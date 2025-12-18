@@ -16,6 +16,191 @@ import { Privacy } from "./pages/Privacy";
 import { Terms } from "./pages/Terms";
 import { Refund } from "./pages/Refund";
 
+const HOST = "https://dev.zintle.ai";
+// const HOST = "http://127.0.0.1:8003";
+const { VITE_EASEBUZZ_KEY, VITE_EASEBUZZ_ENV } = (import.meta as any).env;
+const EASEBUZZ_KEY = VITE_EASEBUZZ_KEY;
+const EASEBUZZ_ENV = VITE_EASEBUZZ_ENV;
+
+// Global callback for showing payment status popup
+let showPaymentStatusCallback: ((status: string) => void) | null = null;
+export const setPaymentStatusCallback = (
+  callback: (status: string) => void
+) => {
+  showPaymentStatusCallback = callback;
+};
+
+// Shared helper to create coin purchase orders
+const createCoinOrder = async (coinPackId: number | string) => {
+  const token = localStorage.getItem("zintle_jwt");
+  const r = await fetch(`${HOST}/api/v1.2/monetization/orders/create/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      coin_pack_id: coinPackId,
+      payment_gateway: "EASEBUZZ",
+    }),
+  });
+  const data = await r.json();
+  if (!r.ok) {
+    throw new Error(data.detail || "Failed to create order");
+  }
+
+  return data;
+};
+
+// Shared helper to initiate payment after order creation
+const initiatePayment = async (
+  orderUuid: number | string,
+  mandateUuid?: number | string | null
+) => {
+  const token = localStorage.getItem("zintle_jwt");
+  const r = await fetch(
+    `${HOST}/api/v1.2/monetization/orders/initiate-payment/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        order_uuid: orderUuid,
+        mandate_uuid: mandateUuid ?? null,
+      }),
+    }
+  );
+  const data = await r.json();
+  if (!r.ok) {
+    throw new Error(data.detail || "Failed to initiate payment");
+  }
+  return data;
+};
+
+// Lazy-load Easebuzz checkout script once
+// let easebuzzScriptPromise: Promise<void> | null = null;
+// const loadEasebuzzScript = () => {
+//   if (easebuzzScriptPromise) return easebuzzScriptPromise;
+//   easebuzzScriptPromise = new Promise((resolve, reject) => {
+//     if (document.getElementById("easebuzz-checkout-script")) {
+//       resolve();
+//       return;
+//     }
+//     const script = document.createElement("script");
+//     script.id = "easebuzz-checkout-script";
+//     script.src =
+//       "https://ebz-static.s3.ap-south-1.amazonaws.com/easecheckout/v2.0.0/easebuzz-checkout-v2.min.js";
+//     script.async = true;
+//     script.onload = () => resolve();
+//     script.onerror = () => reject(new Error("Failed to load Easebuzz script"));
+//     document.body.appendChild(script);
+//   });
+//   return easebuzzScriptPromise;
+// };
+
+export function extractEasebuzzAccessKey(value) {
+  if (!value || typeof value !== "string") return "";
+
+  // If full URL, extract last path segment
+  if (value.includes("/pay/")) {
+    return value.replace(/\/+$/, "").split("/").pop();
+  }
+
+  // Already a token
+  return value;
+}
+
+// Backend validation for Easebuzz payment using order UUID
+const validateEasebuzzPayment = async (orderUuid?: string | null) => {
+  if (!orderUuid) {
+    return;
+  }
+  try {
+    const r = await fetch(
+      `${HOST}/api/v1.2/monetization/easebuzz/payment/validate/`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ order_uuid: orderUuid }),
+      }
+    );
+    const data = await r.json().catch(() => null);
+    if (!r.ok) {
+      console.error("Easebuzz validation failed", { status: r.status, data });
+      return;
+    }
+    console.log("Easebuzz payment validated", data);
+
+    // Check payment_status and show popup accordingly
+    const paymentStatus = data?.data?.payment_status;
+    if (paymentStatus) {
+      showPaymentStatusCallback(paymentStatus);
+    }
+  } catch (err) {
+    console.error("Failed to validate Easebuzz payment", err);
+  }
+};
+
+// Fire Easebuzz iframe checkout with access token
+const launchEasebuzzCheckout = async (paymentData: any) => {
+  const orderUuid = paymentData?.order_uuid;
+  try {
+    const accessKey = extractEasebuzzAccessKey(paymentData?.access_token);
+    const merchantKey = EASEBUZZ_KEY;
+    const env = EASEBUZZ_ENV;
+
+    if (!accessKey) {
+      console.warn(
+        "Missing Easebuzz access key in payment response",
+        paymentData
+      );
+      return;
+    }
+    if (!merchantKey) {
+      console.warn("Missing Easebuzz merchant key (set VITE_EASEBUZZ_KEY)");
+      return;
+    }
+
+    const easebuzzCheckout = new (window as any).EasebuzzCheckout(
+      merchantKey,
+      env
+    );
+    const options = {
+      access_key: accessKey,
+      onResponse: (response: any) => {
+        console.log("Easebuzz response ----------------->", response);
+        validateEasebuzzPayment(orderUuid);
+      },
+      theme: "#123456",
+    };
+    easebuzzCheckout.initiatePayment(options);
+  } catch (err) {
+    console.error("Error occurred in Easebuzz checkout", err);
+    validateEasebuzzPayment(orderUuid);
+  }
+};
+
+// Combined helper to create order and immediately initiate payment
+const createOrderAndInitiatePayment = async (coinPackId: number | string) => {
+  const orderData = await createCoinOrder(coinPackId);
+  const order = orderData.data;
+  if (!order?.order_uuid) {
+    return;
+  }
+  const paymentData = await initiatePayment(
+    order.order_uuid,
+    order.mandate_uuid ?? null
+  );
+  const payment = paymentData.data;
+  // Trigger Easebuzz iframe using access token from payment response
+  launchEasebuzzCheckout(payment);
+  return { order, payment };
+};
+
 const ZintleLogo = ({ h }: { h?: string }) => (
   <img
     src="/zintle_logo.png"
@@ -23,6 +208,115 @@ const ZintleLogo = ({ h }: { h?: string }) => (
     className={`w-auto ${h || "h-8"} object-contain`}
   />
 );
+
+// Payment Status Popup Component
+const PaymentStatusPopup = ({
+  status,
+  onClose,
+}: {
+  status: string;
+  onClose: () => void;
+}) => {
+  const getStatusConfig = () => {
+    switch (status) {
+      case "SUCCESS":
+        return {
+          icon: "fa-check-circle",
+          iconColor: "text-green-500",
+          bgColor: "bg-green-500/20",
+          title: "Payment Successful!",
+          message:
+            "Your payment has been processed successfully. Coins have been added to your wallet.",
+          buttonColor: "bg-green-500 hover:bg-green-600",
+        };
+      case "FAILED":
+        return {
+          icon: "fa-times-circle",
+          iconColor: "text-red-500",
+          bgColor: "bg-red-500/20",
+          title: "Payment Failed",
+          message:
+            "Your payment could not be processed. Please try again or contact support if the issue persists.",
+          buttonColor: "bg-red-500 hover:bg-red-600",
+        };
+      case "CANCELLED":
+        return {
+          icon: "fa-ban",
+          iconColor: "text-orange-500",
+          bgColor: "bg-orange-500/20",
+          title: "Payment Cancelled",
+          message:
+            "The payment was cancelled. You can try again when you're ready.",
+          buttonColor: "bg-orange-500 hover:bg-orange-600",
+        };
+      case "PENDING":
+        return {
+          icon: "fa-clock",
+          iconColor: "text-yellow-500",
+          bgColor: "bg-yellow-500/20",
+          title: "Payment Pending",
+          message:
+            "Your payment is being processed. Please wait for confirmation. We'll notify you once it's complete.",
+          buttonColor: "bg-yellow-500 hover:bg-yellow-600",
+        };
+      case "INITIATED":
+        return {
+          icon: "fa-hourglass-half",
+          iconColor: "text-blue-500",
+          bgColor: "bg-blue-500/20",
+          title: "Payment Initiated",
+          message:
+            "Your payment has been initiated. Please complete the payment process.",
+          buttonColor: "bg-blue-500 hover:bg-blue-600",
+        };
+      case "UNKNOWN":
+      default:
+        return {
+          icon: "fa-question-circle",
+          iconColor: "text-gray-500",
+          bgColor: "bg-gray-500/20",
+          title: "Payment Status Unknown",
+          message:
+            "We couldn't determine the payment status. Please check your order history or contact support.",
+          buttonColor: "bg-gray-500 hover:bg-gray-600",
+        };
+    }
+  };
+
+  const config = getStatusConfig();
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className="bg-brand-surface w-full max-w-md rounded-3xl border border-white/10 shadow-2xl overflow-hidden relative animate-fade-in">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white hover:text-red-400 transition-all z-10"
+          aria-label="Close"
+        >
+          <i className="fa-solid fa-xmark text-sm"></i>
+        </button>
+
+        <div className="p-8 text-center">
+          <div
+            className={`w-20 h-20 ${config.bgColor} ${config.iconColor} rounded-full flex items-center justify-center text-4xl mx-auto mb-6`}
+          >
+            <i className={`fa-solid ${config.icon}`}></i>
+          </div>
+          <h3 className="text-2xl font-bold text-white mb-3">{config.title}</h3>
+          <p className="text-brand-muted mb-6 text-sm leading-relaxed">
+            {config.message}
+          </p>
+          <button
+            onClick={onClose}
+            className={`${config.buttonColor} text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg`}
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // --- Components ---
 
@@ -596,13 +890,15 @@ const Features = () => (
 const CoinStore = ({
   onClose,
   initialStep = "store",
+  coinPacks,
 }: {
   onClose: () => void;
   initialStep?: "store" | "login";
+  coinPacks: any[];
 }) => {
-  const [step, setStep] = useState<
-    "store" | "login" | "otp" | "payment" | "success"
-  >(initialStep);
+  const [step, setStep] = useState<"store" | "login" | "otp" | "success">(
+    initialStep
+  );
   const [selectedPack, setSelectedPack] = useState<any>(null);
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
@@ -611,11 +907,10 @@ const CoinStore = ({
   const [loginAnim, setLoginAnim] = useState(true);
   const [otpAnim, setOtpAnim] = useState(false);
   const countryCode = "91";
-  const HOST = "https://prod.biffle.ai";
 
   // Helper: isLoggedIn
   const isLoggedIn = !!localStorage.getItem("zintle_jwt");
-
+  console.log({ isLoggedIn }, { HOST });
   React.useEffect(() => {
     if (step === "login") {
       setLoginAnim(true);
@@ -634,9 +929,12 @@ const CoinStore = ({
     setLoading(true);
     setError(null);
     try {
-      const r = await fetch(`${HOST}/api/v1/auth/login/otp/request/`, {
+      const r = await fetch(`${HOST}/api/v1.2/auth/login/otp/request/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // "X-Organisation-ID": "ZINTEL1234",
+        },
         body: JSON.stringify({
           country_code: countryCode,
           phone_number: phone,
@@ -658,7 +956,10 @@ const CoinStore = ({
     try {
       const r = await fetch(`${HOST}/api/v1/auth/login/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // "X-Organisation-ID": "ZINTEL1234",
+        },
         body: JSON.stringify({
           provider: "phone",
           country_code: countryCode,
@@ -672,7 +973,7 @@ const CoinStore = ({
       if (data.token) {
         localStorage.setItem("zintle_jwt", data.token);
       }
-      setStep("payment");
+      onClose();
       // Optionally notify parent UI about login status, if needed
     } catch (e: any) {
       setError(e.message || "Failed to verify OTP");
@@ -681,24 +982,20 @@ const CoinStore = ({
     }
   };
 
-  const packs = [
-    { coins: 100, price: 99, bonus: 0, color: "bg-brand-surface" },
-    { coins: 300, price: 249, bonus: 16, color: "bg-brand-surface" },
-    {
-      coins: 1000,
-      price: 799,
-      bonus: 20,
-      tag: "BEST VALUE",
-      color:
-        "bg-gradient-to-br from-brand-primary/20 to-brand-secondary/20 border border-brand-primary",
-    },
-    { coins: 2500, price: 1999, bonus: 25, color: "bg-brand-surface" },
-  ];
-  const handleBuy = (pack: any) => {
+  const packs = coinPacks;
+
+  const handleBuy = async (pack: any) => {
     setSelectedPack(pack);
-    // If already logged in, skip login and go straight to payment
+    // Fire order creation API if we have a backend id
+    if (pack?.id) {
+      try {
+        await createOrderAndInitiatePayment(pack.id);
+      } catch (e) {
+        console.error("Failed to create coin order from CoinStore", e);
+      }
+    }
     if (isLoggedIn) {
-      setStep("payment");
+      onClose();
     } else {
       setStep("login");
     }
@@ -780,55 +1077,55 @@ const CoinStore = ({
     </div>
   );
 
-  const PaymentStep = () => {
-    if (!selectedPack) {
-      onClose();
-      return null;
-    }
-    return (
-      <div className="animate-fade-in">
-        <div className="flex justify-between items-center mb-6 pb-6 border-b border-white/10">
-          <div>
-            <p className="text-brand-muted text-sm">Paying for</p>
-            <p className="text-xl font-bold text-white">
-              {selectedPack.coins} Zintle Coins
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-brand-muted text-sm">Amount</p>
-            <p className="text-xl font-bold text-brand-primary">
-              ₹{selectedPack.price}
-            </p>
-          </div>
-        </div>
-        <p className="text-sm font-bold text-white mb-4">
-          Select Payment Method
-        </p>
-        <div className="space-y-3 mb-6">
-          {["UPI", "Credit/Debit Card", "Net Banking"].map((m) => (
-            <label
-              key={m}
-              className="flex items-center gap-3 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
-            >
-              <input
-                type="radio"
-                name="payment"
-                className="accent-brand-primary"
-                defaultChecked={m === "UPI"}
-              />
-              <span className="text-gray-300">{m}</span>
-            </label>
-          ))}
-        </div>
-        <button
-          onClick={() => setStep("success")}
-          className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-green-500/25"
-        >
-          Pay ₹{selectedPack.price}
-        </button>
-      </div>
-    );
-  };
+  // const PaymentStep = () => {
+  //   React.useEffect(() => {
+  //     if (!selectedPack) onClose();
+  //   }, [selectedPack, onClose]);
+  //   if (!selectedPack) return null;
+  //   return (
+  //     <div className="animate-fade-in">
+  //       <div className="flex justify-between items-center mb-6 pb-6 border-b border-white/10">
+  //         <div>
+  //           <p className="text-brand-muted text-sm">Paying for</p>
+  //           <p className="text-xl font-bold text-white">
+  //             {selectedPack.coins} Zintle Coins
+  //           </p>
+  //         </div>
+  //         <div className="text-right">
+  //           <p className="text-brand-muted text-sm">Amount</p>
+  //           <p className="text-xl font-bold text-brand-primary">
+  //             ₹{selectedPack.price}
+  //           </p>
+  //         </div>
+  //       </div>
+  //       <p className="text-sm font-bold text-white mb-4">
+  //         Select Payment Method
+  //       </p>
+  //       <div className="space-y-3 mb-6">
+  //         {["UPI", "Credit/Debit Card", "Net Banking"].map((m) => (
+  //           <label
+  //             key={m}
+  //             className="flex items-center gap-3 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
+  //           >
+  //             <input
+  //               type="radio"
+  //               name="payment"
+  //               className="accent-brand-primary"
+  //               defaultChecked={m === "UPI"}
+  //             />
+  //             <span className="text-gray-300">{m}</span>
+  //           </label>
+  //         ))}
+  //       </div>
+  //       <button
+  //         onClick={() => setStep("success")}
+  //         className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-green-500/25"
+  //       >
+  //         Pay ₹{selectedPack.price}
+  //       </button>
+  //     </div>
+  //   );
+  // };
 
   const SuccessStep = () => (
     <div className="text-center animate-fade-in py-8">
@@ -852,54 +1149,59 @@ const CoinStore = ({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-brand-surface w-full max-w-md rounded-3xl border border-white/10 shadow-2xl overflow-hidden relative">
+      <div
+        className={`bg-brand-surface w-full ${
+          step === "login" || step === "otp" ? "max-w-md" : "max-w-5xl"
+        } max-h-[90vh] rounded-3xl border border-white/10 shadow-2xl overflow-hidden relative flex flex-col my-auto`}
+      >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-all z-10"
+          className="absolute top-5 right-5 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white hover:text-red-400 transition-all z-10 shadow-lg border border-white/20"
+          aria-label="Close"
         >
-          <i className="fa-solid fa-xmark"></i>
+          <i className="fa-solid fa-xmark text-lg"></i>
         </button>
 
-        <div className="p-6 md:p-8">
+        <div className="p-6 md:p-8 overflow-y-auto flex-1 pb-8">
           {step === "store" && (
             <div className="animate-fade-in">
               <div className="text-center mb-8">
-                <div className="inline-block p-3 rounded-full bg-brand-gold/10 text-brand-gold text-2xl mb-4">
+                <div className="inline-block p-4 rounded-full bg-brand-gold/10 text-brand-gold text-3xl mb-4">
                   <i className="fa-solid fa-coins"></i>
                 </div>
-                <h3 className="text-2xl font-bold text-white">
+                <h3 className="text-3xl font-bold text-white mb-2">
                   Recharge Wallet
                 </h3>
-                <p className="text-brand-muted text-sm mt-1">
-                  1 Coin = ₹1 (approx)
-                </p>
+                <p className="text-brand-muted text-sm">1 Coin = ₹1 (approx)</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-6 pt-4">
                 {packs.map((p, i) => (
                   <div
                     key={i}
-                    className={`relative p-4 rounded-xl ${p.color} cursor-pointer hover:scale-105 transition-transform`}
+                    className={`relative p-6 rounded-2xl ${p.color} cursor-pointer hover:scale-105 hover:shadow-lg transition-all border border-white/10 overflow-visible`}
                     onClick={() => handleBuy(p)}
                   >
                     {p.tag && (
-                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-brand-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">
+                      <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-primary text-white text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap shadow-md z-10">
                         {p.tag}
                       </span>
                     )}
-                    <div className="text-center">
-                      <p className="text-xl font-bold text-white mb-1">
+                    <div className="text-center pt-2">
+                      <p className="text-3xl font-bold text-white mb-2">
                         {p.coins}
                       </p>
-                      <p className="text-xs text-brand-muted mb-3">Coins</p>
-                      <button className="bg-white text-brand-bg text-xs font-bold py-1.5 px-4 rounded-full w-full hover:bg-gray-200">
+                      <p className="text-sm text-brand-muted mb-4 font-medium">
+                        Coins
+                      </p>
+                      <button className="bg-white text-brand-bg text-sm font-bold py-2.5 px-6 rounded-full w-full hover:bg-gray-100 transition-colors shadow-md">
                         ₹{p.price}
                       </button>
                     </div>
                   </div>
                 ))}
               </div>
-              <p className="text-center text-xs text-brand-muted flex items-center justify-center gap-2">
+              <p className="text-center text-sm text-brand-muted flex items-center justify-center gap-2 pt-4 border-t border-white/10">
                 <i className="fa-solid fa-shield-halved"></i> 100% Secure
                 Payment
               </p>
@@ -908,7 +1210,7 @@ const CoinStore = ({
 
           {step === "login" && <LoginStep />}
           {step === "otp" && <OtpStep />}
-          {step === "payment" && <PaymentStep />}
+          {/* {step === "payment" && <PaymentStep />} */}
           {step === "success" && <SuccessStep />}
         </div>
       </div>
@@ -918,20 +1220,27 @@ const CoinStore = ({
 
 const CoinSection = ({
   setShowCoins,
+  coinPacks,
 }: {
   setShowCoins: (v: boolean) => void;
+  coinPacks: any[];
 }) => {
   const isLoggedIn = !!localStorage.getItem("zintle_jwt");
-  const packages = [
-    { coins: 15, price: 15 },
-    { coins: 79, price: 79 },
-    { coins: 49, price: 49 },
-    { coins: 39, price: 39 },
-    { coins: 29, price: 29 },
-    { coins: 149, price: 149 },
-    { coins: 100, price: 100, tag: "Trial Pack" },
-    { coins: 2000, price: 2000, tag: "Bonus Pack", highlight: true },
-  ];
+
+  const handleRechargeClick = async (pkg: any) => {
+    if (!pkg?.id) {
+      console.warn("No coin_pack_id available for package", pkg);
+      return;
+    }
+    try {
+      await createOrderAndInitiatePayment(pkg.id);
+    } catch (e) {
+      console.error("Failed to create coin order from CoinSection", e);
+    }
+  };
+
+  // Use the prop for packs
+  const packages = coinPacks;
   return (
     <section className="py-20 bg-brand-bg/50 relative">
       <div className="container mx-auto px-4">
@@ -967,7 +1276,7 @@ const CoinSection = ({
               </h3>
               <p className="text-2xl font-bold text-white mb-6">₹{pkg.price}</p>
               <button
-                onClick={() => setShowCoins(true)}
+                onClick={() => handleRechargeClick(pkg)}
                 className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20"
               >
                 {isLoggedIn ? "Recharge" : "Login"}
@@ -1088,19 +1397,86 @@ const Footer = () => (
   </footer>
 );
 
+const defaultCoinPacks = [
+  { coins: 100, price: 99, bonus: 0, color: "bg-brand-surface" },
+  { coins: 300, price: 249, bonus: 16, color: "bg-brand-surface" },
+  {
+    coins: 1000,
+    price: 799,
+    bonus: 20,
+    tag: "BEST VALUE",
+    color:
+      "bg-gradient-to-br from-brand-primary/20 to-brand-secondary/20 border border-brand-primary",
+  },
+  { coins: 2500, price: 1999, bonus: 25, color: "bg-brand-surface" },
+];
+
 const Layout = () => {
   const [showLogin, setShowLogin] = useState(false);
   const [showCoins, setShowCoins] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(
     !!localStorage.getItem("zintle_jwt")
   );
+  const [coinPacks, setCoinPacks] = useState(defaultCoinPacks);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+
+  // Fetch coin packs on mount/when logged in changes
+  useEffect(() => {
+    const fetchPacks = async () => {
+      if (!localStorage.getItem("zintle_jwt")) return;
+      try {
+        const r = await fetch(
+          `${HOST}/api/v1.2/creator_center/details/get-coin-pack-details/`,
+          {
+            // headers: { "X-Organisation-ID": "ZINTEL1234" },
+          }
+        );
+        const data = await r.json();
+        if (data.success && Array.isArray(data.data)) {
+          setCoinPacks(
+            data.data
+              .filter((p) => p.is_active)
+              .map((p) => ({
+                id: p.id,
+                coins: p.coin_value,
+                price: p.amount,
+                bonus: p.bonus_coins,
+                product_id: p.product_id,
+                name: p.name,
+                color: "bg-brand-surface",
+                tag: p.isBonusPack
+                  ? "Bonus Pack"
+                  : p.isTrialPack
+                  ? "Trial Pack"
+                  : p.isMicropack
+                  ? "Micropack"
+                  : undefined,
+                highlight: p.isBonusPack || false,
+              }))
+          );
+        }
+      } catch (e) {
+        // fallback to defaultCoinPacks
+      }
+    };
+    fetchPacks();
+  }, [isLoggedIn]);
 
   // Check JWT changes after CoinStore closes
   useEffect(() => {
     const check = () => setIsLoggedIn(!!localStorage.getItem("zintle_jwt"));
-    // Check after closing modal (onClose and on payment success)
     if (!showLogin && !showCoins) check();
   }, [showLogin, showCoins]);
+
+  // Set up payment status callback
+  useEffect(() => {
+    setPaymentStatusCallback((status: string) => {
+      setPaymentStatus(status);
+    });
+    return () => {
+      setPaymentStatusCallback(() => {});
+    };
+  }, []);
 
   // Logout clears JWT
   const handleLogout = () => {
@@ -1126,7 +1502,7 @@ const Layout = () => {
             <>
               <Hero setShowCoins={setShowCoins} />
               <Features />
-              <CoinSection setShowCoins={setShowCoins} />
+              <CoinSection setShowCoins={setShowCoins} coinPacks={coinPacks} />
             </>
           }
         />
@@ -1148,6 +1524,14 @@ const Layout = () => {
             setShowLogin(false);
           }}
           initialStep={showLogin ? "login" : "store"}
+          coinPacks={coinPacks}
+        />
+      )}
+
+      {paymentStatus && (
+        <PaymentStatusPopup
+          status={paymentStatus}
+          onClose={() => setPaymentStatus(null)}
         />
       )}
     </div>

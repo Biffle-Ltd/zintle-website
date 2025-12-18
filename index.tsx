@@ -1401,19 +1401,142 @@ const Footer = () => (
   </footer>
 );
 
-const defaultCoinPacks = [
-  { coins: 100, price: 99, bonus: 0, color: "bg-brand-surface" },
-  { coins: 300, price: 249, bonus: 16, color: "bg-brand-surface" },
+const defaultCoinPackData = [
   {
-    coins: 1000,
-    price: 799,
-    bonus: 20,
-    tag: "BEST VALUE",
-    color:
-      "bg-gradient-to-br from-brand-primary/20 to-brand-secondary/20 border border-brand-primary",
+    id: 17,
+    name: "40 coins micro pack bundle",
+    description: "",
+    coin_value: 90.0,
+    bonus_coins: 0.0,
+    icon_url: null,
+    is_active: true,
+    amount: 29.0,
+    product_id: "coin_29",
+    isTrialPack: false,
+    isBonusPack: false,
+    isMicropack: true,
   },
-  { coins: 2500, price: 1999, bonus: 25, color: "bg-brand-surface" },
+  {
+    id: 14,
+    name: "90 coins micro pack bundle",
+    description: "",
+    coin_value: 160.0,
+    bonus_coins: 0.0,
+    icon_url: null,
+    is_active: true,
+    amount: 49.0,
+    product_id: "coin_49",
+    isTrialPack: false,
+    isBonusPack: false,
+    isMicropack: true,
+  },
+  {
+    id: 15,
+    name: "150 coins micro pack bundle",
+    description: "",
+    coin_value: 240.0,
+    bonus_coins: 0.0,
+    icon_url: null,
+    is_active: true,
+    amount: 79.0,
+    product_id: "coin_79",
+    isTrialPack: false,
+    isBonusPack: false,
+    isMicropack: true,
+  },
+  {
+    id: 16,
+    name: "300 coins micro pack bundle",
+    description: "",
+    coin_value: 400.0,
+    bonus_coins: 0.0,
+    icon_url: null,
+    is_active: true,
+    amount: 149.0,
+    product_id: "coin_149",
+    isTrialPack: false,
+    isBonusPack: false,
+    isMicropack: true,
+  },
+  {
+    id: 18,
+    name: "coin_5000",
+    description: "",
+    coin_value: 15000.0,
+    bonus_coins: 0.0,
+    icon_url: null,
+    is_active: true,
+    amount: 4999.0,
+    product_id: "coin_4999",
+    isTrialPack: false,
+    isBonusPack: false,
+    isMicropack: false,
+  },
+  {
+    id: 19,
+    name: "coin_10000",
+    description: "",
+    coin_value: 35000.0,
+    bonus_coins: 0.0,
+    icon_url: null,
+    is_active: true,
+    amount: 9999.0,
+    product_id: "coin_9999",
+    isTrialPack: false,
+    isBonusPack: false,
+    isMicropack: false,
+  },
+  {
+    id: 20,
+    name: "coin_20000",
+    description: "",
+    coin_value: 70000.0,
+    bonus_coins: 0.0,
+    icon_url: null,
+    is_active: true,
+    amount: 19999.0,
+    product_id: "coin_19999",
+    isTrialPack: false,
+    isBonusPack: false,
+    isMicropack: false,
+  },
+  {
+    id: 21,
+    name: "coin_50000",
+    description: "",
+    coin_value: 175000.0,
+    bonus_coins: 0.0,
+    icon_url: null,
+    is_active: true,
+    amount: 49999.0,
+    product_id: "coin_49999",
+    isTrialPack: false,
+    isBonusPack: false,
+    isMicropack: false,
+  },
 ];
+
+const mapCoinPack = (p: any) => ({
+  id: p.id,
+  coins: p.coin_value,
+  price: p.amount,
+  bonus: p.bonus_coins,
+  product_id: p.product_id,
+  name: p.name,
+  color: "bg-brand-surface",
+  tag: p.isBonusPack
+    ? "Bonus Pack"
+    : p.isTrialPack
+    ? "Trial Pack"
+    : p.isMicropack
+    ? "Micropack"
+    : undefined,
+  highlight: p.isBonusPack || false,
+});
+
+const defaultCoinPacks = defaultCoinPackData
+  .filter((p) => p.is_active)
+  .map(mapCoinPack);
 
 const Layout = () => {
   const [showLogin, setShowLogin] = useState(false);
@@ -1439,24 +1562,8 @@ const Layout = () => {
         if (data.success && Array.isArray(data.data)) {
           setCoinPacks(
             data.data
-              .filter((p) => p.is_active)
-              .map((p) => ({
-                id: p.id,
-                coins: p.coin_value,
-                price: p.amount,
-                bonus: p.bonus_coins,
-                product_id: p.product_id,
-                name: p.name,
-                color: "bg-brand-surface",
-                tag: p.isBonusPack
-                  ? "Bonus Pack"
-                  : p.isTrialPack
-                  ? "Trial Pack"
-                  : p.isMicropack
-                  ? "Micropack"
-                  : undefined,
-                highlight: p.isBonusPack || false,
-              }))
+              .filter((p: any) => p.is_active)
+              .map((p: any) => mapCoinPack(p))
           );
         }
       } catch (e) {

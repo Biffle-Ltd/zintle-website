@@ -990,18 +990,21 @@ const CoinStore = ({
 
   const handleBuy = async (pack: any) => {
     setSelectedPack(pack);
-    // Fire order creation API if we have a backend id
+
+    // If user is not logged in, show login step instead of starting payment
+    if (!isLoggedIn) {
+      setStep("login");
+      return;
+    }
+
+    // Fire order creation API only for logged-in users
     if (pack?.id) {
       try {
         await createOrderAndInitiatePayment(pack.id);
+        onClose();
       } catch (e) {
         console.error("Failed to create coin order from CoinStore", e);
       }
-    }
-    if (isLoggedIn) {
-      onClose();
-    } else {
-      setStep("login");
     }
   };
 
@@ -1224,14 +1227,23 @@ const CoinStore = ({
 
 const CoinSection = ({
   setShowCoins,
+  setShowLogin,
   coinPacks,
 }: {
   setShowCoins: (v: boolean) => void;
+  setShowLogin: (v: boolean) => void;
   coinPacks: any[];
 }) => {
   const isLoggedIn = !!localStorage.getItem("zintle_jwt");
 
   const handleRechargeClick = async (pkg: any) => {
+    // If user is logged out, open login popup instead of creating order
+    if (!isLoggedIn) {
+      setShowLogin(true);
+      setShowCoins(true);
+      return;
+    }
+
     if (!pkg?.id) {
       console.warn("No coin_pack_id available for package", pkg);
       return;
@@ -1613,7 +1625,11 @@ const Layout = () => {
             <>
               <Hero setShowCoins={setShowCoins} />
               <Features />
-              <CoinSection setShowCoins={setShowCoins} coinPacks={coinPacks} />
+              <CoinSection
+                setShowCoins={setShowCoins}
+                setShowLogin={setShowLogin}
+                coinPacks={coinPacks}
+              />
             </>
           }
         />

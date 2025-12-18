@@ -502,7 +502,11 @@ const Hero = ({ setShowCoins }: { setShowCoins: (v: boolean) => void }) => (
             className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 animate-slide-up w-full sm:w-auto"
             style={{ animationDelay: "0.2s" }}
           >
-            <button className="w-full sm:w-auto bg-transparent border border-white/20 text-white font-bold py-4 px-8 rounded-full hover:bg-white/5 transition-all flex items-center justify-center gap-3 transform hover:scale-105">
+            <a
+              href="https://biffle-apk.s3.ap-south-1.amazonaws.com/zintel.apk"
+              download
+              className="w-full sm:w-auto bg-transparent border border-white/20 text-white font-bold py-4 px-8 rounded-full hover:bg-white/5 transition-all flex items-center justify-center gap-3 transform hover:scale-105"
+            >
               <i className="fa-brands fa-google-play text-xl"></i>
               <div className="text-left leading-tight">
                 <span className="block text-[10px] font-medium uppercase tracking-wider text-brand-muted">
@@ -510,7 +514,7 @@ const Hero = ({ setShowCoins }: { setShowCoins: (v: boolean) => void }) => (
                 </span>
                 <span className="block text-sm">Google Play</span>
               </div>
-            </button>
+            </a>
           </div>
 
           <div

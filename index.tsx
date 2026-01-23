@@ -15,6 +15,7 @@ import { Guidelines } from "./pages/Guidelines";
 import { Privacy } from "./pages/Privacy";
 import { Terms } from "./pages/Terms";
 import { Refund } from "./pages/Refund";
+import { ChildSafety } from "./pages/ChildSafety";
 
 const HOST = "https://dev.zintle.ai";
 // const HOST = "http://127.0.0.1:8003";
@@ -1399,6 +1400,14 @@ const Footer = () => (
                 Refund Policy
               </Link>
             </li>
+            <li>
+              <Link
+                to="/child-safety-standards"
+                className="hover:text-brand-primary transition-colors"
+              >
+                Child Safety Standards
+              </Link>
+            </li>
           </ul>
         </div>
       </div>
@@ -1640,6 +1649,7 @@ const Layout = () => {
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/refund" element={<Refund />} />
+        <Route path="/child-safety-standards" element={<ChildSafety />} />
       </Routes>
 
       <Footer />

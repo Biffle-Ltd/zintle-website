@@ -504,8 +504,9 @@ const Hero = ({ setShowCoins }: { setShowCoins: (v: boolean) => void }) => (
             style={{ animationDelay: "0.2s" }}
           >
             <a
-              href="https://biffle-apk.s3.ap-south-1.amazonaws.com/zintle_v2.apk"
-              download
+              href="https://play.google.com/store/apps/details?id=ai.zintle&hl=en_IN"
+              target="_blank"
+              rel="noopener noreferrer"
               className="w-full sm:w-auto bg-transparent border border-white/20 text-white font-bold py-4 px-8 rounded-full hover:bg-white/5 transition-all flex items-center justify-center gap-3 transform hover:scale-105"
             >
               <i className="fa-brands fa-google-play text-xl"></i>

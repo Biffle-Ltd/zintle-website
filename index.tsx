@@ -32,13 +32,13 @@ export const setPaymentStatusCallback = (
 };
 
 // Shared helper to create coin purchase orders
-const createCoinOrder = async (coinPackId: number | string) => {
-  const token = localStorage.getItem("zintle_jwt");
+const createCoinOrder = async (coinPackId: number | string, token?: string | null) => {
+  const jwtToken = token || localStorage.getItem("zintle_jwt");
   const r = await fetch(`${HOST}/api/v1.2/monetization/orders/create/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
     },
     body: JSON.stringify({
       coin_pack_id: coinPackId,
@@ -56,16 +56,17 @@ const createCoinOrder = async (coinPackId: number | string) => {
 // Shared helper to initiate payment after order creation
 const initiatePayment = async (
   orderUuid: number | string,
-  mandateUuid?: number | string | null
+  mandateUuid?: number | string | null,
+  token?: string | null
 ) => {
-  const token = localStorage.getItem("zintle_jwt");
+  const jwtToken = token || localStorage.getItem("zintle_jwt");
   const r = await fetch(
     `${HOST}/api/v1.2/monetization/orders/initiate-payment/`,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
       },
       body: JSON.stringify({
         order_uuid: orderUuid,
@@ -186,15 +187,16 @@ const launchEasebuzzCheckout = async (paymentData: any) => {
 };
 
 // Combined helper to create order and immediately initiate payment
-const createOrderAndInitiatePayment = async (coinPackId: number | string) => {
-  const orderData = await createCoinOrder(coinPackId);
+const createOrderAndInitiatePayment = async (coinPackId: number | string, token?: string | null) => {
+  const orderData = await createCoinOrder(coinPackId, token);
   const order = orderData.data;
   if (!order?.order_uuid) {
     return;
   }
   const paymentData = await initiatePayment(
     order.order_uuid,
-    order.mandate_uuid ?? null
+    order.mandate_uuid ?? null,
+    token
   );
   const payment = paymentData.data;
   // Trigger Easebuzz iframe using access token from payment response
@@ -1307,6 +1309,169 @@ const CoinSection = ({
   );
 };
 
+// Mobile-optimized Coins Page Component
+const CoinsPage = ({
+  setShowCoins,
+  setShowLogin,
+  coinPacks,
+}: {
+  setShowCoins: (v: boolean) => void;
+  setShowLogin: (v: boolean) => void;
+  coinPacks: any[];
+}) => {
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const tokenFromQuery = searchParams.get("id");
+  
+  // Use token from query params if available, otherwise fall back to localStorage
+  const token = tokenFromQuery || localStorage.getItem("zintle_jwt");
+  const isLoggedIn = !!token;
+  
+  const [selectedPackage, setSelectedPackage] = useState<any>(
+    coinPacks[0] || null
+  );
+
+  // Update selected package when coinPacks change
+  useEffect(() => {
+    if (coinPacks.length > 0) {
+      // If no selection or selected package doesn't exist anymore, select first
+      if (!selectedPackage || !coinPacks.some((p) => p.id === selectedPackage?.id)) {
+        setSelectedPackage(coinPacks[0]);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coinPacks]);
+
+  const handlePayClick = async (pkg?: any) => {
+    const packageToUse = pkg || selectedPackage;
+    if (!packageToUse) return;
+
+    // If user is logged out, open login popup instead of creating order
+    if (!isLoggedIn) {
+      setShowLogin(true);
+      setShowCoins(true);
+      return;
+    }
+
+    if (!packageToUse?.id) {
+      console.warn("No coin_pack_id available for package", packageToUse);
+      return;
+    }
+    try {
+      await createOrderAndInitiatePayment(packageToUse.id, token);
+    } catch (e) {
+      console.error("Failed to create coin order from CoinsPage", e);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-brand-bg pb-24 md:pb-8">
+      <div className="container mx-auto px-4 pt-24 md:pt-20 pb-8 md:pb-20">
+        <h2 className="text-2xl md:text-3xl font-bold text-center text-white mb-8 md:mb-12">
+          Coin Packages
+        </h2>
+        
+        {/* Mobile: Single column stacked layout */}
+        <div className="md:hidden space-y-4 max-w-md mx-auto">
+          {coinPacks.map((pkg, i) => {
+            const isSelected = selectedPackage?.id === pkg.id;
+            return (
+              <div
+                key={i}
+                onClick={() => setSelectedPackage(pkg)}
+                className={`relative glass-card rounded-2xl p-5 cursor-pointer transition-all ${
+                  isSelected
+                    ? "border-2 border-brand-gold shadow-[0_0_20px_rgba(255,215,0,0.3)]"
+                    : "border border-white/10"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  {/* Left: Coins with icon */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-primary to-brand-secondary flex items-center justify-center text-white font-bold text-sm">
+                      Z
+                    </div>
+                    <div className="w-2 h-2 rounded-full bg-brand-primary"></div>
+                    <span className="text-3xl font-bold italic text-white">
+                      {pkg.coins}
+                    </span>
+                  </div>
+                  
+                  {/* Right: Price badge */}
+                  <div className="px-4 py-2 rounded-lg bg-white/10 border border-white/20 backdrop-blur-sm">
+                    <span className="text-lg font-bold text-white">
+                      ₹ {pkg.price}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop: Grid layout (same as CoinSection) */}
+        <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+          {coinPacks.map((pkg, i) => (
+            <div
+              key={i}
+              className={`relative glass-card rounded-3xl p-6 text-center transition-transform hover:-translate-y-1 ${
+                pkg.highlight
+                  ? "border-2 border-brand-gold shadow-[0_0_20px_rgba(255,215,0,0.3)]"
+                  : "hover:bg-white/5"
+              }`}
+            >
+              {pkg.tag && (
+                <span
+                  className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold px-3 py-1 rounded-full ${
+                    pkg.highlight
+                      ? "bg-brand-gold text-black"
+                      : "text-green-600 bg-green-100"
+                  }`}
+                >
+                  {pkg.tag}
+                </span>
+              )}
+              <div className="flex justify-center mb-4 text-brand-gold text-2xl">
+                <i className="fa-solid fa-coins"></i>
+              </div>
+              <h3 className="text-xl font-bold text-white mb-1">
+                {pkg.coins} Coins
+              </h3>
+              <p className="text-2xl font-bold text-white mb-6">₹{pkg.price}</p>
+              <button
+                onClick={() => handlePayClick(pkg)}
+                className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20"
+              >
+                {isLoggedIn ? "Recharge" : "Login"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Fixed bottom action bar (mobile only) */}
+      {selectedPackage && (
+        <div className="fixed bottom-0 left-0 right-0 md:hidden bg-brand-bg border-t border-white/10 p-4 z-50">
+          <div className="flex items-center gap-4 max-w-md mx-auto">
+            {/* Left icon button */}
+            <button className="w-12 h-12 rounded-full bg-black/50 border border-white/10 flex items-center justify-center text-white hover:bg-black/70 transition-colors">
+              <i className="fa-solid fa-credit-card text-lg"></i>
+            </button>
+            
+            {/* Pay button */}
+            <button
+              onClick={handlePayClick}
+              className="flex-1 bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-brand-primary/20"
+            >
+              Pay ₹ {selectedPackage.price}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Footer = () => (
   <footer className="bg-black py-16 border-t border-white/5 text-sm">
     <div className="container mx-auto px-4">
@@ -1572,7 +1737,7 @@ const Layout = () => {
   // Fetch coin packs on mount/when logged in changes
   useEffect(() => {
     const fetchPacks = async () => {
-      if (!localStorage.getItem("zintle_jwt")) return;
+      // if (!localStorage.getItem("zintle_jwt")) return;
       try {
         const r = await fetch(
           `${HOST}/api/v1.2/creator_center/details/get-coin-pack-details/`,
@@ -1641,6 +1806,16 @@ const Layout = () => {
                 coinPacks={coinPacks}
               />
             </>
+          }
+        />
+        <Route
+          path="/coins"
+          element={
+            <CoinsPage
+              setShowCoins={setShowCoins}
+              setShowLogin={setShowLogin}
+              coinPacks={coinPacks}
+            />
           }
         />
         <Route path="/about" element={<About />} />

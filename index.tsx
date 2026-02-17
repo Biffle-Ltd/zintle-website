@@ -26,13 +26,16 @@ const EASEBUZZ_ENV = VITE_EASEBUZZ_ENV;
 // Global callback for showing payment status popup
 let showPaymentStatusCallback: ((status: string) => void) | null = null;
 export const setPaymentStatusCallback = (
-  callback: (status: string) => void
+  callback: (status: string) => void,
 ) => {
   showPaymentStatusCallback = callback;
 };
 
 // Shared helper to create coin purchase orders
-const createCoinOrder = async (coinPackId: number | string, token?: string | null) => {
+const createCoinOrder = async (
+  coinPackId: number | string,
+  token?: string | null,
+) => {
   const jwtToken = token || localStorage.getItem("zintle_jwt");
   const r = await fetch(`${HOST}/api/v1.2/monetization/orders/create/`, {
     method: "POST",
@@ -57,7 +60,7 @@ const createCoinOrder = async (coinPackId: number | string, token?: string | nul
 const initiatePayment = async (
   orderUuid: number | string,
   mandateUuid?: number | string | null,
-  token?: string | null
+  token?: string | null,
 ) => {
   const jwtToken = token || localStorage.getItem("zintle_jwt");
   const r = await fetch(
@@ -72,7 +75,7 @@ const initiatePayment = async (
         order_uuid: orderUuid,
         mandate_uuid: mandateUuid ?? null,
       }),
-    }
+    },
   );
   const data = await r.json();
   if (!r.ok) {
@@ -128,7 +131,7 @@ const validateEasebuzzPayment = async (orderUuid?: string | null) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ order_uuid: orderUuid }),
-      }
+      },
     );
     const data = await r.json().catch(() => null);
     if (!r.ok) {
@@ -158,7 +161,7 @@ const launchEasebuzzCheckout = async (paymentData: any) => {
     if (!accessKey) {
       console.warn(
         "Missing Easebuzz access key in payment response",
-        paymentData
+        paymentData,
       );
       return;
     }
@@ -169,7 +172,7 @@ const launchEasebuzzCheckout = async (paymentData: any) => {
 
     const easebuzzCheckout = new (window as any).EasebuzzCheckout(
       merchantKey,
-      env
+      env,
     );
     const options = {
       access_key: accessKey,
@@ -187,7 +190,10 @@ const launchEasebuzzCheckout = async (paymentData: any) => {
 };
 
 // Combined helper to create order and immediately initiate payment
-const createOrderAndInitiatePayment = async (coinPackId: number | string, token?: string | null) => {
+const createOrderAndInitiatePayment = async (
+  coinPackId: number | string,
+  token?: string | null,
+) => {
   const orderData = await createCoinOrder(coinPackId, token);
   const order = orderData.data;
   if (!order?.order_uuid) {
@@ -196,7 +202,7 @@ const createOrderAndInitiatePayment = async (coinPackId: number | string, token?
   const paymentData = await initiatePayment(
     order.order_uuid,
     order.mandate_uuid ?? null,
-    token
+    token,
   );
   const payment = paymentData.data;
   // Trigger Easebuzz iframe using access token from payment response
@@ -905,7 +911,7 @@ const CoinStore = ({
   coinPacks: any[];
 }) => {
   const [step, setStep] = useState<"store" | "login" | "otp" | "success">(
-    initialStep
+    initialStep,
   );
   const [selectedPack, setSelectedPack] = useState<any>(null);
   const [phone, setPhone] = useState("");
@@ -1322,28 +1328,30 @@ const CoinsPage = ({
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const tokenFromQuery = searchParams.get("id");
-  
+
   // Use token from query params if available, otherwise fall back to localStorage
   const token = tokenFromQuery || localStorage.getItem("zintle_jwt");
   const isLoggedIn = !!token;
-  
-  const [selectedPackage, setSelectedPackage] = useState<any>(
-    coinPacks[0] || null
-  );
+
+  const [selectedPackage, setSelectedPackage] = useState<any>(null);
 
   // Update selected package when coinPacks change
   useEffect(() => {
     if (coinPacks.length > 0) {
-      // If no selection or selected package doesn't exist anymore, select first
-      if (!selectedPackage || !coinPacks.some((p) => p.id === selectedPackage?.id)) {
-        setSelectedPackage(coinPacks[0]);
+      const first = coinPacks[0];
+      const hasValidSelection =
+        selectedPackage &&
+        selectedPackage.id != null &&
+        coinPacks.some((p) => p.id === selectedPackage?.id);
+      if (!hasValidSelection && first?.id != null) {
+        setSelectedPackage(first);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coinPacks]);
 
   const handlePayClick = async (pkg?: any) => {
-    const packageToUse = pkg || selectedPackage;
+    const packageToUse = pkg;
     if (!packageToUse) return;
 
     // If user is logged out, open login popup instead of creating order
@@ -1366,11 +1374,11 @@ const CoinsPage = ({
 
   return (
     <div className="min-h-screen bg-brand-bg pb-24 md:pb-8">
-      <div className="container mx-auto px-4 pt-24 md:pt-20 pb-8 md:pb-20">
+      <div className="container mx-auto px-4 pt-8 md:pt-12 pb-8 md:pb-20">
         <h2 className="text-2xl md:text-3xl font-bold text-center text-white mb-8 md:mb-12">
           Coin Packages
         </h2>
-        
+
         {/* Mobile: Single column stacked layout */}
         <div className="md:hidden space-y-4 max-w-md mx-auto">
           {coinPacks.map((pkg, i) => {
@@ -1388,15 +1396,15 @@ const CoinsPage = ({
                 <div className="flex items-center justify-between">
                   {/* Left: Coins with icon */}
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-primary to-brand-secondary flex items-center justify-center text-white font-bold text-sm">
-                      Z
+                    <div className="flex justify-center text-brand-gold text-2xl">
+                      <i className="fa-solid fa-coins"></i>
                     </div>
-                    <div className="w-2 h-2 rounded-full bg-brand-primary"></div>
-                    <span className="text-3xl font-bold italic text-white">
+
+                    <span className="text-2xl font-bold italic text-white">
                       {pkg.coins}
                     </span>
                   </div>
-                  
+
                   {/* Right: Price badge */}
                   <div className="px-4 py-2 rounded-lg bg-white/10 border border-white/20 backdrop-blur-sm">
                     <span className="text-lg font-bold text-white">
@@ -1457,13 +1465,14 @@ const CoinsPage = ({
             <button className="w-12 h-12 rounded-full bg-black/50 border border-white/10 flex items-center justify-center text-white hover:bg-black/70 transition-colors">
               <i className="fa-solid fa-credit-card text-lg"></i>
             </button>
-            
+
             {/* Pay button */}
             <button
-              onClick={handlePayClick}
+              type="button"
+              onClick={() => handlePayClick(selectedPackage)}
               className="flex-1 bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-brand-primary/20"
             >
-              Pay ₹ {selectedPackage.price}
+              {isLoggedIn ? "Recharge" : "Login"}
             </button>
           </div>
         </div>
@@ -1714,10 +1723,10 @@ const mapCoinPack = (p: any) => ({
   tag: p.isBonusPack
     ? "Bonus Pack"
     : p.isTrialPack
-    ? "Trial Pack"
-    : p.isMicropack
-    ? "Micropack"
-    : undefined,
+      ? "Trial Pack"
+      : p.isMicropack
+        ? "Micropack"
+        : undefined,
   highlight: p.isBonusPack || false,
 });
 
@@ -1726,10 +1735,13 @@ const defaultCoinPacks = defaultCoinPackData
   .map(mapCoinPack);
 
 const Layout = () => {
+  const location = useLocation();
+  const isCoinsPage = location.pathname === "/coins";
+
   const [showLogin, setShowLogin] = useState(false);
   const [showCoins, setShowCoins] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(
-    !!localStorage.getItem("zintle_jwt")
+    !!localStorage.getItem("zintle_jwt"),
   );
   const [coinPacks, setCoinPacks] = useState(defaultCoinPacks);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
@@ -1743,14 +1755,14 @@ const Layout = () => {
           `${HOST}/api/v1.2/creator_center/details/get-coin-pack-details/`,
           {
             // headers: { "X-Organisation-ID": "ZINTEL1234" },
-          }
+          },
         );
         const data = await r.json();
         if (data.success && Array.isArray(data.data)) {
           setCoinPacks(
             data.data
               .filter((p: any) => p.is_active)
-              .map((p: any) => mapCoinPack(p))
+              .map((p: any) => mapCoinPack(p)),
           );
         }
       } catch (e) {
@@ -1786,12 +1798,14 @@ const Layout = () => {
 
   return (
     <div className="min-h-screen bg-brand-bg text-brand-text font-sans">
-      <Header
-        setShowLogin={setShowLogin}
-        setShowCoins={setShowCoins}
-        isLoggedIn={isLoggedIn}
-        onLogout={handleLogout}
-      />
+      {!isCoinsPage && (
+        <Header
+          setShowLogin={setShowLogin}
+          setShowCoins={setShowCoins}
+          isLoggedIn={isLoggedIn}
+          onLogout={handleLogout}
+        />
+      )}
 
       <Routes>
         <Route
@@ -1828,7 +1842,7 @@ const Layout = () => {
         <Route path="/child-safety-standards" element={<ChildSafety />} />
       </Routes>
 
-      <Footer />
+      {!isCoinsPage && <Footer />}
 
       {(showCoins || showLogin) && (
         <CoinStore

@@ -890,12 +890,14 @@ const Features = () => (
           "The best stories aren't just read—they're lived. Where will Zintle
           take you today?"
         </p>
-        <button
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        <a
+              href="https://play.google.com/store/apps/details?id=ai.zintle&hl=en_IN"
+              target="_blank"
+              rel="noopener noreferrer"
           className="bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-4 px-10 rounded-full shadow-xl shadow-brand-primary/30 transition-all transform hover:scale-105 text-lg"
         >
           Start Exploring Now
-        </button>
+        </a>
       </div>
     </div>
   </section>

@@ -42,6 +42,7 @@ const createCoinOrder = async (
     headers: {
       "Content-Type": "application/json",
       ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
+      "X-Organisation-ID": "ZINTEL1234",
     },
     body: JSON.stringify({
       coin_pack_id: coinPackId,
@@ -70,6 +71,7 @@ const initiatePayment = async (
       headers: {
         "Content-Type": "application/json",
         ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
+        "X-Organisation-ID": "ZINTEL1234",
       },
       body: JSON.stringify({
         order_uuid: orderUuid,
@@ -129,6 +131,7 @@ const validateEasebuzzPayment = async (orderUuid?: string | null) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-Organisation-ID": "ZINTEL1234",
         },
         body: JSON.stringify({ order_uuid: orderUuid }),
       },
@@ -949,7 +952,7 @@ const CoinStore = ({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // "X-Organisation-ID": "ZINTEL1234",
+          "X-Organisation-ID": "ZINTEL1234",
         },
         body: JSON.stringify({
           country_code: countryCode,
@@ -974,7 +977,7 @@ const CoinStore = ({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // "X-Organisation-ID": "ZINTEL1234",
+          "X-Organisation-ID": "ZINTEL1234",
         },
         body: JSON.stringify({
           provider: "phone",
@@ -1756,7 +1759,7 @@ const Layout = () => {
         const r = await fetch(
           `${HOST}/api/v1.2/creator_center/details/get-coin-pack-details/`,
           {
-            // headers: { "X-Organisation-ID": "ZINTEL1234" },
+            headers: { "X-Organisation-ID": "ZINTEL1234" },
           },
         );
         const data = await r.json();

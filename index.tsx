@@ -1453,7 +1453,7 @@ const CoinsPage = ({
               <p className="text-2xl font-bold text-white mb-6">₹{pkg.price}</p>
               <button
                 onClick={() => handlePayClick(pkg)}
-                className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20"
+                className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20 pb-8"
               >
                 {isLoggedIn ? "Recharge" : "Login"}
               </button>

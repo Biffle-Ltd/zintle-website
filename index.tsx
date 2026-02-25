@@ -1453,7 +1453,7 @@ const CoinsPage = ({
               <p className="text-2xl font-bold text-white mb-6">₹{pkg.price}</p>
               <button
                 onClick={() => handlePayClick(pkg)}
-                className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20 pb-8"
+                className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20"
               >
                 {isLoggedIn ? "Recharge" : "Login"}
               </button>
@@ -1464,7 +1464,7 @@ const CoinsPage = ({
 
       {/* Fixed bottom action bar (mobile only) */}
       {selectedPackage && (
-        <div className="fixed bottom-0 left-0 right-0 md:hidden bg-brand-bg border-t border-white/10 p-4 z-50">
+        <div className="fixed bottom-0 left-0 right-0 md:hidden bg-brand-bg border-t border-white/10 p-4 z-50 pb-12">
           <div className="flex items-center gap-4 max-w-md mx-auto">
             {/* Left icon button */}
             <button className="w-12 h-12 rounded-full bg-black/50 border border-white/10 flex items-center justify-center text-white hover:bg-black/70 transition-colors">

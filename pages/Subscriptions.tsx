@@ -44,6 +44,12 @@ type MandateValidationResponse = {
   nextDebitOn?: string;
 };
 
+// Sanitize token for HTTP headers (ISO-8859-1 only) to avoid fetch "non ISO-8859-1 code point" error.
+const headerSafeToken = (t: string | null | undefined): string | null => {
+  if (!t || typeof t !== "string") return null;
+  const safe = t.replace(/[\u0100-\uFFFF]/g, "");
+  return safe.length > 0 ? safe : null;
+};
 
 export const Subscriptions = ({
   setShowLogin,
@@ -170,13 +176,14 @@ export const Subscriptions = ({
       //   body.phonepe_version_code = Number(phonePeVersionCode);
       // }
 
+      const authToken = headerSafeToken(token);
       const r = await fetch(
         `${HOST}/api/v1/monetization/subscriptions/mandate/initiate/`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
             "X-Organisation-ID": "ZINTEL1234",
           },
           body: JSON.stringify(body),
@@ -222,13 +229,14 @@ export const Subscriptions = ({
     setMandateValidationLoading(true);
     setMandateValidationError(null);
     try {
+      const authToken = headerSafeToken(token);
       const r = await fetch(
         `${HOST}/api/v1/monetization/subscriptions/mandate/${mandate.id}/validate/`,
         {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
             "X-Organisation-ID": "ZINTEL1234",
           },
         },

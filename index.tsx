@@ -16,12 +16,22 @@ import { Privacy } from "./pages/Privacy";
 import { Terms } from "./pages/Terms";
 import { Refund } from "./pages/Refund";
 import { ChildSafety } from "./pages/ChildSafety";
+import { Subscriptions } from "./pages/Subscriptions";
 
-const HOST = "https://dev.zintle.ai";
-// const HOST = "http://127.0.0.1:8003";
+export const HOST = "https://dev.zintle.ai";
+//export const HOST = "https://balanced-crow-officially.ngrok-free.app";
+// export const HOST = "http://127.0.0.1:8003";
 const { VITE_EASEBUZZ_KEY, VITE_EASEBUZZ_ENV } = (import.meta as any).env;
 const EASEBUZZ_KEY = VITE_EASEBUZZ_KEY;
 const EASEBUZZ_ENV = VITE_EASEBUZZ_ENV;
+
+// Sanitize token for HTTP headers (ISO-8859-1 only) to avoid fetch "non ISO-8859-1 code point" error.
+// Strips non-Latin-1 chars; valid JWTs are ASCII so pass through unchanged.
+const headerSafeToken = (t: string | null | undefined): string | null => {
+  if (!t || typeof t !== "string") return null;
+  const safe = t.replace(/[\u0100-\uFFFF]/g, "");
+  return safe.length > 0 ? safe : null;
+};
 
 // Global callback for showing payment status popup
 let showPaymentStatusCallback: ((status: string) => void) | null = null;
@@ -36,7 +46,8 @@ const createCoinOrder = async (
   coinPackId: number | string,
   token?: string | null,
 ) => {
-  const jwtToken = token || localStorage.getItem("zintle_jwt");
+  const rawToken = token || localStorage.getItem("zintle_jwt");
+  const jwtToken = headerSafeToken(rawToken);
   const r = await fetch(`${HOST}/api/v1.2/monetization/orders/create/`, {
     method: "POST",
     headers: {
@@ -63,7 +74,8 @@ const initiatePayment = async (
   mandateUuid?: number | string | null,
   token?: string | null,
 ) => {
-  const jwtToken = token || localStorage.getItem("zintle_jwt");
+  const rawToken = token || localStorage.getItem("zintle_jwt");
+  const jwtToken = headerSafeToken(rawToken);
   const r = await fetch(
     `${HOST}/api/v1.2/monetization/orders/initiate-payment/`,
     {
@@ -424,6 +436,12 @@ const Header = ({
             className="hover:text-white transition-colors"
           >
             Guidelines
+          </button>
+          <button
+            onClick={() => navTo("subscriptions")}
+            className="hover:text-white transition-colors"
+          >
+            Subscriptions
           </button>
           <button
             onClick={() => navTo("privacy")}
@@ -1742,7 +1760,7 @@ const defaultCoinPacks = defaultCoinPackData
 const Layout = () => {
   const location = useLocation();
   const isCoinsPage = location.pathname === "/coins";
-
+  const isSubscriptionsPage = location.pathname === "/subscriptions";
   const [showLogin, setShowLogin] = useState(false);
   const [showCoins, setShowCoins] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(
@@ -1803,7 +1821,7 @@ const Layout = () => {
 
   return (
     <div className="min-h-screen bg-brand-bg text-brand-text font-sans">
-      {!isCoinsPage && (
+      {!isCoinsPage && !isSubscriptionsPage && (
         <Header
           setShowLogin={setShowLogin}
           setShowCoins={setShowCoins}
@@ -1845,9 +1863,13 @@ const Layout = () => {
         <Route path="/terms" element={<Terms />} />
         <Route path="/refund" element={<Refund />} />
         <Route path="/child-safety-standards" element={<ChildSafety />} />
+        <Route
+          path="/subscriptions"
+          element={<Subscriptions setShowLogin={setShowLogin} />}
+        />
       </Routes>
 
-      {!isCoinsPage && <Footer />}
+      {!isCoinsPage && !isSubscriptionsPage && <Footer />}
 
       {(showCoins || showLogin) && (
         <CoinStore

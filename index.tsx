@@ -16,9 +16,10 @@ import { Privacy } from "./pages/Privacy";
 import { Terms } from "./pages/Terms";
 import { Refund } from "./pages/Refund";
 import { ChildSafety } from "./pages/ChildSafety";
+import { Subscriptions } from "./pages/Subscriptions";
 
-const HOST = "https://dev.zintle.ai";
-// const HOST = "http://127.0.0.1:8003";
+// export const HOST = "https://dev.zintle.ai";
+export const HOST = "http://127.0.0.1:8003";
 const { VITE_EASEBUZZ_KEY, VITE_EASEBUZZ_ENV } = (import.meta as any).env;
 const EASEBUZZ_KEY = VITE_EASEBUZZ_KEY;
 const EASEBUZZ_ENV = VITE_EASEBUZZ_ENV;
@@ -424,6 +425,12 @@ const Header = ({
             className="hover:text-white transition-colors"
           >
             Guidelines
+          </button>
+          <button
+            onClick={() => navTo("subscriptions")}
+            className="hover:text-white transition-colors"
+          >
+            Subscriptions
           </button>
           <button
             onClick={() => navTo("privacy")}
@@ -1742,7 +1749,7 @@ const defaultCoinPacks = defaultCoinPackData
 const Layout = () => {
   const location = useLocation();
   const isCoinsPage = location.pathname === "/coins";
-
+  const isSubscriptionsPage = location.pathname === "/subscriptions";
   const [showLogin, setShowLogin] = useState(false);
   const [showCoins, setShowCoins] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(
@@ -1803,7 +1810,7 @@ const Layout = () => {
 
   return (
     <div className="min-h-screen bg-brand-bg text-brand-text font-sans">
-      {!isCoinsPage && (
+      {!isCoinsPage && !isSubscriptionsPage && (
         <Header
           setShowLogin={setShowLogin}
           setShowCoins={setShowCoins}
@@ -1845,9 +1852,13 @@ const Layout = () => {
         <Route path="/terms" element={<Terms />} />
         <Route path="/refund" element={<Refund />} />
         <Route path="/child-safety-standards" element={<ChildSafety />} />
+        <Route
+          path="/subscriptions"
+          element={<Subscriptions setShowLogin={setShowLogin} />}
+        />
       </Routes>
 
-      {!isCoinsPage && <Footer />}
+      {!isCoinsPage && !isSubscriptionsPage && <Footer />}
 
       {(showCoins || showLogin) && (
         <CoinStore

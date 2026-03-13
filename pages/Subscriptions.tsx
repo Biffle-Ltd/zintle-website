@@ -54,12 +54,14 @@ export const Subscriptions = ({
   const searchParams = new URLSearchParams(location.search);
   const tokenFromQuery = searchParams.get("id");
   const planIdFromQuery = searchParams.get("plan_id");
+  const targetAppFromQuery = searchParams.get("target_app");
 
   // Use token from query params if available, otherwise fall back to localStorage
   const token = tokenFromQuery || localStorage.getItem("zintle_jwt");
   const isLoggedIn = !!token;
 
   const planId = planIdFromQuery ? Number(planIdFromQuery) : null;
+  const targetApp = targetAppFromQuery;
 
   // // Plan listing state (currently unused as we no longer fetch plans)
   // const [plans, setPlans] = useState<Plan[]>([]);
@@ -77,7 +79,6 @@ export const Subscriptions = ({
   const [vpa, setVpa] = useState("");
   const [mobileNumber, setMobileNumber] = useState("");
   const [phonePeVersionCode, setPhonePeVersionCode] = useState<string>("");
-  const [targetApp, setTargetApp] = useState<string>("PHONEPE");
   const [isFreeTrial, setIsFreeTrial] = useState(false);
 
   const [mandateInitLoading, setMandateInitLoading] = useState(false);
@@ -137,7 +138,7 @@ export const Subscriptions = ({
     //   return;
     // }
     if (!planId) return;
-
+    if (!targetApp) return;
     setMandateInitLoading(true);
     setMandateInitError(null);
     setMandate(null);
@@ -148,7 +149,7 @@ export const Subscriptions = ({
         // is_free_trial: isFreeTrial,
         payment_instrument_type: "UPI_INTENT",
         device_os: "ANDROID",
-        target_app: "com.phonepe.simulator",
+        target_app: targetApp,
       };
 
       // if (paymentInstrumentType === "UPI_COLLECT") {
@@ -295,7 +296,7 @@ export const Subscriptions = ({
         </div> */}
 
         <div className="lg:col-span-2 space-y-6">
-          <div className="glass-card rounded-3xl p-6 md:p-8">
+          <div className="hidden lg:block glass-card rounded-3xl p-6 md:p-8">
             {/* <h2 className="text-xl font-semibold text-white mb-4">
               Plan Details & Payment
             </h2> */}
@@ -409,12 +410,12 @@ export const Subscriptions = ({
                         </div>
                         <div>
                           <label className="block text-xs text-brand-muted mb-1">
-                            Target App
+                            Target App (from URL)
                           </label>
                           <input
                             type="text"
                             value={targetApp}
-                            onChange={(e) => setTargetApp(e.target.value)}
+                            readOnly
                             className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none"
                           />
                         </div>
@@ -508,19 +509,13 @@ export const Subscriptions = ({
               <div className="text-xs text-brand-muted space-y-1">
                 <p>
                   <span className="font-semibold text-white">Mandate ID:</span>{" "}
-                  {mandate.id} ({mandate.mandate_uuid})
+                  {mandate.id}
                 </p>
                 <p>
                   <span className="font-semibold text-white">
                     Payment Gateway:
                   </span>{" "}
                   {mandate.payment_gateway}
-                </p>
-                <p>
-                  <span className="font-semibold text-white">
-                    Gateway Mandate ID:
-                  </span>{" "}
-                  {mandate.pg_mandate_id}
                 </p>
                 <p>
                   <span className="font-semibold text-white">State:</span>{" "}

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { HOST } from "../index";
 type PaymentInstrumentType = "UPI_COLLECT" | "UPI_INTENT" | "UPI_QR";
 type DeviceOS = "IOS" | "ANDROID";
+const HOST = "https://prod.biffle.ai";
 
 // NOTE: Plan listing & fetching are disabled for now.
 // We rely solely on plan_id coming from the page URL.
@@ -536,6 +536,14 @@ export const Subscriptions = ({
                   {mandate?.pg_info?.redirect_url ||
                     "N/A"}
                 </p>
+                <p>
+                  <span className="font-semibold text-white">
+                    Target App
+                  </span>{" "}
+                  {targetApp ||
+                    "N/A"}
+                </p>
+
               </div>
             </div>
           )}

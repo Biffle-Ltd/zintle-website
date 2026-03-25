@@ -303,11 +303,11 @@ export const Subscriptions = ({
           </div>
         </div> */}
 
-        <div className="lg:col-span-2 space-y-6">
+        {/* <div className="lg:col-span-2 space-y-6">
           <div className="hidden lg:block glass-card rounded-3xl p-6 md:p-8">
-            {/* <h2 className="text-xl font-semibold text-white mb-4">
+            <h2 className="text-xl font-semibold text-white mb-4">
               Plan Details & Payment
-            </h2> */}
+            </h2>
             {!planId && (
               <p className="text-brand-muted text-sm">INVALID URL.</p>
             )}
@@ -590,7 +590,7 @@ export const Subscriptions = ({
               )}
             </div>
           )}
-        </div>
+        </div> */}
       </div>
     </div>
   );

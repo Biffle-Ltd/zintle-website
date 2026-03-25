@@ -18,7 +18,7 @@ import { Refund } from "./pages/Refund";
 import { ChildSafety } from "./pages/ChildSafety";
 import { Subscriptions } from "./pages/Subscriptions";
 
-export const HOST = "https://dev.zintle.ai";
+export const HOST = "https://prod.biffle.ai";
 //export const HOST = "https://balanced-crow-officially.ngrok-free.app";
 // export const HOST = "http://127.0.0.1:8003";
 const { VITE_EASEBUZZ_KEY, VITE_EASEBUZZ_ENV } = (import.meta as any).env;

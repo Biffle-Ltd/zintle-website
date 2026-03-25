@@ -2,8 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 type PaymentInstrumentType = "UPI_COLLECT" | "UPI_INTENT" | "UPI_QR";
 type DeviceOS = "IOS" | "ANDROID";
-// import { HOST } from "../index";
-const HOST = "https://balanced-crow-officially.ngrok-free.app";
+import { HOST } from "../index";
 // NOTE: Plan listing & fetching are disabled for now.
 // We rely solely on plan_id coming from the page URL.
 // type Plan = {

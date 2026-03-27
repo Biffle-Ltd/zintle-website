@@ -162,7 +162,7 @@ export const Subscriptions = ({
       // }
 
       // if (paymentInstrumentType === "UPI_INTENT") {
-      //   body.target_app = targetApp; 
+      //   body.target_app = targetApp;
       //   if (usePhonePe) {
       //     body.use_phonepe = true;
       //     body.mobile_number = mobileNumber;
@@ -201,7 +201,7 @@ export const Subscriptions = ({
       const redirectUrl = mandateData?.pg_info?.redirect_url;
       console.log({ redirectUrl });
       if (redirectUrl && typeof window !== "undefined") {
-        window.location.href = redirectUrl;
+        window.open(redirectUrl, "_blank", "noopener,noreferrer");
       }
     } catch (e: any) {
       setMandateInitError(e.message || "Failed to initiate mandate");
@@ -212,7 +212,13 @@ export const Subscriptions = ({
 
   // Automatically start mandate initiation when plan_id (and token) are available
   useEffect(() => {
-    if (planId && isLoggedIn && !autoInitiated && !mandate && !mandateInitLoading) {
+    if (
+      planId &&
+      isLoggedIn &&
+      !autoInitiated &&
+      !mandate &&
+      !mandateInitLoading
+    ) {
       setAutoInitiated(true);
       // Fire and forget; errors will surface in UI via state
       void handleInitiateMandate();
@@ -222,7 +228,9 @@ export const Subscriptions = ({
 
   const handleValidateMandate = async () => {
     if (!mandate?.id) {
-      setMandateValidationError("No mandate to validate. Please initiate first.");
+      setMandateValidationError(
+        "No mandate to validate. Please initiate first.",
+      );
       return;
     }
 
@@ -594,4 +602,3 @@ export const Subscriptions = ({
     </div>
   );
 };
-

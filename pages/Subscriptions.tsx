@@ -201,7 +201,7 @@ export const Subscriptions = ({
       const redirectUrl = mandateData?.pg_info?.redirect_url;
       console.log({ redirectUrl });
       if (redirectUrl && typeof window !== "undefined") {
-        window.open(redirectUrl, "_blank", "noopener,noreferrer");
+        window.location.href = redirectUrl;
       }
     } catch (e: any) {
       setMandateInitError(e.message || "Failed to initiate mandate");

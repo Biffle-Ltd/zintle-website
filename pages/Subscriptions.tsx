@@ -50,6 +50,26 @@ const headerSafeToken = (t: string | null | undefined): string | null => {
   return safe.length > 0 ? safe : null;
 };
 
+/** Notify React Native WebView before handing off to UPI / payment app. */
+const postMandateToReactNative = (
+  mandateData: MandateInitResponse,
+) => {
+  const w = window as Window & {
+    ReactNativeWebView?: { postMessage: (message: string) => void };
+  };
+  if (!w.ReactNativeWebView?.postMessage) return;
+  try {
+    w.ReactNativeWebView.postMessage(
+      JSON.stringify({
+        mandateId: String(mandateData.id),
+        status: mandateData.mandate_state,
+      }),
+    );
+  } catch {
+    // ignore stringify / bridge errors
+  }
+};
+
 export const Subscriptions = ({
   setShowLogin,
 }: {
@@ -197,10 +217,9 @@ export const Subscriptions = ({
       }
       const mandateData = data.data as MandateInitResponse;
       setMandate(mandateData);
-      console.log({ mandateData });
       const redirectUrl = mandateData?.pg_info?.redirect_url;
-      console.log({ redirectUrl });
       if (redirectUrl && typeof window !== "undefined") {
+        postMandateToReactNative(mandateData);
         window.location.href = redirectUrl;
       }
     } catch (e: any) {
@@ -536,12 +555,11 @@ export const Subscriptions = ({
                   <span className="font-semibold text-white">State:</span>{" "}
                   {mandate.mandate_state}
                 </p>
-                <p>
+                <p className="break-all">
                   <span className="font-semibold text-white">
                     Intent URL:
                   </span>{" "}
-                  {mandate?.pg_info?.redirect_url ||
-                    "N/A"}
+                  {mandate ? resolveMandateRedirectUrl(mandate) || "N/A" : "N/A"}
                 </p>
                 <p>
                   <span className="font-semibold text-white">

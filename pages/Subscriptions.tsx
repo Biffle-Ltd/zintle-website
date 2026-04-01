@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 type PaymentInstrumentType = "UPI_COLLECT" | "UPI_INTENT" | "UPI_QR";
 type DeviceOS = "IOS" | "ANDROID";
 import { HOST } from "../index";
+import { headerSafeToken } from "../utils/headerSafeToken";
 // NOTE: Plan listing & fetching are disabled for now.
 // We rely solely on plan_id coming from the page URL.
 // type Plan = {
@@ -41,13 +42,6 @@ type MandateValidationResponse = {
   code: string;
   message: string;
   nextDebitOn?: string;
-};
-
-// Sanitize token for HTTP headers (ISO-8859-1 only) to avoid fetch "non ISO-8859-1 code point" error.
-const headerSafeToken = (t: string | null | undefined): string | null => {
-  if (!t || typeof t !== "string") return null;
-  const safe = t.replace(/[\u0100-\uFFFF]/g, "");
-  return safe.length > 0 ? safe : null;
 };
 
 /** Notify React Native WebView before handing off to UPI / payment app. */
@@ -162,6 +156,7 @@ export const Subscriptions = ({
     //   setMandateInitError(validationError);
     //   return;
     // }
+    return
     if (!planId) return;
     if (!targetApp) return;
     setMandateInitLoading(true);
@@ -291,6 +286,29 @@ export const Subscriptions = ({
       <h1 className="text-3xl md:text-4xl font-bold text-white mb-4">
         Subscription
       </h1>
+      {isLoggedIn && (
+        <>
+          <div className="grid lg:grid-cols-3 gap-8">
+            <div className="overflow-hidden rounded-xl border border-white/10 mb-5">
+              <div className="bg-neutral-950 px-4 py-2.5 flex items-center gap-1.5">
+                <span className="text-white font-bold text-sm tracking-tight">
+                  UPI
+                </span>
+                <i
+                  className="fa-solid fa-bolt text-sky-400 text-sm"
+                  aria-hidden
+                />
+                <span className="text-sky-300 font-bold text-sm">Fastest</span>
+              </div>
+              <div className="bg-sky-50 px-4 py-2.5">
+                <p className="text-sky-600 text-sm leading-snug">
+                  87.5% of our users prefer paying via UPI
+                </p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
       {/* <p className="text-brand-muted mb-10 max-w-2xl">
         Configure payment options and start your recurring subscription securely
         for the selected plan.
@@ -311,9 +329,8 @@ export const Subscriptions = ({
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-8">
-        {/* Left column (plan list) intentionally left empty since plans are not fetched */}
-        {/* <div className="lg:col-span-1 space-y-4">
+      {/* Left column (plan list) intentionally left empty since plans are not fetched */}
+      {/* <div className="lg:col-span-1 space-y-4">
           <h2 className="text-xl font-semibold text-white mb-2">
             Plan Information
           </h2>
@@ -329,7 +346,7 @@ export const Subscriptions = ({
           </div>
         </div> */}
 
-        {/* <div className="lg:col-span-2 space-y-6">
+      {/* <div className="lg:col-span-2 space-y-6">
           <div className="hidden lg:block glass-card rounded-3xl p-6 md:p-8">
             <h2 className="text-xl font-semibold text-white mb-4">
               Plan Details & Payment
@@ -616,7 +633,6 @@ export const Subscriptions = ({
             </div>
           )}
         </div> */}
-      </div>
     </div>
   );
 };

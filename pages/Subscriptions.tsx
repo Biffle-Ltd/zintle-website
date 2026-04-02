@@ -120,9 +120,15 @@ function formatRecurringRight(plan: MonetizationPlanDetails): string {
   return pricePart;
 }
 
-/** "Starting 03 Apr, 2026" using local today */
-function formatStartingTodayLabel(): string {
+/** "Starting 03 Apr, 2026" = local today + free_plan_duration (days). */
+function formatSubscriptionStartLabel(plan: MonetizationPlanDetails): string {
+  const raw = plan.free_plan_duration;
+  const addDays =
+    typeof raw === "number" && Number.isFinite(raw) && raw >= 0
+      ? Math.floor(raw)
+      : 0;
   const d = new Date();
+  d.setDate(d.getDate() + addDays);
   const parts = new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
     month: "short",
@@ -215,7 +221,7 @@ function PaySecureTimelineCard({ plan }: { plan: MonetizationPlanDetails }) {
             <div className="h-3 w-3 shrink-0 rounded-full border-2 border-white/50 bg-transparent" />
           </div>
           <div className="flex min-w-0 flex-1 items-start justify-between gap-3 text-sm text-white/55">
-            <span>{formatStartingTodayLabel()}</span>
+            <span>{formatSubscriptionStartLabel(plan)}</span>
             <span className="shrink-0 text-right tabular-nums">
               {formatRecurringRight(plan)}
             </span>

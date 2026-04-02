@@ -156,7 +156,6 @@ export const Subscriptions = ({
     //   setMandateInitError(validationError);
     //   return;
     // }
-    return
     if (!planId) return;
     if (!targetApp) return;
     setMandateInitLoading(true);

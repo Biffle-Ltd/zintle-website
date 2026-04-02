@@ -44,6 +44,198 @@ type MandateValidationResponse = {
   nextDebitOn?: string;
 };
 
+const PAY_SECURE_GREEN = "#34C759";
+const PAY_CARD_BG = "#1E1E21";
+
+/** Plan object from GET /api/v1/monetization/plans/{id}/details/ */
+export type MonetizationPlanDetails = {
+  id?: number;
+  plan_name?: string;
+  plan_description?: string;
+  plan_duration?: number;
+  price?: string | number;
+  is_freetrial_allowed?: boolean;
+  free_plan_duration?: number;
+  trial_token_amount?: number;
+  token_amount?: number;
+  extra_info?: Record<string, unknown>;
+  is_active?: boolean;
+  subscription_id?: string;
+  organisation_id?: string;
+  coin_value?: number;
+};
+
+function unwrapPlanDetailsJson(json: unknown): MonetizationPlanDetails | null {
+  if (!json || typeof json !== "object") return null;
+  const o = json as Record<string, unknown>;
+  const inner = o.data;
+  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+    return inner as MonetizationPlanDetails;
+  }
+  if (
+    "plan_duration" in o ||
+    "price" in o ||
+    typeof o.id === "number"
+  ) {
+    return o as MonetizationPlanDetails;
+  }
+  return null;
+}
+
+function parsePlanPriceNumber(price: string | number | undefined): number {
+  if (typeof price === "number" && Number.isFinite(price)) return price;
+  if (typeof price === "string" && price.trim() !== "") {
+    const n = Number(price);
+    if (!Number.isNaN(n)) return n;
+  }
+  return 0;
+}
+
+/** e.g. ₹ 199.00 with en-IN grouping */
+function formatPlanPriceInr(price: string | number | undefined): string {
+  const n = parsePlanPriceNumber(price);
+  return `₹ ${n.toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatRupeeWhole(n: number): string {
+  return `₹ ${Math.round(n).toLocaleString("en-IN")}`;
+}
+
+function getBillingUnit(
+  planDuration: number | undefined,
+): "month" | "week" | null {
+  if (planDuration === 7) return "week";
+  if (planDuration === 30 || planDuration === 31) return "month";
+  return null;
+}
+
+function formatRecurringRight(plan: MonetizationPlanDetails): string {
+  const unit = getBillingUnit(plan.plan_duration);
+  const pricePart = formatPlanPriceInr(plan.price);
+  if (unit === "month") return `${pricePart}/month`;
+  if (unit === "week") return `${pricePart}/week`;
+  return pricePart;
+}
+
+/** "Starting 03 Apr, 2026" using local today */
+function formatStartingTodayLabel(): string {
+  const d = new Date();
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).formatToParts(d);
+  const day = parts.find((p) => p.type === "day")?.value ?? "";
+  const month = parts.find((p) => p.type === "month")?.value ?? "";
+  const year = parts.find((p) => p.type === "year")?.value ?? "";
+  return `Starting ${day} ${month}, ${year}`;
+}
+
+function getTrialTokenRupee(plan: MonetizationPlanDetails): number {
+  const t = plan.trial_token_amount ?? plan.token_amount;
+  if (typeof t === "number" && Number.isFinite(t)) return t;
+  if (plan.is_freetrial_allowed) return 2;
+  return 0;
+}
+
+function autopayFooterText(plan: MonetizationPlanDetails): string {
+  const unit = getBillingUnit(plan.plan_duration);
+  if (unit === "week") return "Autopay every week, Cancel anytime";
+  if (unit === "month") return "Autopay every month, Cancel anytime";
+  const pd = plan.plan_duration;
+  if (pd != null && pd > 0)
+    return `Autopay every ${pd} days, Cancel anytime`;
+  return "Autopay, Cancel anytime";
+}
+
+function PaySecureTimelineCard({ plan }: { plan: MonetizationPlanDetails }) {
+  const tokenRupee = getTrialTokenRupee(plan);
+  return (
+    <div
+      className="overflow-hidden rounded-2xl shadow-lg shadow-black/40"
+      style={{ backgroundColor: PAY_CARD_BG }}
+    >
+      <div className="px-5 pt-6 pb-4">
+        <div className="flex gap-4">
+          <div className="flex w-5 shrink-0 flex-col items-center">
+            <div
+              className="h-3 w-3 shrink-0 rounded-full"
+              style={{ backgroundColor: PAY_SECURE_GREEN }}
+            />
+            <div
+              className="min-h-[36px] w-0.5 flex-1"
+              style={{ backgroundColor: PAY_SECURE_GREEN }}
+            />
+          </div>
+          <div className="flex min-w-0 flex-1 items-start justify-between gap-3 pb-1">
+            <span
+              className="text-sm font-medium"
+              style={{ color: PAY_SECURE_GREEN }}
+            >
+              Pay Today
+            </span>
+            <span
+              className="shrink-0 text-sm font-semibold tabular-nums"
+              style={{ color: PAY_SECURE_GREEN }}
+            >
+              {formatRupeeWhole(tokenRupee)}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex gap-4">
+          <div className="flex w-5 shrink-0 flex-col items-center">
+            <div
+              className="h-3 w-3 shrink-0 rounded-full"
+              style={{ backgroundColor: PAY_SECURE_GREEN }}
+            />
+            <div className="min-h-[36px] w-0.5 flex-1 bg-white/20" />
+          </div>
+          <div className="flex min-w-0 flex-1 items-start justify-between gap-3 pb-1">
+            <span
+              className="text-sm font-medium"
+              style={{ color: PAY_SECURE_GREEN }}
+            >
+              Get Refunded Today
+            </span>
+            <span
+              className="shrink-0 text-sm font-semibold tabular-nums"
+              style={{ color: PAY_SECURE_GREEN }}
+            >
+              {formatRupeeWhole(tokenRupee)}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex gap-4">
+          <div className="flex w-5 shrink-0 flex-col items-center pt-0.5">
+            <div className="h-3 w-3 shrink-0 rounded-full border-2 border-white/50 bg-transparent" />
+          </div>
+          <div className="flex min-w-0 flex-1 items-start justify-between gap-3 text-sm text-white/55">
+            <span>{formatStartingTodayLabel()}</span>
+            <span className="shrink-0 text-right tabular-nums">
+              {formatRecurringRight(plan)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-3 border-t border-white/[0.08] bg-black/25 px-5 py-4">
+        <i
+          className="fa-solid fa-arrows-rotate mt-0.5 shrink-0 text-white"
+          aria-hidden
+        />
+        <p className="text-sm leading-snug text-white">
+          {autopayFooterText(plan)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /** Notify React Native WebView before handing off to UPI / payment app. */
 const postMandateToReactNative = (
   mandateData: MandateInitResponse,
@@ -115,40 +307,75 @@ export const Subscriptions = ({
   // To avoid repeatedly triggering auto-initiation when plan_id is present
   const [autoInitiated, setAutoInitiated] = useState(false);
 
-  // Plan fetching & detail loading are disabled.
-  // All plan information comes from the URL (plan_id).
+  const [planDetailsState, setPlanDetailsState] = useState<{
+    loading: boolean;
+    error: string | null;
+    data: MonetizationPlanDetails | null;
+  }>({ loading: false, error: null, data: null });
 
-  const validateForm = () => {
-    if (!planId) {
-      return "Missing plan_id in URL.";
+  useEffect(() => {
+    if (!isLoggedIn || !planId) {
+      setPlanDetailsState({ loading: false, error: null, data: null });
+      return;
     }
-    if (!isLoggedIn) {
-      return "Please log in to start a subscription.";
-    }
-    if (paymentInstrumentType === "UPI_COLLECT") {
-      if (!vpa) {
-        return "Please enter your UPI ID (VPA).";
+    let cancelled = false;
+    setPlanDetailsState((s) => ({ ...s, loading: true, error: null }));
+    void (async () => {
+      try {
+        const authToken = headerSafeToken(token);
+        const r = await fetch(
+          `${HOST}/api/v1/monetization/plans/${planId}/details/`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+              "X-Organisation-ID": "ZINTEL1234",
+            },
+          },
+        );
+        const json: unknown = await r.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!r.ok) {
+          const rec =
+            json && typeof json === "object"
+              ? (json as Record<string, unknown>)
+              : null;
+          let msg = `Failed to load plan (${r.status})`;
+          if (rec) {
+            const d = rec.detail;
+            if (typeof d === "string") msg = d;
+            else if (typeof rec.message === "string") msg = rec.message;
+          }
+          setPlanDetailsState({
+            loading: false,
+            error: msg,
+            data: null,
+          });
+          return;
+        }
+        const plan = unwrapPlanDetailsJson(json);
+        if (!plan) {
+          setPlanDetailsState({
+            loading: false,
+            error: "Invalid plan response",
+            data: null,
+          });
+          return;
+        }
+        setPlanDetailsState({ loading: false, error: null, data: plan });
+      } catch (e: unknown) {
+        if (!cancelled) {
+          const msg = e instanceof Error ? e.message : "Failed to load plan";
+          setPlanDetailsState({ loading: false, error: msg, data: null });
+        }
       }
-      if (!/^[\w.\-]+@[\w.\-]+$/.test(vpa)) {
-        return "Please enter a valid UPI ID.";
-      }
-    }
-    if (paymentInstrumentType === "UPI_INTENT" && usePhonePe) {
-      if (!mobileNumber) {
-        return "Mobile number is required for PhonePe intent.";
-      }
-      if (!/^\d{10}$/.test(mobileNumber)) {
-        return "Please enter a valid 10-digit mobile number.";
-      }
-      if (!phonePeVersionCode) {
-        return "PhonePe version code is required for PhonePe intent.";
-      }
-    }
-    if (deviceOS === "ANDROID" && usePhonePe && !phonePeVersionCode) {
-      return "PhonePe version code is required on Android.";
-    }
-    return null;
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, planId, token]);
+
 
   const handleInitiateMandate = async () => {
     // const validationError = validateForm();
@@ -282,11 +509,11 @@ export const Subscriptions = ({
 
   return (
     <div className="container mx-auto px-4 py-24">
-      <h1 className="text-3xl md:text-4xl font-bold text-white mb-4">
-        Subscription
-      </h1>
-      {isLoggedIn && (
+      {/* {isLoggedIn && (
         <>
+          <h1 className="text-3xl md:text-4xl font-bold text-white mb-4">
+            Subscription
+          </h1>
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="overflow-hidden rounded-xl border border-white/10 mb-5">
               <div className="bg-neutral-950 px-4 py-2.5 flex items-center gap-1.5">
@@ -307,11 +534,47 @@ export const Subscriptions = ({
             </div>
           </div>
         </>
-      )}
+      )} */}
       {/* <p className="text-brand-muted mb-10 max-w-2xl">
         Configure payment options and start your recurring subscription securely
         for the selected plan.
       </p> */}
+      {isLoggedIn && (
+        <div className="mx-auto mb-10 max-w-md">
+          <h2 className="mb-5 text-center text-lg font-semibold tracking-tight text-white">
+            Pay Securely
+          </h2>
+
+          {!planId && (
+            <p className="text-center text-sm text-brand-muted">
+              Add a valid{" "}
+              <span className="font-medium text-white">plan_id</span> query
+              parameter to see your payment schedule.
+            </p>
+          )}
+
+          {planId && planDetailsState.loading && (
+            <div
+              className="animate-pulse rounded-2xl p-6"
+              style={{ backgroundColor: PAY_CARD_BG }}
+            >
+              <div className="mb-4 h-4 w-3/4 rounded bg-white/10" />
+              <div className="mb-4 h-4 w-1/2 rounded bg-white/10" />
+              <div className="h-4 w-2/3 rounded bg-white/10" />
+            </div>
+          )}
+
+          {planId && planDetailsState.error && !planDetailsState.loading && (
+            <p className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-center text-sm text-red-300">
+              {planDetailsState.error}
+            </p>
+          )}
+
+          {planId && planDetailsState.data && !planDetailsState.loading && (
+            <PaySecureTimelineCard plan={planDetailsState.data} />
+          )}
+        </div>
+      )}
 
       {!isLoggedIn && (
         <div className="mb-8 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/40 text-sm flex items-center justify-between gap-4">

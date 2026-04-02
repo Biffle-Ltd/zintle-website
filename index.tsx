@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -8,6 +8,7 @@ import {
   useNavigate,
   useLocation,
 } from "react-router-dom";
+import FBRedirect from "./pages/FbRedirect";
 import { About } from "./pages/About";
 import { Contact } from "./pages/Contact";
 import { Safety } from "./pages/Safety";
@@ -1761,6 +1762,7 @@ const Layout = () => {
   const location = useLocation();
   const isCoinsPage = location.pathname === "/coins";
   const isSubscriptionsPage = location.pathname === "/subscriptions";
+  const isFbRedirectPage = location.pathname === "/fb-redirect";
   const [showLogin, setShowLogin] = useState(false);
   const [showCoins, setShowCoins] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(
@@ -1821,7 +1823,7 @@ const Layout = () => {
 
   return (
     <div className="min-h-screen bg-brand-bg text-brand-text font-sans">
-      {!isCoinsPage && !isSubscriptionsPage && (
+      {!isCoinsPage && !isSubscriptionsPage && !isFbRedirectPage && (
         <Header
           setShowLogin={setShowLogin}
           setShowCoins={setShowCoins}
@@ -1867,9 +1869,10 @@ const Layout = () => {
           path="/subscriptions"
           element={<Subscriptions setShowLogin={setShowLogin} />}
         />
+        <Route path="/fb-redirect" element={<FBRedirect />} />
       </Routes>
 
-      {!isCoinsPage && !isSubscriptionsPage && <Footer />}
+      {!isCoinsPage && !isSubscriptionsPage && !isFbRedirectPage && <Footer />}
 
       {(showCoins || showLogin) && (
         <CoinStore

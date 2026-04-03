@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { HOST } from "../index";
 
 const PLAY_STORE_URL =
-  "https://play.google.com/store/apps/details?id=ai.biffle";
+  "https://play.google.com/store/apps/details?id=ai.zintle";
 
 const FBRedirect: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -98,8 +98,8 @@ const FBRedirect: React.FC = () => {
 
       {/* Logo */}
       <img
-        src="/biffle_logo_new.png"
-        alt="Biffle"
+        src="/zintle_app_logo.png"
+        alt="Zintle"
         style={{
           width: "120px",
           height: "120px",

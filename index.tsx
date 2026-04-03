@@ -18,7 +18,16 @@ import { Terms } from "./pages/Terms";
 import { Refund } from "./pages/Refund";
 import { ChildSafety } from "./pages/ChildSafety";
 import { Subscriptions } from "./pages/Subscriptions";
-
+import {
+  parseCoinPixelContext,
+  sendCoinPaymentFailed,
+  sendCoinPaymentInitiated,
+  sendCoinPaymentSuccess,
+  sendCoinStoreViewed,
+  type ParsedCoinPixelContext,
+} from "./utils/pixelEvents";
+import { headerSafeToken } from "./utils/headerSafeToken";
+export const PAYMENT_GATEWAY = "Easebuzz";
 export const HOST = "https://prod.biffle.ai";
 //export const HOST = "https://balanced-crow-officially.ngrok-free.app";
 // export const HOST = "http://127.0.0.1:8003";
@@ -26,20 +35,29 @@ const { VITE_EASEBUZZ_KEY, VITE_EASEBUZZ_ENV } = (import.meta as any).env;
 const EASEBUZZ_KEY = VITE_EASEBUZZ_KEY;
 const EASEBUZZ_ENV = VITE_EASEBUZZ_ENV;
 
-// Sanitize token for HTTP headers (ISO-8859-1 only) to avoid fetch "non ISO-8859-1 code point" error.
-// Strips non-Latin-1 chars; valid JWTs are ASCII so pass through unchanged.
-const headerSafeToken = (t: string | null | undefined): string | null => {
-  if (!t || typeof t !== "string") return null;
-  const safe = t.replace(/[\u0100-\uFFFF]/g, "");
-  return safe.length > 0 ? safe : null;
-};
-
 // Global callback for showing payment status popup
 let showPaymentStatusCallback: ((status: string) => void) | null = null;
 export const setPaymentStatusCallback = (
   callback: (status: string) => void,
 ) => {
   showPaymentStatusCallback = callback;
+};
+
+type LastTrackedCoinPurchase = {
+  orderId: string;
+  orderUuid: string;
+  coinPackId: number;
+  amount: number;
+  coinQuantity: number;
+  pixelContext: ParsedCoinPixelContext;
+};
+
+let lastTrackedCoinPurchaseRef: LastTrackedCoinPurchase | null = null;
+
+export type CreateOrderPixelOptions = {
+  trackCoinPixels?: boolean;
+  pixelContext?: ParsedCoinPixelContext | null;
+  coinPack?: { id: number; price: number; coins: number };
 };
 
 // Shared helper to create coin purchase orders
@@ -156,10 +174,34 @@ const validateEasebuzzPayment = async (orderUuid?: string | null) => {
     }
     console.log("Easebuzz payment validated", data);
 
-    // Check payment_status and show popup accordingly
-    const paymentStatus = data?.data?.payment_status;
+    const paymentStatus = data?.data?.payment_status as string | undefined;
+    const ref = lastTrackedCoinPurchaseRef;
+    if (ref && orderUuid && ref.orderUuid === orderUuid) {
+      const failReason =
+        (data?.data?.failure_reason as string | undefined) ??
+        (data?.data?.message as string | undefined) ??
+        "";
+      if (paymentStatus === "SUCCESS") {
+        sendCoinPaymentSuccess(ref.pixelContext, {
+          order_id: ref.orderId,
+          transaction_id: ref.orderUuid,
+          amount: ref.amount,
+          coin_pack_id: ref.coinPackId,
+          coin_quantity: ref.coinQuantity,
+        });
+        lastTrackedCoinPurchaseRef = null;
+      } else if (paymentStatus === "FAILED") {
+        sendCoinPaymentFailed(ref.pixelContext, {
+          failure_reason: failReason,
+        });
+        lastTrackedCoinPurchaseRef = null;
+      } else {
+        lastTrackedCoinPurchaseRef = null;
+      }
+    }
+
     if (paymentStatus) {
-      showPaymentStatusCallback(paymentStatus);
+      showPaymentStatusCallback?.(paymentStatus);
     }
   } catch (err) {
     console.error("Failed to validate Easebuzz payment", err);
@@ -209,19 +251,45 @@ const launchEasebuzzCheckout = async (paymentData: any) => {
 const createOrderAndInitiatePayment = async (
   coinPackId: number | string,
   token?: string | null,
+  options?: CreateOrderPixelOptions,
 ) => {
+  const trackCoinPurchase =
+    Boolean(options?.trackCoinPixels) &&
+    options?.pixelContext != null &&
+    options?.coinPack != null;
+
+  if (trackCoinPurchase) {
+    const { pixelContext, coinPack } = options!;
+    sendCoinPaymentInitiated(pixelContext, {
+      coin_pack_id: coinPack.id,
+      amount: coinPack.price,
+    });
+  }
+
   const orderData = await createCoinOrder(coinPackId, token);
   const order = orderData.data;
   if (!order?.order_uuid) {
     return;
   }
+
+  if (trackCoinPurchase) {
+    const { pixelContext, coinPack } = options!;
+    lastTrackedCoinPurchaseRef = {
+      orderId: String(order.id),
+      orderUuid: String(order.order_uuid),
+      coinPackId: coinPack.id,
+      amount: coinPack.price,
+      coinQuantity: coinPack.coins,
+      pixelContext,
+    };
+  }
+
   const paymentData = await initiatePayment(
     order.order_uuid,
     order.mandate_uuid ?? null,
     token,
   );
   const payment = paymentData.data;
-  // Trigger Easebuzz iframe using access token from payment response
   launchEasebuzzCheckout(payment);
   return { order, payment };
 };
@@ -1353,6 +1421,19 @@ const CoinsPage = ({
   const searchParams = new URLSearchParams(location.search);
   const tokenFromQuery = searchParams.get("id");
 
+  const pixelContext = useMemo(
+    () => parseCoinPixelContext(location.search),
+    [location.search],
+  );
+
+  const coinStoreViewedSentRef = useRef(false);
+
+  useEffect(() => {
+    if (!pixelContext || coinStoreViewedSentRef.current) return;
+    coinStoreViewedSentRef.current = true;
+    sendCoinStoreViewed(pixelContext);
+  }, [pixelContext]);
+
   // Use token from query params if available, otherwise fall back to localStorage
   const token = tokenFromQuery || localStorage.getItem("zintle_jwt");
   const isLoggedIn = !!token;
@@ -1390,7 +1471,15 @@ const CoinsPage = ({
       return;
     }
     try {
-      await createOrderAndInitiatePayment(packageToUse.id, token);
+      await createOrderAndInitiatePayment(packageToUse.id, token, {
+        trackCoinPixels: true,
+        pixelContext,
+        coinPack: {
+          id: packageToUse.id,
+          price: packageToUse.price,
+          coins: packageToUse.coins,
+        },
+      });
     } catch (e) {
       console.error("Failed to create coin order from CoinsPage", e);
     }

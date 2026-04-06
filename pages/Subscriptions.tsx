@@ -302,6 +302,11 @@ export const Subscriptions = ({
   const [mandateInitError, setMandateInitError] = useState<string | null>(null);
   const [mandate, setMandate] = useState<MandateInitResponse | null>(null);
 
+  const [activeSubscriptionModal, setActiveSubscriptionModal] = useState<{
+    open: boolean;
+    message: string;
+  }>({ open: false, message: "" });
+
   const [mandateValidationLoading, setMandateValidationLoading] =
     useState(false);
   const [mandateValidationError, setMandateValidationError] = useState<
@@ -438,9 +443,15 @@ export const Subscriptions = ({
       );
       const data = await r.json();
       if (!r.ok || !data.success) {
-        throw new Error(
-          data.error_message || data.detail || "Failed to initiate mandate",
-        );
+        const errMsg =
+          data.error_message ||
+          (typeof data.detail === "string" ? data.detail : "") ||
+          "Failed to initiate mandate";
+        if (data.error_code === "active_subscription_exists") {
+          setActiveSubscriptionModal({ open: true, message: errMsg });
+          return;
+        }
+        throw new Error(errMsg);
       }
       const mandateData = data.data as MandateInitResponse;
       setMandate(mandateData);
@@ -513,8 +524,42 @@ export const Subscriptions = ({
     setShowLogin(true);
   };
 
+  const closeActiveSubscriptionModal = () =>
+    setActiveSubscriptionModal({ open: false, message: "" });
+
   return (
     <div className="container mx-auto px-4 py-24">
+      {activeSubscriptionModal.open && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="active-subscription-modal-title"
+          onClick={closeActiveSubscriptionModal}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#151b2e] p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="active-subscription-modal-title"
+              className="text-lg font-semibold text-white"
+            >
+              Active subscription
+            </h3>
+            <p className="mt-3 text-sm leading-relaxed text-white/80">
+              {activeSubscriptionModal.message}
+            </p>
+            <button
+              type="button"
+              onClick={closeActiveSubscriptionModal}
+              className="mt-6 w-full rounded-xl bg-brand-primary py-3 text-sm font-semibold text-white hover:opacity-90"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
       {/* {isLoggedIn && (
         <>
           <h1 className="text-3xl md:text-4xl font-bold text-white mb-4">

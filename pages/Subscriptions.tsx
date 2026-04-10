@@ -4,8 +4,9 @@ type PaymentInstrumentType = "UPI_COLLECT" | "UPI_INTENT" | "UPI_QR";
 type DeviceOS = "IOS" | "ANDROID";
 import { HOST } from "../index";
 import { headerSafeToken } from "../utils/headerSafeToken";
-// NOTE: Plan listing & fetching are disabled for now.
-// We rely solely on plan_id coming from the page URL.
+import { getOrganisationIdFromSearch } from "../utils/organisationIdFromUrl";
+// NOTE: Plan listing is disabled. Plan UI uses `plan_details` (URL JSON) when
+// present, else GET /plans/{plan_id}/details/.
 // type Plan = {
 //   id: number;
 //   plan_name: string;
@@ -80,6 +81,24 @@ function unwrapPlanDetailsJson(json: unknown): MonetizationPlanDetails | null {
     return o as MonetizationPlanDetails;
   }
   return null;
+}
+
+/** URI-encoded JSON in query `plan_details` (same pattern as `user` on /coins). */
+function parsePlanDetailsFromUrlSearch(
+  search: string,
+): MonetizationPlanDetails | null {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search,
+  );
+  const raw = params.get("plan_details");
+  if (!raw || !String(raw).trim()) return null;
+  try {
+    const decoded = decodeURIComponent(raw.replace(/\+/g, " "));
+    const parsed: unknown = JSON.parse(decoded);
+    return unwrapPlanDetailsJson(parsed);
+  } catch {
+    return null;
+  }
 }
 
 function parsePlanPriceNumber(price: string | number | undefined): number {
@@ -272,6 +291,7 @@ export const Subscriptions = ({
   const tokenFromQuery = searchParams.get("id");
   const planIdFromQuery = searchParams.get("plan_id");
   const targetAppFromQuery = searchParams.get("target_app");
+  const organisationId = getOrganisationIdFromSearch(location.search);
 
   // Use token from query params if available, otherwise fall back to localStorage
   const token = tokenFromQuery || localStorage.getItem("zintle_jwt");
@@ -329,6 +349,20 @@ export const Subscriptions = ({
       setPlanDetailsState({ loading: false, error: null, data: null });
       return;
     }
+
+    const fromUrl = parsePlanDetailsFromUrlSearch(location.search);
+    if (fromUrl) {
+      const urlId = fromUrl.id;
+      const idMismatch =
+        typeof urlId === "number" &&
+        Number.isFinite(urlId) &&
+        urlId !== planId;
+      if (!idMismatch) {
+        setPlanDetailsState({ loading: false, error: null, data: fromUrl });
+        return;
+      }
+    }
+
     let cancelled = false;
     setPlanDetailsState((s) => ({ ...s, loading: true, error: null }));
     void (async () => {
@@ -341,7 +375,7 @@ export const Subscriptions = ({
             headers: {
               "Content-Type": "application/json",
               ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-              "X-Organisation-ID": "ZINTEL1234",
+              "X-Organisation-ID": organisationId,
             },
           },
         );
@@ -385,7 +419,7 @@ export const Subscriptions = ({
     return () => {
       cancelled = true;
     };
-  }, [isLoggedIn, planId, token]);
+  }, [isLoggedIn, planId, token, organisationId, location.search]);
 
 
   const handleInitiateMandate = async () => {
@@ -436,7 +470,7 @@ export const Subscriptions = ({
           headers: {
             "Content-Type": "application/json",
             ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-            "X-Organisation-ID": "ZINTEL1234",
+            "X-Organisation-ID": organisationId,
           },
           body: JSON.stringify(body),
         },
@@ -502,7 +536,7 @@ export const Subscriptions = ({
           headers: {
             "Content-Type": "application/json",
             ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-            "X-Organisation-ID": "ZINTEL1234",
+            "X-Organisation-ID": organisationId,
           },
         },
       );

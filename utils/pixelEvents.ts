@@ -16,6 +16,7 @@ declare global {
 }
 import { PAYMENT_GATEWAY } from "../index";
 import { sendCoinAnalyticsEvent } from "./coinAnalyticsApi";
+import { getOrganisationIdFromSearch } from "./organisationIdFromUrl";
 
 export type DeviceInfo = {
   platform: string;
@@ -39,7 +40,7 @@ export type ParsedCoinPixelContext = {
   platform: "web" | "android" | "ios";
   deviceInfo: DeviceInfo;
   appInfo: AppInfo;
-  organisationId: "ZINTEL1234" | "BIFFLE1234";
+  organisation_id: string;
 };
 
 export type CoinPixelEventName =
@@ -81,13 +82,6 @@ function normalizePlatform(raw: string): "web" | "android" | "ios" {
   return "web";
 }
 
-function getOrganisationId(
-  organisation: string | null,
-): "ZINTEL1234" | "BIFFLE1234" {
-  if (!organisation) return "ZINTEL1234";
-  if (organisation.toLocaleLowerCase() === "biffle") return "BIFFLE1234";
-  return "ZINTEL1234";
-}
 
 /** Parse optional `user` JSON (URL-encoded) from query; `id` must be present to allow pixels. */
 export function parseCoinPixelContext(
@@ -135,8 +129,7 @@ export function parseCoinPixelContext(
 
   const platform = normalizePlatform(deviceInfo.platform);
 
-  const organisation = params.get("organisation");
-  const organisationId = getOrganisationId(organisation);
+  const organisation_id = getOrganisationIdFromSearch(search);
 
   return {
     token: id,
@@ -147,7 +140,7 @@ export function parseCoinPixelContext(
     platform,
     deviceInfo,
     appInfo,
-    organisationId,
+    organisation_id,
   };
 }
 

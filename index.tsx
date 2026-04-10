@@ -27,6 +27,10 @@ import {
   type ParsedCoinPixelContext,
 } from "./utils/pixelEvents";
 import { headerSafeToken } from "./utils/headerSafeToken";
+import {
+  DEFAULT_ORGANISATION_ID,
+  getOrganisationIdFromSearch,
+} from "./utils/organisationIdFromUrl";
 export const PAYMENT_GATEWAY = "Easebuzz";
 export const HOST = "https://prod.biffle.ai";
 //export const HOST = "https://balanced-crow-officially.ngrok-free.app";
@@ -64,6 +68,7 @@ export type CreateOrderPixelOptions = {
 const createCoinOrder = async (
   coinPackId: number | string,
   token?: string | null,
+  organisationId: string = DEFAULT_ORGANISATION_ID,
 ) => {
   const rawToken = token || localStorage.getItem("zintle_jwt");
   const jwtToken = headerSafeToken(rawToken);
@@ -72,7 +77,7 @@ const createCoinOrder = async (
     headers: {
       "Content-Type": "application/json",
       ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
-      "X-Organisation-ID": "ZINTEL1234",
+      "X-Organisation-ID": organisationId,
     },
     body: JSON.stringify({
       coin_pack_id: coinPackId,
@@ -92,6 +97,7 @@ const initiatePayment = async (
   orderUuid: number | string,
   mandateUuid?: number | string | null,
   token?: string | null,
+  organisationId: string = DEFAULT_ORGANISATION_ID,
 ) => {
   const rawToken = token || localStorage.getItem("zintle_jwt");
   const jwtToken = headerSafeToken(rawToken);
@@ -102,7 +108,7 @@ const initiatePayment = async (
       headers: {
         "Content-Type": "application/json",
         ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
-        "X-Organisation-ID": "ZINTEL1234",
+        "X-Organisation-ID": organisationId,
       },
       body: JSON.stringify({
         order_uuid: orderUuid,
@@ -151,7 +157,10 @@ export function extractEasebuzzAccessKey(value) {
 }
 
 // Backend validation for Easebuzz payment using order UUID
-const validateEasebuzzPayment = async (orderUuid?: string | null) => {
+const validateEasebuzzPayment = async (
+  orderUuid?: string | null,
+  organisationId: string = DEFAULT_ORGANISATION_ID,
+) => {
   if (!orderUuid) {
     return;
   }
@@ -162,7 +171,7 @@ const validateEasebuzzPayment = async (orderUuid?: string | null) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Organisation-ID": "ZINTEL1234",
+          "X-Organisation-ID": organisationId,
         },
         body: JSON.stringify({ order_uuid: orderUuid }),
       },
@@ -209,7 +218,10 @@ const validateEasebuzzPayment = async (orderUuid?: string | null) => {
 };
 
 // Fire Easebuzz iframe checkout with access token
-const launchEasebuzzCheckout = async (paymentData: any) => {
+const launchEasebuzzCheckout = async (
+  paymentData: any,
+  organisationId: string = DEFAULT_ORGANISATION_ID,
+) => {
   const orderUuid = paymentData?.order_uuid;
   try {
     const accessKey = extractEasebuzzAccessKey(paymentData?.access_token);
@@ -236,14 +248,14 @@ const launchEasebuzzCheckout = async (paymentData: any) => {
       access_key: accessKey,
       onResponse: (response: any) => {
         console.log("Easebuzz response ----------------->", response);
-        validateEasebuzzPayment(orderUuid);
+        validateEasebuzzPayment(orderUuid, organisationId);
       },
       theme: "#123456",
     };
     easebuzzCheckout.initiatePayment(options);
   } catch (err) {
     console.error("Error occurred in Easebuzz checkout", err);
-    validateEasebuzzPayment(orderUuid);
+    validateEasebuzzPayment(orderUuid, organisationId);
   }
 };
 
@@ -252,6 +264,7 @@ const createOrderAndInitiatePayment = async (
   coinPackId: number | string,
   token?: string | null,
   options?: CreateOrderPixelOptions,
+  organisationId: string = DEFAULT_ORGANISATION_ID,
 ) => {
   const trackCoinPurchase =
     Boolean(options?.trackCoinPixels) &&
@@ -266,7 +279,7 @@ const createOrderAndInitiatePayment = async (
     });
   }
 
-  const orderData = await createCoinOrder(coinPackId, token);
+  const orderData = await createCoinOrder(coinPackId, token, organisationId);
   const order = orderData.data;
   if (!order?.order_uuid) {
     return;
@@ -288,9 +301,10 @@ const createOrderAndInitiatePayment = async (
     order.order_uuid,
     order.mandate_uuid ?? null,
     token,
+    organisationId,
   );
   const payment = paymentData.data;
-  launchEasebuzzCheckout(payment);
+  launchEasebuzzCheckout(payment, organisationId);
   return { order, payment };
 };
 
@@ -981,9 +995,9 @@ const Features = () => (
           take you today?"
         </p>
         <a
-              href="https://play.google.com/store/apps/details?id=ai.zintle&hl=en_IN"
-              target="_blank"
-              rel="noopener noreferrer"
+          href="https://play.google.com/store/apps/details?id=ai.zintle&hl=en_IN"
+          target="_blank"
+          rel="noopener noreferrer"
           className="bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-4 px-10 rounded-full shadow-xl shadow-brand-primary/30 transition-all transform hover:scale-105 text-lg"
         >
           Start Exploring Now
@@ -997,10 +1011,12 @@ const CoinStore = ({
   onClose,
   initialStep = "store",
   coinPacks,
+  organisationId = DEFAULT_ORGANISATION_ID,
 }: {
   onClose: () => void;
   initialStep?: "store" | "login";
   coinPacks: any[];
+  organisationId?: string;
 }) => {
   const [step, setStep] = useState<"store" | "login" | "otp" | "success">(
     initialStep,
@@ -1039,7 +1055,7 @@ const CoinStore = ({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Organisation-ID": "ZINTEL1234",
+          "X-Organisation-ID": organisationId,
         },
         body: JSON.stringify({
           country_code: countryCode,
@@ -1064,7 +1080,7 @@ const CoinStore = ({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Organisation-ID": "ZINTEL1234",
+          "X-Organisation-ID": organisationId,
         },
         body: JSON.stringify({
           provider: "phone",
@@ -1102,7 +1118,12 @@ const CoinStore = ({
     // Fire order creation API only for logged-in users
     if (pack?.id) {
       try {
-        await createOrderAndInitiatePayment(pack.id);
+        await createOrderAndInitiatePayment(
+          pack.id,
+          undefined,
+          undefined,
+          organisationId,
+        );
         onClose();
       } catch (e) {
         console.error("Failed to create coin order from CoinStore", e);
@@ -1331,10 +1352,12 @@ const CoinSection = ({
   setShowCoins,
   setShowLogin,
   coinPacks,
+  organisationId = DEFAULT_ORGANISATION_ID,
 }: {
   setShowCoins: (v: boolean) => void;
   setShowLogin: (v: boolean) => void;
   coinPacks: any[];
+  organisationId?: string;
 }) => {
   const isLoggedIn = !!localStorage.getItem("zintle_jwt");
 
@@ -1351,7 +1374,12 @@ const CoinSection = ({
       return;
     }
     try {
-      await createOrderAndInitiatePayment(pkg.id);
+      await createOrderAndInitiatePayment(
+        pkg.id,
+        undefined,
+        undefined,
+        organisationId,
+      );
     } catch (e) {
       console.error("Failed to create coin order from CoinSection", e);
     }
@@ -1412,10 +1440,12 @@ const CoinsPage = ({
   setShowCoins,
   setShowLogin,
   coinPacks,
+  organisationId = DEFAULT_ORGANISATION_ID,
 }: {
   setShowCoins: (v: boolean) => void;
   setShowLogin: (v: boolean) => void;
   coinPacks: any[];
+  organisationId?: string;
 }) => {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
@@ -1471,15 +1501,20 @@ const CoinsPage = ({
       return;
     }
     try {
-      await createOrderAndInitiatePayment(packageToUse.id, token, {
-        trackCoinPixels: true,
-        pixelContext,
-        coinPack: {
-          id: packageToUse.id,
-          price: packageToUse.price,
-          coins: packageToUse.coins,
+      await createOrderAndInitiatePayment(
+        packageToUse.id,
+        token,
+        {
+          trackCoinPixels: true,
+          pixelContext,
+          coinPack: {
+            id: packageToUse.id,
+            price: packageToUse.price,
+            coins: packageToUse.coins,
+          },
         },
-      });
+        organisationId,
+      );
     } catch (e) {
       console.error("Failed to create coin order from CoinsPage", e);
     }
@@ -1849,6 +1884,10 @@ const defaultCoinPacks = defaultCoinPackData
 
 const Layout = () => {
   const location = useLocation();
+  const organisationId = useMemo(
+    () => getOrganisationIdFromSearch(location.search),
+    [location.search],
+  );
   const isCoinsPage = location.pathname === "/coins";
   const isSubscriptionsPage = location.pathname === "/subscriptions";
   const isFbRedirectPage = location.pathname === "/fb-redirect";
@@ -1863,12 +1902,18 @@ const Layout = () => {
   // Fetch coin packs on mount/when logged in changes
   useEffect(() => {
     const fetchPacks = async () => {
-      // if (!localStorage.getItem("zintle_jwt")) return;
       try {
+        const searchParams = new URLSearchParams(location.search);
+        const tokenFromQuery = searchParams.get("id");
+        const rawToken = tokenFromQuery || localStorage.getItem("zintle_jwt");
+        const jwtToken = headerSafeToken(rawToken);
         const r = await fetch(
           `${HOST}/api/v1.2/creator_center/details/get-coin-pack-details/`,
           {
-            headers: { "X-Organisation-ID": "ZINTEL1234" },
+            headers: {
+              ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
+              "X-Organisation-ID": organisationId,
+            },
           },
         );
         const data = await r.json();
@@ -1884,7 +1929,7 @@ const Layout = () => {
       }
     };
     fetchPacks();
-  }, [isLoggedIn]);
+  }, [isLoggedIn, organisationId, location.search]);
 
   // Check JWT changes after CoinStore closes
   useEffect(() => {
@@ -1932,6 +1977,7 @@ const Layout = () => {
                 setShowCoins={setShowCoins}
                 setShowLogin={setShowLogin}
                 coinPacks={coinPacks}
+                organisationId={organisationId}
               />
             </>
           }
@@ -1943,6 +1989,7 @@ const Layout = () => {
               setShowCoins={setShowCoins}
               setShowLogin={setShowLogin}
               coinPacks={coinPacks}
+              organisationId={organisationId}
             />
           }
         />
@@ -1971,6 +2018,7 @@ const Layout = () => {
           }}
           initialStep={showLogin ? "login" : "store"}
           coinPacks={coinPacks}
+          organisationId={organisationId}
         />
       )}
 

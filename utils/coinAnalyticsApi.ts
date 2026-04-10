@@ -37,7 +37,7 @@ export function sendCoinAnalyticsEvent(
     },
     device_info: ctx.deviceInfo,
     app_info: ctx.appInfo,
-    organisation_id: ctx.organisationId,
+    organisation_id: ctx.organisation_id,
   };
 
   void fetch(url, {

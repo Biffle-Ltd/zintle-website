@@ -6,7 +6,7 @@
  * - Optional user profile: URL query `user` (JSON, URI-encoded) for user_id / phone_number / email.
  * - Optional `device_info` / `app_info` (JSON, URI-encoded) for analytics + device_id resolution.
  * - coin_payment_failed: only when payment_status === "FAILED" (not CANCELLED / PENDING / etc.).
- * - payment_gateway / payment_method: "Easebuzz" (matches web checkout).
+ * - payment_gateway / payment_method: matches PAYMENT_GATEWAY in index.tsx.
  */
 
 declare global {

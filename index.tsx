@@ -31,13 +31,29 @@ import {
   DEFAULT_ORGANISATION_ID,
   getOrganisationIdFromSearch,
 } from "./utils/organisationIdFromUrl";
-export const PAYMENT_GATEWAY = "Easebuzz";
+
 export const HOST = "https://prod.biffle.ai";
 //export const HOST = "https://balanced-crow-officially.ngrok-free.app";
 // export const HOST = "http://127.0.0.1:8003";
+
 const { VITE_EASEBUZZ_KEY, VITE_EASEBUZZ_ENV } = (import.meta as any).env;
 const EASEBUZZ_KEY = VITE_EASEBUZZ_KEY;
 const EASEBUZZ_ENV = VITE_EASEBUZZ_ENV;
+const PAYMENT_GATEWAY_MAP = {
+  PhonePe: "PHONEPE",
+  Easebuzz: "EASEBUZZ",
+} as const;
+
+type PaymentGateway = keyof typeof PAYMENT_GATEWAY_MAP;
+
+function getPaymentGatewayFromUrl(): PaymentGateway {
+  const raw = new URLSearchParams(window.location.search).get("payment_gateway")?.trim();
+  if (raw && raw in PAYMENT_GATEWAY_MAP) return raw as PaymentGateway;
+  return "Easebuzz";
+}
+
+export const PAYMENT_GATEWAY: PaymentGateway = getPaymentGatewayFromUrl();
+const COIN_ORDER_PAYMENT_GATEWAY = PAYMENT_GATEWAY_MAP[PAYMENT_GATEWAY];
 
 // Global callback for showing payment status popup
 let showPaymentStatusCallback: ((status: string) => void) | null = null;
@@ -81,7 +97,7 @@ const createCoinOrder = async (
     },
     body: JSON.stringify({
       coin_pack_id: coinPackId,
-      payment_gateway: "EASEBUZZ",
+      payment_gateway: COIN_ORDER_PAYMENT_GATEWAY,
     }),
   });
   const data = await r.json();
@@ -123,27 +139,6 @@ const initiatePayment = async (
   return data;
 };
 
-// Lazy-load Easebuzz checkout script once
-// let easebuzzScriptPromise: Promise<void> | null = null;
-// const loadEasebuzzScript = () => {
-//   if (easebuzzScriptPromise) return easebuzzScriptPromise;
-//   easebuzzScriptPromise = new Promise((resolve, reject) => {
-//     if (document.getElementById("easebuzz-checkout-script")) {
-//       resolve();
-//       return;
-//     }
-//     const script = document.createElement("script");
-//     script.id = "easebuzz-checkout-script";
-//     script.src =
-//       "https://ebz-static.s3.ap-south-1.amazonaws.com/easecheckout/v2.0.0/easebuzz-checkout-v2.min.js";
-//     script.async = true;
-//     script.onload = () => resolve();
-//     script.onerror = () => reject(new Error("Failed to load Easebuzz script"));
-//     document.body.appendChild(script);
-//   });
-//   return easebuzzScriptPromise;
-// };
-
 export function extractEasebuzzAccessKey(value) {
   if (!value || typeof value !== "string") return "";
 
@@ -156,32 +151,42 @@ export function extractEasebuzzAccessKey(value) {
   return value;
 }
 
-// Backend validation for Easebuzz payment using order UUID
-const validateEasebuzzPayment = async (
+// Backend validation for coin pack payment using order UUID
+const validateCoinPackPayment = async (
   orderUuid?: string | null,
   organisationId: string = DEFAULT_ORGANISATION_ID,
+  token?: string | null,
 ) => {
   if (!orderUuid) {
     return;
   }
+  const rawToken = token || localStorage.getItem("zintle_jwt");
+  const jwtToken = headerSafeToken(rawToken);
   try {
-    const r = await fetch(
-      `${HOST}/api/v1.2/monetization/easebuzz/payment/validate/`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Organisation-ID": organisationId,
-        },
-        body: JSON.stringify({ order_uuid: orderUuid }),
-      },
-    );
-    const data = await r.json().catch(() => null);
-    if (!r.ok) {
-      console.error("Easebuzz validation failed", { status: r.status, data });
+    let endpoint = "";
+    if (PAYMENT_GATEWAY === "PhonePe") {
+      endpoint = "orders/details/";
+    } else if (PAYMENT_GATEWAY === "Easebuzz") {
+      endpoint = "easebuzz/payment/validate/";
+    }
+    if (!endpoint) {
       return;
     }
-    console.log("Easebuzz payment validated", data);
+    const r = await fetch(`${HOST}/api/v1.2/monetization/${endpoint}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
+        "X-Organisation-ID": organisationId,
+      },
+      body: JSON.stringify({ order_uuid: orderUuid }),
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok) {
+      console.error("Payment validation failed", { status: r.status, data });
+      return;
+    }
+    console.log("Payment validated", data);
 
     const paymentStatus = data?.data?.payment_status as string | undefined;
     const ref = lastTrackedCoinPurchaseRef;
@@ -213,7 +218,37 @@ const validateEasebuzzPayment = async (
       showPaymentStatusCallback?.(paymentStatus);
     }
   } catch (err) {
-    console.error("Failed to validate Easebuzz payment", err);
+    console.error("Failed to validate payment", err);
+  }
+};
+
+/** PhonePe PayPage iframe — `tokenUrl` is the `redirectUrl` from initiate-payment (see PhonePe docs). */
+const launchPhonePeIframeCheckout = (
+  paymentData: any,
+  organisationId: string = DEFAULT_ORGANISATION_ID,
+  token?: string | null,
+) => {
+  const orderUuid = paymentData?.order_uuid;
+  try {
+  const tokenUrl = paymentData.access_token;
+  if (!tokenUrl) {
+    return;
+  }
+  const PhonePeCheckout = (window as any).PhonePeCheckout;
+  if (!PhonePeCheckout?.transact) {
+    console.error("PhonePe checkout script not loaded");
+    return;
+  }
+  PhonePeCheckout.transact({
+    tokenUrl,
+    type: "IFRAME",
+    callback: (response: string) => {
+      void validateCoinPackPayment(orderUuid, organisationId, token);
+      },
+    });
+  } catch (err) {
+    console.error("Error in PhonePe iframe checkout", err);
+    void validateCoinPackPayment(orderUuid, organisationId, token);
   }
 };
 
@@ -221,6 +256,7 @@ const validateEasebuzzPayment = async (
 const launchEasebuzzCheckout = async (
   paymentData: any,
   organisationId: string = DEFAULT_ORGANISATION_ID,
+  token?: string | null,
 ) => {
   const orderUuid = paymentData?.order_uuid;
   try {
@@ -248,14 +284,14 @@ const launchEasebuzzCheckout = async (
       access_key: accessKey,
       onResponse: (response: any) => {
         console.log("Easebuzz response ----------------->", response);
-        validateEasebuzzPayment(orderUuid, organisationId);
+        validateCoinPackPayment(orderUuid, organisationId, token);
       },
       theme: "#123456",
     };
     easebuzzCheckout.initiatePayment(options);
   } catch (err) {
     console.error("Error occurred in Easebuzz checkout", err);
-    validateEasebuzzPayment(orderUuid, organisationId);
+    validateCoinPackPayment(orderUuid, organisationId, token);
   }
 };
 
@@ -304,7 +340,11 @@ const createOrderAndInitiatePayment = async (
     organisationId,
   );
   const payment = paymentData.data;
-  launchEasebuzzCheckout(payment, organisationId);
+  if (PAYMENT_GATEWAY === "Easebuzz") {
+    launchEasebuzzCheckout(payment, organisationId, token);
+  } else if (PAYMENT_GATEWAY === "PhonePe") {
+    launchPhonePeIframeCheckout(payment, organisationId, token);
+  }
   return { order, payment };
 };
 

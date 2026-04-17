@@ -56,7 +56,7 @@ Zintle is an immersive library of AI-powered interactive stories where every con
     npm run dev
     ```
 4.  **Open in browser**:
-    Navigate to `http://localhost:3000` (or the port shown in the terminal).
+    Navigate to `https://zintle.ai` (or the port shown in the terminal).
 
 ## Project Structure
 

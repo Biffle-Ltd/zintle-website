@@ -1,4 +1,4 @@
-# Zintle AI - Interactive Storytelling
+# Zintle AI - Interactive Storytelling 
 
 Zintle is an immersive library of AI-powered interactive stories where every conversation shapes your unique narrative journey. Designed for both casual readers and avid story lovers, Zintle puts endless adventures at your fingertips.
 

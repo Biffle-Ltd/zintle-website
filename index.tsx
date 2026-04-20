@@ -343,8 +343,8 @@ const createOrderAndInitiatePayment = async (
   if (PAYMENT_GATEWAY === "Easebuzz") {
     launchEasebuzzCheckout(payment, organisationId, token);
   } else if (PAYMENT_GATEWAY === "PhonePe") {
-    launchPhonePeIframeCheckout(payment, organisationId, token);
-    // window.open(payment.access_token, "_blank", "noopener,noreferrer");
+    // launchPhonePeIframeCheckout(payment, organisationId, token);
+    window.open(payment.access_token);
   }
   return { order, payment };
 };

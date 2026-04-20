@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { HOST } from "../index";
+import { HOST } from "../utils/host";
 
 const PLAY_STORE_URL =
   "https://play.google.com/store/apps/details?id=ai.zintle";

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 type PaymentInstrumentType = "UPI_COLLECT" | "UPI_INTENT" | "UPI_QR";
 type DeviceOS = "IOS" | "ANDROID";
-import { HOST } from "../index";
+import { HOST } from "../utils/host";
 import { headerSafeToken } from "../utils/headerSafeToken";
 import { getOrganisationIdFromSearch } from "../utils/organisationIdFromUrl";
 // NOTE: Plan listing is disabled. Plan UI uses `plan_details` (URL JSON) when

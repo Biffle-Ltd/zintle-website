@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { PaymentStatusPopup } from "../components/PaymentStatusPopup";
 import { HOST } from "../utils/host";
 import { headerSafeToken } from "../utils/headerSafeToken";
@@ -7,6 +7,7 @@ import {
   DEFAULT_ORGANISATION_ID,
   getOrganisationIdFromSearch,
 } from "../utils/organisationIdFromUrl";
+import { getJwtFromStorage } from "../utils/authStorage";
 
 type PhonePeValidateRow = {
   payment_status?: string;
@@ -26,11 +27,16 @@ function pickValidatePayload(json: any): PhonePeValidateRow | null {
 export const PaymentStatus = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const orderId = searchParams.get("order_id")?.trim() ?? "";
   const organisationId = useMemo(
-    () => getOrganisationIdFromSearch(`?${searchParams.toString()}`),
-    [searchParams],
+    () =>
+      getOrganisationIdFromSearch(
+        `?${searchParams.toString()}`,
+        location.pathname,
+      ),
+    [searchParams, location.pathname],
   );
 
   const [status, setStatus] = useState<string | null>(null);
@@ -48,7 +54,7 @@ export const PaymentStatus = () => {
         return;
       }
 
-      const rawToken = localStorage.getItem("zintle_jwt");
+      const rawToken = getJwtFromStorage(organisationId);
       const jwtToken = headerSafeToken(rawToken);
 
       try {

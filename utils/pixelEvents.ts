@@ -82,10 +82,10 @@ function normalizePlatform(raw: string): "web" | "android" | "ios" {
   return "web";
 }
 
-
 /** Parse optional `user` JSON (URL-encoded) from query; `id` must be present to allow pixels. */
 export function parseCoinPixelContext(
   search: string,
+  pathname?: string,
 ): ParsedCoinPixelContext | null {
   const params = new URLSearchParams(
     search.startsWith("?") ? search.slice(1) : search,
@@ -129,7 +129,7 @@ export function parseCoinPixelContext(
 
   const platform = normalizePlatform(deviceInfo.platform);
 
-  const organisation_id = getOrganisationIdFromSearch(search);
+  const organisation_id = getOrganisationIdFromSearch(search, pathname);
 
   return {
     token: id,

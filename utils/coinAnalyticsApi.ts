@@ -6,8 +6,7 @@ const REGION = "IN";
 function analyticsEventTimestampSeconds(
   eventParams: Record<string, unknown>,
 ): number {
-  const fromParams =
-    eventParams.event_timestamp ?? eventParams.timestamp;
+  const fromParams = eventParams.event_timestamp ?? eventParams.timestamp;
   if (typeof fromParams === "number" && Number.isFinite(fromParams)) {
     return Math.trunc(fromParams);
   }

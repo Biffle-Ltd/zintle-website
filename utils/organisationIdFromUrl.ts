@@ -1,8 +1,27 @@
-/** Default when `organisation_id` is absent or empty in the URL query. */
+/** Default when `organisation_id` is absent or empty in the URL query (non-campaign pages). */
 export const DEFAULT_ORGANISATION_ID = "ZINTEL1234";
 
-/** Reads `organisation_id` from a URL search string (e.g. `location.search`). */
-export function getOrganisationIdFromSearch(search: string): string {
+/** Default org when path is `/campaign` and query has no `organisation_id`. */
+export const BIFFLE_ORGANISATION_ID = "BIFFLE1234";
+
+function normalizePathBasename(pathname: string): string {
+  return pathname.replace(/\/+$/, "") || "/";
+}
+
+/**
+ * Reads `organisation_id` from a URL search string (e.g. `location.search`).
+ */
+export function getOrganisationIdFromSearch(
+  search: string,
+  pathname?: string,
+): string {
   const raw = new URLSearchParams(search).get("organisation_id")?.trim();
-  return raw || DEFAULT_ORGANISATION_ID;
+  if (raw == "ZINTEL1234" || raw == "CAMPAIGN_Z") return "ZINTEL1234";
+  else if (raw == "BIFFLE1234" || raw == "CAMPAIGN_B") return "BIFFLE1234";
+  else return DEFAULT_ORGANISATION_ID;
+}
+
+export function isBiffleOrganisationId(id: string | undefined): boolean {
+  if (!id) return false;
+  return id.trim().toUpperCase() === BIFFLE_ORGANISATION_ID;
 }

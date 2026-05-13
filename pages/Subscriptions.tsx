@@ -1,10 +1,22 @@
 import React, { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 type PaymentInstrumentType = "UPI_COLLECT" | "UPI_INTENT" | "UPI_QR";
 type DeviceOS = "IOS" | "ANDROID";
 import { HOST } from "../utils/host";
 import { headerSafeToken } from "../utils/headerSafeToken";
-import { getOrganisationIdFromSearch } from "../utils/organisationIdFromUrl";
+import { DEFAULT_ORGANISATION_ID, getOrganisationIdFromSearch } from "../utils/organisationIdFromUrl";
+import { getJwtFromStorage } from "../utils/authStorage";
+
+/** Non-Zintle campaign: base URL for attribution redirect (append `fbclid` when present). */
+const BIFFLE_FB_REDIRECT_URL = "https://biffle.ai/fbredirect";
+
+function appendFbclid(urlOrPath: string, fbclid: string | null | undefined): string {
+  const raw = fbclid?.trim();
+  if (!raw) return urlOrPath;
+  const sep = urlOrPath.includes("?") ? "&" : "?";
+  return `${urlOrPath}${sep}fbclid=${encodeURIComponent(raw)}`;
+}
+
 // NOTE: Plan listing is disabled. Plan UI uses `plan_details` (URL JSON) when
 // present, else GET /plans/{plan_id}/details/.
 // type Plan = {
@@ -281,20 +293,34 @@ const postMandateToReactNative = (
   }
 };
 
+function parseIsCampaignParam(raw: string | null): boolean {
+  if (raw == null || String(raw).trim() === "") return false;
+  const v = String(raw).trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
 export const Subscriptions = ({
   setShowLogin,
 }: {
   setShowLogin: (v: boolean) => void;
 }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const searchParams = new URLSearchParams(location.search);
   const tokenFromQuery = searchParams.get("id");
   const planIdFromQuery = searchParams.get("plan_id");
-  const targetAppFromQuery = searchParams.get("target_app");
-  const organisationId = getOrganisationIdFromSearch(location.search);
+  const isCampaign = parseIsCampaignParam(searchParams.get("is_campaign"));
+  const fbclidFromUrl = searchParams.get("fbclid")?.trim() ?? "";
+  const targetAppFromQuery =
+    searchParams.get("target_app") || "com.phonepe.app";
+  const organisationId = getOrganisationIdFromSearch(
+    location.search,
+    location.pathname,
+  );
 
   // Use token from query params if available, otherwise fall back to localStorage
-  const token = tokenFromQuery || localStorage.getItem("zintle_jwt");
+  const token =
+    tokenFromQuery || getJwtFromStorage(organisationId);
   const isLoggedIn = !!token;
 
   const planId = planIdFromQuery ? Number(planIdFromQuery) : null;
@@ -492,7 +518,18 @@ export const Subscriptions = ({
       const redirectUrl = mandateData?.pg_info?.redirect_url;
       if (redirectUrl && typeof window !== "undefined") {
         postMandateToReactNative(mandateData);
-        window.location.href = redirectUrl;
+        if (isCampaign) {
+          window.open(redirectUrl, "_blank", "noopener,noreferrer");
+          if (organisationId === DEFAULT_ORGANISATION_ID) {
+            navigate(appendFbclid("/fb-redirect", fbclidFromUrl));
+          } else {
+            window.location.assign(
+              appendFbclid(BIFFLE_FB_REDIRECT_URL, fbclidFromUrl),
+            );
+          }
+        } else {
+          window.location.href = redirectUrl;
+        }
       }
     } catch (e: any) {
       setMandateInitError(e.message || "Failed to initiate mandate");

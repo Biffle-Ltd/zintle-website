@@ -108,7 +108,6 @@ export function Campaign({
   organisationId: string;
   setShowLogin: (v: boolean) => void;
 }) {
-  console.log("organisationId ========>", organisationId);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const fbclidFromUrl = searchParams.get("fbclid")?.trim() ?? "";

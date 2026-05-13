@@ -10,8 +10,6 @@ function normalizePathBasename(pathname: string): string {
 
 /**
  * Reads `organisation_id` from a URL search string (e.g. `location.search`).
- * When the path is `/campaign` (with optional trailing slash) and the query
- * omits `organisation_id`, returns {@link BIFFLE_ORGANISATION_ID}.
  */
 export function getOrganisationIdFromSearch(
   search: string,

@@ -1,9 +1,9 @@
 import path from "path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-/** Ngrok tunnel hostnames allowed by dev/preview server (`allowedHosts`). */
-const TUNNEL_HOSTS = ["balanced-crow-officially.ngrok-free.app"] as const;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** Same-origin proxy in dev so dash.js can load .mpd + segments without CDN CORS. */
 const dashCfProxy = {
@@ -19,13 +19,11 @@ export default defineConfig({
   server: {
     port: 3000,
     host: "127.0.0.1",
-    allowedHosts: [...TUNNEL_HOSTS],
     proxy: dashCfProxy,
   },
   preview: {
     port: 3000,
     host: "127.0.0.1",
-    allowedHosts: [...TUNNEL_HOSTS],
     proxy: dashCfProxy,
   },
   resolve: {

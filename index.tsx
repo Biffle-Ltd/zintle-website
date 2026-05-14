@@ -983,54 +983,12 @@ const CoinStore = ({
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loginAnim, setLoginAnim] = useState(true);
-  const [otpAnim, setOtpAnim] = useState(false);
-  const [keyboardBottomInset, setKeyboardBottomInset] = useState(0);
-  const phoneInputRef = useRef<HTMLInputElement>(null);
   const countryCode = "91";
 
   const isAuthStep = step === "login" || step === "otp";
 
-  React.useEffect(() => {
-    if (!isAuthStep) {
-      setKeyboardBottomInset(0);
-      return;
-    }
-    const vv = window.visualViewport;
-    if (!vv) return;
-
-    const updateKeyboardInset = () => {
-      const inset = Math.max(
-        0,
-        Math.round(window.innerHeight - vv.height - vv.offsetTop),
-      );
-      setKeyboardBottomInset(inset);
-    };
-
-    updateKeyboardInset();
-    vv.addEventListener("resize", updateKeyboardInset);
-    vv.addEventListener("scroll", updateKeyboardInset);
-    return () => {
-      vv.removeEventListener("resize", updateKeyboardInset);
-      vv.removeEventListener("scroll", updateKeyboardInset);
-    };
-  }, [isAuthStep]);
-
   // Helper: isLoggedIn for this organisation's JWT slot
   const isLoggedIn = !!getJwtFromStorage(organisationId);
-  console.log({ isLoggedIn }, { HOST });
-  React.useEffect(() => {
-    if (step === "login") {
-      setLoginAnim(true);
-    } else {
-      setLoginAnim(false);
-    }
-    if (step === "otp") {
-      setOtpAnim(true);
-    } else {
-      setOtpAnim(false);
-    }
-  }, [step]);
 
   // Send OTP API call
   const handleSendOtp = async () => {
@@ -1123,251 +1081,19 @@ const CoinStore = ({
     }
   };
 
-  const LoginStep = () => (
-    <div
-      className={loginAnim ? "animate-fade-in" : undefined}
-      onAnimationEnd={() => setLoginAnim(false)}
-    >
-      <h3
-        className={
-          isBiffle
-            ? "text-2xl font-bold text-gray-900 mb-2"
-            : "text-2xl font-bold text-white mb-2"
-        }
-      >
-        {isBiffle ? "Log in to Biffle" : "Log in to Zintle"}
-      </h3>
-      <p
-        className={
-          isBiffle
-            ? "text-gray-600 mb-6 text-sm"
-            : "text-brand-muted mb-6 text-sm"
-        }
-      >
-        Enter your mobile number to continue
-      </p>
-      <div className="space-y-4">
-        <div
-          className={
-            isBiffle
-              ? "bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3"
-              : "bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3"
-          }
-        >
-          <span className={isBiffle ? "text-gray-500" : "text-gray-400"}>
-            +91
-          </span>
-          <input
-            ref={phoneInputRef}
-            type="tel"
-            placeholder="Enter mobile number"
-            className={
-              isBiffle
-                ? "bg-transparent w-full text-gray-900 outline-none placeholder-gray-400 font-medium"
-                : "bg-transparent w-full text-white outline-none placeholder-gray-600 font-medium"
-            }
-            value={phone}
-            onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
-            autoFocus
-            disabled={loading}
-            onFocus={() => {
-              requestAnimationFrame(() => {
-                phoneInputRef.current?.scrollIntoView({
-                  block: "center",
-                  behavior: "smooth",
-                });
-              });
-            }}
-          />
-        </div>
-        {error && (
-          <div
-            className={
-              isBiffle ? "text-red-600 text-xs" : "text-red-500 text-xs"
-            }
-          >
-            {error}
-          </div>
-        )}
-        <button
-          onClick={handleSendOtp}
-          disabled={loading || !phone}
-          className={
-            isBiffle
-              ? "w-full text-white font-bold py-3.5 rounded-xl transition-all shadow-lg"
-              : "w-full bg-brand-primary hover:bg-brand-secondary text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-brand-primary/25"
-          }
-          style={isBiffle ? biffleBtnStyle : undefined}
-        >
-          {loading ? "Sending..." : "Send OTP"}
-        </button>
-      </div>
-    </div>
-  );
-  const OtpStep = () => (
-    <div
-      className={otpAnim ? "animate-fade-in" : undefined}
-      onAnimationEnd={() => setOtpAnim(false)}
-    >
-      <h3
-        className={
-          isBiffle
-            ? "text-2xl font-bold text-gray-900 mb-2"
-            : "text-2xl font-bold text-white mb-2"
-        }
-      >
-        Enter OTP
-      </h3>
-      <p
-        className={
-          isBiffle
-            ? "text-gray-600 mb-6 text-sm"
-            : "text-brand-muted mb-6 text-sm"
-        }
-      >
-        Please enter the 6-digit code sent to <b>+91 {phone}</b>
-      </p>
-      <div className="space-y-4">
-        <input
-          type="text"
-          maxLength={6}
-          pattern="[0-9]{6}"
-          inputMode="numeric"
-          placeholder="OTP"
-          className={
-            isBiffle
-              ? "bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 outline-none placeholder-gray-400 font-medium w-full text-center tracking-widest text-lg"
-              : "bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none placeholder-gray-600 font-medium w-full text-center tracking-widest text-lg"
-          }
-          value={otp}
-          onChange={(e) =>
-            setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
-          }
-          autoFocus
-          disabled={loading}
-        />
-        {error && (
-          <div
-            className={
-              isBiffle ? "text-red-600 text-xs" : "text-red-500 text-xs"
-            }
-          >
-            {error}
-          </div>
-        )}
-        <button
-          onClick={handleVerifyOtp}
-          disabled={loading || otp.length !== 6}
-          className={
-            isBiffle
-              ? "w-full text-white font-bold py-3.5 rounded-xl transition-all shadow-lg"
-              : "w-full bg-brand-primary hover:bg-brand-secondary text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-brand-primary/25"
-          }
-          style={isBiffle ? biffleBtnStyle : undefined}
-        >
-          {loading ? "Verifying..." : "Verify OTP"}
-        </button>
-        <button
-          onClick={() => setStep("login")}
-          disabled={loading}
-          className={
-            isBiffle
-              ? "text-xs text-gray-500 underline"
-              : "text-xs text-brand-muted underline"
-          }
-        >
-          Edit mobile number
-        </button>
-      </div>
-    </div>
-  );
-
-  // const PaymentStep = () => {
-  //   React.useEffect(() => {
-  //     if (!selectedPack) onClose();
-  //   }, [selectedPack, onClose]);
-  //   if (!selectedPack) return null;
-  //   return (
-  //     <div className="animate-fade-in">
-  //       <div className="flex justify-between items-center mb-6 pb-6 border-b border-white/10">
-  //         <div>
-  //           <p className="text-brand-muted text-sm">Paying for</p>
-  //           <p className="text-xl font-bold text-white">
-  //             {selectedPack.coins} Zintle Coins
-  //           </p>
-  //         </div>
-  //         <div className="text-right">
-  //           <p className="text-brand-muted text-sm">Amount</p>
-  //           <p className="text-xl font-bold text-brand-primary">
-  //             ₹{selectedPack.price}
-  //           </p>
-  //         </div>
-  //       </div>
-  //       <p className="text-sm font-bold text-white mb-4">
-  //         Select Payment Method
-  //       </p>
-  //       <div className="space-y-3 mb-6">
-  //         {["UPI", "Credit/Debit Card", "Net Banking"].map((m) => (
-  //           <label
-  //             key={m}
-  //             className="flex items-center gap-3 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 cursor-pointer transition-all"
-  //           >
-  //             <input
-  //               type="radio"
-  //               name="payment"
-  //               className="accent-brand-primary"
-  //               defaultChecked={m === "UPI"}
-  //             />
-  //             <span className="text-gray-300">{m}</span>
-  //           </label>
-  //         ))}
-  //       </div>
-  //       <button
-  //         onClick={() => setStep("success")}
-  //         className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-green-500/25"
-  //       >
-  //         Pay ₹{selectedPack.price}
-  //       </button>
-  //     </div>
-  //   );
-  // };
-
-  const SuccessStep = () => (
-    <div className="text-center animate-fade-in py-8">
-      <div className="w-20 h-20 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 animate-float">
-        <i className="fa-solid fa-check"></i>
-      </div>
-      <h3 className="text-2xl font-bold text-white mb-2">
-        Payment Successful!
-      </h3>
-      <p className="text-brand-muted mb-8">
-        Your {selectedPack.coins} coins have been added to your wallet.
-      </p>
-      <button
-        onClick={abandonCampaignRedirectAndClose}
-        className="bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-8 rounded-xl transition-all"
-      >
-        Start Exploring
-      </button>
-    </div>
-  );
-
   return (
     <div
-      className={`fixed inset-0 z-[100] flex animate-fade-in overflow-y-auto overscroll-contain ${
+      className={`fixed inset-0 z-[100] flex overflow-y-auto overscroll-contain ${
+        isAuthStep ? "" : "animate-fade-in items-center justify-center p-4"
+      } ${
         isAuthStep
-          ? "items-start justify-center pt-[max(0.75rem,env(safe-area-inset-top))] md:items-center md:py-4"
-          : "items-center justify-center"
-      } p-4 ${
+          ? "items-start justify-center px-4 pt-[max(1rem,calc(env(safe-area-inset-top)+12px))] pb-6 md:items-center md:justify-center md:py-4 md:p-4"
+          : ""
+      } ${
         isBiffle
           ? "bg-slate-900/70 backdrop-blur-sm"
           : "bg-black/80 backdrop-blur-sm"
       }`}
-      style={
-        isAuthStep && keyboardBottomInset > 0
-          ? { paddingBottom: `${keyboardBottomInset + 16}px` }
-          : undefined
-      }
     >
       <div
         className={`w-full shrink-0 ${
@@ -1438,10 +1164,181 @@ const CoinStore = ({
             </div>
           )}
 
-          {step === "login" && <LoginStep />}
-          {step === "otp" && <OtpStep />}
+          {step === "login" && (
+            <div className="touch-manipulation">
+              <h3
+                className={
+                  isBiffle
+                    ? "text-2xl font-bold text-gray-900 mb-2"
+                    : "text-2xl font-bold text-white mb-2"
+                }
+              >
+                {isBiffle ? "Log in to Biffle" : "Log in to Zintle"}
+              </h3>
+              <p
+                className={
+                  isBiffle
+                    ? "text-gray-600 mb-6 text-sm"
+                    : "text-brand-muted mb-6 text-sm"
+                }
+              >
+                Enter your mobile number to continue
+              </p>
+              <div className="space-y-4">
+                <div
+                  className={
+                    isBiffle
+                      ? "bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3"
+                      : "bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3"
+                  }
+                >
+                  <span
+                    className={isBiffle ? "text-gray-500" : "text-gray-400"}
+                  >
+                    +91
+                  </span>
+                  <input
+                    type="tel"
+                    placeholder="Enter mobile number"
+                    enterKeyHint="done"
+                    className={
+                      isBiffle
+                        ? "bg-transparent w-full text-gray-900 outline-none placeholder-gray-400 font-medium"
+                        : "bg-transparent w-full text-white outline-none placeholder-gray-600 font-medium"
+                    }
+                    value={phone}
+                    onChange={(e) =>
+                      setPhone(e.target.value.replace(/\D/g, ""))
+                    }
+                    autoComplete="tel-national"
+                    autoFocus
+                    disabled={loading}
+                  />
+                </div>
+                {error && (
+                  <div
+                    className={
+                      isBiffle ? "text-red-600 text-xs" : "text-red-500 text-xs"
+                    }
+                  >
+                    {error}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={loading || !phone}
+                  className={
+                    isBiffle
+                      ? "w-full text-white font-bold py-3.5 rounded-xl transition-all shadow-lg"
+                      : "w-full bg-brand-primary hover:bg-brand-secondary text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-brand-primary/25"
+                  }
+                  style={isBiffle ? biffleBtnStyle : undefined}
+                >
+                  {loading ? "Sending..." : "Send OTP"}
+                </button>
+              </div>
+            </div>
+          )}
+          {step === "otp" && (
+            <div className="touch-manipulation">
+              <h3
+                className={
+                  isBiffle
+                    ? "text-2xl font-bold text-gray-900 mb-2"
+                    : "text-2xl font-bold text-white mb-2"
+                }
+              >
+                Enter OTP
+              </h3>
+              <p
+                className={
+                  isBiffle
+                    ? "text-gray-600 mb-6 text-sm"
+                    : "text-brand-muted mb-6 text-sm"
+                }
+              >
+                Please enter the 6-digit code sent to{" "}
+                <b>+91 {phone}</b>
+              </p>
+              <div className="space-y-4">
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="OTP"
+                  enterKeyHint="done"
+                  className={
+                    isBiffle
+                      ? "bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 outline-none placeholder-gray-400 font-medium w-full text-center tracking-widest text-lg"
+                      : "bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none placeholder-gray-600 font-medium w-full text-center tracking-widest text-lg"
+                  }
+                  value={otp}
+                  onChange={(e) =>
+                    setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  }
+                  autoFocus
+                  disabled={loading}
+                />
+                {error && (
+                  <div
+                    className={
+                      isBiffle ? "text-red-600 text-xs" : "text-red-500 text-xs"
+                    }
+                  >
+                    {error}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleVerifyOtp}
+                  disabled={loading || otp.length !== 6}
+                  className={
+                    isBiffle
+                      ? "w-full text-white font-bold py-3.5 rounded-xl transition-all shadow-lg"
+                      : "w-full bg-brand-primary hover:bg-brand-secondary text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-brand-primary/25"
+                  }
+                  style={isBiffle ? biffleBtnStyle : undefined}
+                >
+                  {loading ? "Verifying..." : "Verify OTP"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep("login")}
+                  disabled={loading}
+                  className={
+                    isBiffle
+                      ? "text-xs text-gray-500 underline"
+                      : "text-xs text-brand-muted underline"
+                  }
+                >
+                  Edit mobile number
+                </button>
+              </div>
+            </div>
+          )}
           {/* {step === "payment" && <PaymentStep />} */}
-          {step === "success" && <SuccessStep />}
+          {step === "success" && (
+            <div className="text-center py-8 animate-fade-in">
+              <div className="w-20 h-20 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 animate-float">
+                <i className="fa-solid fa-check"></i>
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-2">
+                Payment Successful!
+              </h3>
+              <p className="text-brand-muted mb-8">
+                Your {selectedPack.coins} coins have been added to your wallet.
+              </p>
+              <button
+                type="button"
+                onClick={abandonCampaignRedirectAndClose}
+                className="bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-8 rounded-xl transition-all"
+              >
+                Start Exploring
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

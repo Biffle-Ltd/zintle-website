@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from "react";
 import type { MediaPlayerClass } from "dashjs";
-import { resolveDashManifestUrlForBrowser } from "../utils/dashSameOriginDevUrl";
 import { isDashManifestUrl } from "../utils/isDashManifestUrl";
 
 type Props = {
@@ -81,8 +80,7 @@ export function CampaignVideo({
         el.muted = muted;
         const player = MediaPlayer().create();
         dashPlayerRef.current = player;
-        const manifestUrl = resolveDashManifestUrlForBrowser(src);
-        player.initialize(el, manifestUrl, false);
+        player.initialize(el, src, false);
         player.setMute(muted);
 
         const onEnded = () => {

@@ -1,21 +1,30 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { CampaignPaymentFailedModal } from "../components/CampaignPaymentFailedModal";
+import { CampaignPaymentSuccessModal } from "../components/CampaignPaymentSuccessModal";
+import { CampaignPaymentWaitingModal } from "../components/CampaignPaymentWaitingModal";
+import { CampaignPaymentMethodLogo } from "../components/PaymentMethodLogos";
 type PaymentInstrumentType = "UPI_COLLECT" | "UPI_INTENT" | "UPI_QR";
 type DeviceOS = "IOS" | "ANDROID";
 import { HOST } from "../utils/host";
 import { headerSafeToken } from "../utils/headerSafeToken";
-import { DEFAULT_ORGANISATION_ID, getOrganisationIdFromSearch } from "../utils/organisationIdFromUrl";
+import { triggerCampaignFbRedirect } from "../utils/campaignFbRedirect";
+import { getOrganisationIdFromSearch } from "../utils/organisationIdFromUrl";
 import { getJwtFromStorage } from "../utils/authStorage";
-
-/** Non-Zintle campaign: base URL for attribution redirect (append `fbclid` when present). */
-const BIFFLE_FB_REDIRECT_URL = "https://biffle.ai/fbredirect";
-
-function appendFbclid(urlOrPath: string, fbclid: string | null | undefined): string {
-  const raw = fbclid?.trim();
-  if (!raw) return urlOrPath;
-  const sep = urlOrPath.includes("?") ? "&" : "?";
-  return `${urlOrPath}${sep}fbclid=${encodeURIComponent(raw)}`;
-}
+import { getLoginPhoneForOrganisation } from "../utils/loginContactStorage";
+import {
+  fetchMandateStatus,
+  isMandateActive,
+  isMandateFailure,
+  isMandateInitiated,
+  MANDATE_STATUS_POLL_INTERVAL_MS,
+  type MandateStatusData,
+} from "../utils/mandateStatus";
+import {
+  openMandateRedirectUrl,
+  resolveMandateRedirectUrl,
+  UPI_APP_PACKAGES,
+} from "../utils/upiMandateLaunch";
 
 // NOTE: Plan listing is disabled. Plan UI uses `plan_details` (URL JSON) when
 // present, else GET /plans/{plan_id}/details/.
@@ -49,15 +58,43 @@ type MandateInitResponse = {
   };
 };
 
-type MandateValidationResponse = {
-  subscriptionId: string;
-  state: string;
-  code: string;
-  message: string;
-  nextDebitOn?: string;
+/** POST /mandate/initiate/ envelope (success and error). */
+type MandateInitiateApiResponse = {
+  success: boolean;
+  data: MandateInitResponse | null;
+  error_message?: string;
+  error_code?: string;
+  organisation_id?: string;
 };
 
 const PAY_SECURE_GREEN = "#34C759";
+const CAMPAIGN_PAYMENT_FAILED_DEFAULT_MESSAGE =
+  "Please try again or try changing the payment method. Any money deducted will be refunded in 5-7 days.";
+const CAMPAIGN_PAYMENT_SUCCESS_DEFAULT_MESSAGE =
+  "Your subscription is now active.";
+
+type CampaignPaymentOutcome =
+  | { type: "success"; message: string }
+  | { type: "failed"; message: string };
+
+function resolveCampaignOutcomeFromStatus(
+  result: MandateStatusData,
+): CampaignPaymentOutcome {
+  const state = result.mandate_state;
+  if (isMandateActive(state)) {
+    return {
+      type: "success",
+      message: CAMPAIGN_PAYMENT_SUCCESS_DEFAULT_MESSAGE,
+    };
+  }
+  return {
+    type: "failed",
+    message: isMandateFailure(state)
+      ? CAMPAIGN_PAYMENT_FAILED_DEFAULT_MESSAGE
+      : `Payment could not be completed (status: ${state}).`,
+  };
+}
+
 const PAY_CARD_BG = "#1E1E21";
 
 /** Plan object from GET /api/v1/monetization/plans/{id}/details/ */
@@ -151,8 +188,7 @@ function formatRecurringRight(plan: MonetizationPlanDetails): string {
   return pricePart;
 }
 
-/** "Starting 03 Apr, 2026" = local today + free_plan_duration (days). */
-function formatSubscriptionStartLabel(plan: MonetizationPlanDetails): string {
+function addFreePlanEndDate(plan: MonetizationPlanDetails): Date {
   const raw = plan.free_plan_duration;
   const addDays =
     typeof raw === "number" && Number.isFinite(raw) && raw >= 0
@@ -160,15 +196,17 @@ function formatSubscriptionStartLabel(plan: MonetizationPlanDetails): string {
       : 0;
   const d = new Date();
   d.setDate(d.getDate() + addDays);
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
+  return d;
+}
+
+/** e.g. "Starting 30 May, 2026" after free trial ends. */
+function formatStartingOnDateLabel(plan: MonetizationPlanDetails): string {
+  const formatted = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
     month: "short",
     year: "numeric",
-  }).formatToParts(d);
-  const day = parts.find((p) => p.type === "day")?.value ?? "";
-  const month = parts.find((p) => p.type === "month")?.value ?? "";
-  const year = parts.find((p) => p.type === "year")?.value ?? "";
-  return `Starting ${day} ${month}, ${year}`;
+  }).format(addFreePlanEndDate(plan));
+  return `Starting ${formatted}`;
 }
 
 function getTrialTokenRupee(plan: MonetizationPlanDetails): number {
@@ -178,89 +216,150 @@ function getTrialTokenRupee(plan: MonetizationPlanDetails): number {
   return 0;
 }
 
-function autopayFooterText(plan: MonetizationPlanDetails): string {
-  const unit = getBillingUnit(plan.plan_duration);
-  if (unit === "week") return "Autopay every week, Cancel anytime";
-  if (unit === "month") return "Autopay every month, Cancel anytime";
+function formatFutureBillingRight(plan: MonetizationPlanDetails): string {
+  const price = formatPlanPriceInr(plan.price);
   const pd = plan.plan_duration;
+  if (pd === 90) return `${price} / 3 Months`;
+  const unit = getBillingUnit(pd);
+  if (unit === "month") return `${price}/month`;
+  if (unit === "week") return `${price}/week`;
+  return formatRecurringRight(plan);
+}
+
+function autopayFooterText(plan: MonetizationPlanDetails): string {
+  const pd = plan.plan_duration;
+  if (pd === 90) return "Autopay every 3 Months, Cancel anytime.";
+  const unit = getBillingUnit(pd);
+  if (unit === "week") return "Autopay every week. Cancel anytime.";
+  if (unit === "month") return "Autopay every month. Cancel anytime.";
   if (pd != null && pd > 0)
-    return `Autopay every ${pd} days, Cancel anytime`;
-  return "Autopay, Cancel anytime";
+    return `Autopay every ${pd} days. Cancel anytime.`;
+  return "Autopay. Cancel anytime.";
+}
+
+function parseUserFromSearch(search: string): {
+  email: string;
+  phone: string;
+} {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search,
+  );
+  const raw = params.get("user");
+  if (!raw?.trim()) return { email: "", phone: "" };
+  try {
+    const decoded = decodeURIComponent(raw.replace(/\+/g, " "));
+    const user = JSON.parse(decoded) as Record<string, unknown>;
+    return {
+      email: user?.email != null ? String(user.email).trim() : "",
+      phone:
+        user?.phone_number != null
+          ? String(user.phone_number).replace(/\D/g, "")
+          : "",
+    };
+  } catch {
+    return { email: "", phone: "" };
+  }
+}
+
+function resolveUserContact(
+  search: string,
+  organisationId: string,
+): { email: string; phone: string } {
+  const fromUrl = parseUserFromSearch(search);
+  const storedPhone = getLoginPhoneForOrganisation(organisationId);
+  return {
+    email: fromUrl.email,
+    phone: fromUrl.phone || storedPhone,
+  };
+}
+
+function hasPaySecureContact(contact: { email: string; phone: string }): boolean {
+  return Boolean(contact.email.trim() || contact.phone.trim());
+}
+
+function formatContactPhoneDisplay(phoneDigits: string): string {
+  const digits = phoneDigits.replace(/\D/g, "");
+  if (digits.length === 10) return `+91-${digits}`;
+  if (digits.length === 12 && digits.startsWith("91")) return `+${digits}`;
+  return digits ? `+${digits}` : "";
 }
 
 function PaySecureTimelineCard({ plan }: { plan: MonetizationPlanDetails }) {
-  const tokenRupee = getTrialTokenRupee(plan);
+  const hasFreeTrial = plan.is_freetrial_allowed === true;
+  const recurringPrice = formatFutureBillingRight(plan);
+  const trialPrice = formatRupeeWhole(getTrialTokenRupee(plan));
+  const todayPrice = hasFreeTrial ? trialPrice : recurringPrice;
+
+  const greenRow = (label: string, price: string) => (
+    <div className="flex min-w-0 flex-1 items-start justify-between gap-3 pb-1">
+      <span
+        className="text-sm font-medium"
+        style={{ color: PAY_SECURE_GREEN }}
+      >
+        {label}
+      </span>
+      <span
+        className="shrink-0 text-sm font-semibold tabular-nums"
+        style={{ color: PAY_SECURE_GREEN }}
+      >
+        {price}
+      </span>
+    </div>
+  );
+
   return (
     <div
       className="overflow-hidden rounded-2xl shadow-lg shadow-black/40"
       style={{ backgroundColor: PAY_CARD_BG }}
     >
-      <div className="px-5 pt-6 pb-4">
-        <div className="flex gap-4">
+      <div className="px-4 pt-4 pb-3">
+        <div className="flex gap-3">
           <div className="flex w-5 shrink-0 flex-col items-center">
             <div
-              className="h-3 w-3 shrink-0 rounded-full"
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: PAY_SECURE_GREEN }}
             />
             <div
-              className="min-h-[36px] w-0.5 flex-1"
-              style={{ backgroundColor: PAY_SECURE_GREEN }}
+              className={`min-h-[28px] w-0.5 flex-1 ${
+                hasFreeTrial ? "" : "bg-white/20"
+              }`}
+              style={
+                hasFreeTrial
+                  ? { backgroundColor: PAY_SECURE_GREEN }
+                  : undefined
+              }
             />
           </div>
-          <div className="flex min-w-0 flex-1 items-start justify-between gap-3 pb-1">
-            <span
-              className="text-sm font-medium"
-              style={{ color: PAY_SECURE_GREEN }}
-            >
-              Pay Today
-            </span>
-            <span
-              className="shrink-0 text-sm font-semibold tabular-nums"
-              style={{ color: PAY_SECURE_GREEN }}
-            >
-              {formatRupeeWhole(tokenRupee)}
-            </span>
-          </div>
+          {greenRow("Starting Today", todayPrice)}
         </div>
 
-        <div className="flex gap-4">
-          <div className="flex w-5 shrink-0 flex-col items-center">
-            <div
-              className="h-3 w-3 shrink-0 rounded-full"
-              style={{ backgroundColor: PAY_SECURE_GREEN }}
-            />
-            <div className="min-h-[36px] w-0.5 flex-1 bg-white/20" />
+        {hasFreeTrial && (
+          <div className="flex gap-3">
+            <div className="flex w-5 shrink-0 flex-col items-center">
+              <div
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: PAY_SECURE_GREEN }}
+              />
+              <div className="min-h-[28px] w-0.5 flex-1 bg-white/20" />
+            </div>
+            {greenRow("Get Refunded Today", trialPrice)}
           </div>
-          <div className="flex min-w-0 flex-1 items-start justify-between gap-3 pb-1">
-            <span
-              className="text-sm font-medium"
-              style={{ color: PAY_SECURE_GREEN }}
-            >
-              Get Refunded Today
-            </span>
-            <span
-              className="shrink-0 text-sm font-semibold tabular-nums"
-              style={{ color: PAY_SECURE_GREEN }}
-            >
-              {formatRupeeWhole(tokenRupee)}
-            </span>
-          </div>
-        </div>
+        )}
 
-        <div className="flex gap-4">
+        <div className="flex gap-3">
           <div className="flex w-5 shrink-0 flex-col items-center pt-0.5">
-            <div className="h-3 w-3 shrink-0 rounded-full border-2 border-white/50 bg-transparent" />
+            <div className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-white/50 bg-transparent" />
           </div>
           <div className="flex min-w-0 flex-1 items-start justify-between gap-3 text-sm text-white/55">
-            <span>{formatSubscriptionStartLabel(plan)}</span>
+            <span>{formatStartingOnDateLabel(plan)}</span>
             <span className="shrink-0 text-right tabular-nums">
-              {formatRecurringRight(plan)}
+              {recurringPrice}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-3 border-t border-white/[0.08] bg-black/25 px-5 py-4">
+      <div className="flex gap-2.5 border-t border-white/[0.08] bg-black/25 px-4 py-3">
         <i
           className="fa-solid fa-arrows-rotate mt-0.5 shrink-0 text-white"
           aria-hidden
@@ -269,6 +368,204 @@ function PaySecureTimelineCard({ plan }: { plan: MonetizationPlanDetails }) {
           {autopayFooterText(plan)}
         </p>
       </div>
+    </div>
+  );
+}
+
+function PaySecureHeader({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <span
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+          style={{ backgroundColor: `${PAY_SECURE_GREEN}22` }}
+        >
+          <i
+            className="fa-solid fa-shield-halved text-sm"
+            style={{ color: PAY_SECURE_GREEN }}
+            aria-hidden
+          />
+        </span>
+        <h2 className="text-base font-semibold tracking-tight text-white">
+          Pay Securely
+        </h2>
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10"
+        aria-label="Close"
+      >
+        <i className="fa-solid fa-xmark text-lg" aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+function PaySecureNotifyBanner() {
+  return (
+    <div
+      className="mt-3 flex items-start gap-2 text-sm leading-snug"
+      style={{ color: PAY_SECURE_GREEN }}
+    >
+      <i className="fa-solid fa-circle-check mt-0.5 shrink-0" aria-hidden />
+      <p>We will notify you 24hrs before auto debit happens.</p>
+    </div>
+  );
+}
+
+function PaySecureActivationBox() {
+  return (
+    <div
+      className="mt-3 rounded-2xl px-4 py-3 text-left text-sm leading-snug text-white"
+      style={{ backgroundColor: PAY_CARD_BG }}
+    >
+      Subscription will be activated on
+    </div>
+  );
+}
+
+function PaySecureContactRow({
+  email,
+  phone,
+}: {
+  email: string;
+  phone: string;
+}) {
+  const phoneDisplay = formatContactPhoneDisplay(phone);
+  const display = email.trim() || phoneDisplay;
+  if (!display) return null;
+  const showPhone = !email.trim() && Boolean(phoneDisplay);
+
+  return (
+    <div className="mt-3 flex items-center gap-2.5 text-sm text-white/85">
+      <i
+        className={`shrink-0 text-white/60 ${
+          showPhone ? "fa-solid fa-phone" : "fa-regular fa-envelope"
+        }`}
+        aria-hidden
+      />
+      <span className="min-w-0 truncate">{display}</span>
+    </div>
+  );
+}
+
+export type CampaignPaymentMethod =
+  | "phonepe"
+  | "paytm"
+  | "gpay"
+  | "other_upi";
+  // | "qr" — hidden for now
+
+type MandateInitOptions = {
+  targetAppOverride?: string;
+  campaignMethod?: CampaignPaymentMethod;
+};
+
+function CampaignPaymentSectionHeader({ label }: { label: string }) {
+  return (
+    <div
+      className="rounded-xl px-3.5 py-2"
+      style={{ backgroundColor: PAY_CARD_BG }}
+    >
+      <span className="text-xs font-semibold text-white">{label}</span>
+    </div>
+  );
+}
+
+function CampaignPaymentOptionRow({
+  icon,
+  label,
+  badge,
+  onClick,
+  disabled,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  badge?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex w-full items-center gap-3 py-1 text-left disabled:opacity-50"
+    >
+      {icon}
+      <span className="min-w-0 flex-1 text-sm font-medium text-white">
+        {label}
+      </span>
+      {badge ? (
+        <span
+          className="flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold"
+          style={{
+            backgroundColor: `${PAY_SECURE_GREEN}22`,
+            color: PAY_SECURE_GREEN,
+          }}
+        >
+          <i className="fa-solid fa-bolt text-[9px]" aria-hidden />
+          {badge}
+        </span>
+      ) : null}
+      <i
+        className="fa-solid fa-chevron-right shrink-0 text-sm text-white/35"
+        aria-hidden
+      />
+    </button>
+  );
+}
+
+function CampaignPaymentMethods({
+  disabled,
+  onSelect,
+}: {
+  disabled?: boolean;
+  onSelect?: (method: CampaignPaymentMethod) => void;
+}) {
+  return (
+    <div className="mt-4 space-y-2 pb-4">
+      <CampaignPaymentSectionHeader label="UPI" />
+      <div className="space-y-0.5 px-1">
+        <CampaignPaymentOptionRow
+          icon={<CampaignPaymentMethodLogo variant="phonepe" />}
+          label="PhonePe"
+          badge="Quickest"
+          disabled={disabled}
+          onClick={() => onSelect?.("phonepe")}
+        />
+        <CampaignPaymentOptionRow
+          icon={<CampaignPaymentMethodLogo variant="paytm" />}
+          label="PayTM"
+          disabled={disabled}
+          onClick={() => onSelect?.("paytm")}
+        />
+        <CampaignPaymentOptionRow
+          icon={<CampaignPaymentMethodLogo variant="gpay" />}
+          label="GPay"
+          disabled={disabled}
+          onClick={() => onSelect?.("gpay")}
+        />
+        <CampaignPaymentOptionRow
+          icon={<CampaignPaymentMethodLogo variant="upi" />}
+          label="Other UPI Apps"
+          disabled={disabled}
+          onClick={() => onSelect?.("other_upi")}
+        />
+      </div>
+
+      {/* QR Code — hidden for now
+      <CampaignPaymentSectionHeader label="QR Code" />
+      <div className="px-1">
+        <CampaignPaymentOptionRow
+          icon={<CampaignPaymentMethodLogo variant="qr" />}
+          label="Scan QR code to pay"
+          disabled={disabled}
+          onClick={() => onSelect?.("qr")}
+        />
+      </div>
+      */}
     </div>
   );
 }
@@ -358,8 +655,14 @@ export const Subscriptions = ({
   const [mandateValidationError, setMandateValidationError] = useState<
     string | null
   >(null);
-  const [mandateStatus, setMandateStatus] =
-    useState<MandateValidationResponse | null>(null);
+  const [mandateStatus, setMandateStatus] = useState<MandateStatusData | null>(
+    null,
+  );
+
+  const [campaignPaymentWaiting, setCampaignPaymentWaiting] =
+    useState<CampaignPaymentMethod | null>(null);
+  const [campaignPaymentOutcome, setCampaignPaymentOutcome] =
+    useState<CampaignPaymentOutcome | null>(null);
 
   // To avoid repeatedly triggering auto-initiation when plan_id is present
   const [autoInitiated, setAutoInitiated] = useState(false);
@@ -448,25 +751,24 @@ export const Subscriptions = ({
   }, [isLoggedIn, planId, token, organisationId, location.search]);
 
 
-  const handleInitiateMandate = async () => {
-    // const validationError = validateForm();
-    // if (validationError) {
-    //   setMandateInitError(validationError);
-    //   return;
-    // }
+  const handleInitiateMandate = async (options?: MandateInitOptions) => {
     if (!planId) return;
-    if (!targetApp) return;
+    const appTarget = options?.targetAppOverride ?? targetApp;
+    if (!appTarget) return;
     setMandateInitLoading(true);
     setMandateInitError(null);
     setMandate(null);
     setMandateStatus(null);
+    if (isCampaign) {
+      setCampaignPaymentWaiting(null);
+      setCampaignPaymentOutcome(null);
+    }
     try {
-      const body: any = {
+      const body: Record<string, unknown> = {
         plan_id: planId,
-        // is_free_trial: isFreeTrial,
         payment_instrument_type: "UPI_INTENT",
         device_os: "ANDROID",
-        target_app: targetApp,
+        target_app: appTarget,
       };
 
       // if (paymentInstrumentType === "UPI_COLLECT") {
@@ -501,45 +803,92 @@ export const Subscriptions = ({
           body: JSON.stringify(body),
         },
       );
-      const data = await r.json();
-      if (!r.ok || !data.success) {
-        const errMsg =
-          data.error_message ||
-          (typeof data.detail === "string" ? data.detail : "") ||
-          "Failed to initiate mandate";
-        if (data.error_code === "active_subscription_exists") {
-          setActiveSubscriptionModal({ open: true, message: errMsg });
-          return;
-        }
-        throw new Error(errMsg);
+      const data = (await r.json()) as MandateInitiateApiResponse;
+
+      if (
+        r.status === 400 &&
+        data.success === false &&
+        data.error_code === "active_subscription_exists"
+      ) {
+        setActiveSubscriptionModal({
+          open: true,
+          message:
+            data.error_message ??
+            "You already have an active subscription.",
+        });
+        return;
       }
-      const mandateData = data.data as MandateInitResponse;
+
+      if (!r.ok || !data.success || !data.data) {
+        throw new Error(
+          data.error_message ?? "Failed to initiate mandate",
+        );
+      }
+      const mandateData = data.data;
       setMandate(mandateData);
-      const redirectUrl = mandateData?.pg_info?.redirect_url;
+      const redirectUrl = resolveMandateRedirectUrl(mandateData);
       if (redirectUrl && typeof window !== "undefined") {
         postMandateToReactNative(mandateData);
-        if (isCampaign) {
-          window.open(redirectUrl, "_blank", "noopener,noreferrer");
-          if (organisationId === DEFAULT_ORGANISATION_ID) {
-            navigate(appendFbclid("/fb-redirect", fbclidFromUrl));
+        const method = options?.campaignMethod;
+        if (isCampaign && method) {
+          setCampaignPaymentWaiting(method);
+          if (
+            method === "phonepe" ||
+            method === "paytm" ||
+            method === "gpay"
+          ) {
+            openMandateRedirectUrl(redirectUrl, UPI_APP_PACKAGES[method]);
           } else {
-            window.location.assign(
-              appendFbclid(BIFFLE_FB_REDIRECT_URL, fbclidFromUrl),
-            );
+            openMandateRedirectUrl(redirectUrl);
           }
-        } else {
-          window.location.href = redirectUrl;
+          return;
         }
+        window.location.href = redirectUrl;
       }
-    } catch (e: any) {
-      setMandateInitError(e.message || "Failed to initiate mandate");
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : "Failed to initiate mandate";
+      setMandateInitError(msg);
     } finally {
       setMandateInitLoading(false);
     }
   };
 
+  const handleCampaignPaymentSelect = (method: CampaignPaymentMethod) => {
+    if (!isCampaign) return;
+    const targetAppOverride =
+      method === "phonepe"
+        ? UPI_APP_PACKAGES.phonepe
+        : method === "paytm"
+          ? UPI_APP_PACKAGES.paytm
+          : method === "gpay"
+            ? UPI_APP_PACKAGES.gpay
+            : targetApp;
+    void handleInitiateMandate({ targetAppOverride, campaignMethod: method });
+  };
+
+  const handleCampaignPaymentWaitCancel = () => {
+    if (!isCampaign) return;
+    setCampaignPaymentWaiting(null);
+    setCampaignPaymentOutcome({
+      type: "failed",
+      message: CAMPAIGN_PAYMENT_FAILED_DEFAULT_MESSAGE,
+    });
+  };
+
+  const handleCampaignPaymentSuccessDone = () => {
+    setCampaignPaymentOutcome(null);
+    if (!isCampaign) return;
+    triggerCampaignFbRedirect({
+      organisationId,
+      fbclid: fbclidFromUrl,
+      navigate,
+    });
+  };
+
   // Automatically start mandate initiation when plan_id (and token) are available
   useEffect(() => {
+    if (isCampaign) return;
     if (
       planId &&
       isLoggedIn &&
@@ -552,7 +901,7 @@ export const Subscriptions = ({
       void handleInitiateMandate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planId, isLoggedIn]);
+  }, [planId, isLoggedIn, isCampaign]);
 
   const handleValidateMandate = async () => {
     if (!mandate?.id) {
@@ -565,31 +914,67 @@ export const Subscriptions = ({
     setMandateValidationLoading(true);
     setMandateValidationError(null);
     try {
-      const authToken = headerSafeToken(token);
-      const r = await fetch(
-        `${HOST}/api/v1/monetization/subscriptions/mandate/${mandate.id}/validate/`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-            "X-Organisation-ID": organisationId,
-          },
-        },
-      );
-      const data = await r.json();
-      if (!r.ok || !data.success) {
-        throw new Error(
-          data.error_message || data.detail || "Failed to validate mandate",
-        );
-      }
-      setMandateStatus(data.data as MandateValidationResponse);
-    } catch (e: any) {
-      setMandateValidationError(e.message || "Failed to validate mandate");
+      const result = await fetchMandateStatus({
+        host: HOST,
+        mandateId: mandate.id,
+        authToken: headerSafeToken(token),
+        organisationId,
+      });
+      setMandateStatus(result);
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : "Failed to validate mandate";
+      setMandateValidationError(msg);
     } finally {
       setMandateValidationLoading(false);
     }
   };
+
+  // Poll mandate status every 10s while the waiting modal is open (first call after 10s).
+  useEffect(() => {
+    if (!isCampaign || !campaignPaymentWaiting || !mandate?.id) return;
+
+    let cancelled = false;
+    let intervalId: number | undefined;
+
+    const poll = async () => {
+      try {
+        const result = await fetchMandateStatus({
+          host: HOST,
+          mandateId: mandate.id,
+          authToken: headerSafeToken(token),
+          organisationId,
+        });
+        if (cancelled) return;
+
+        setMandateStatus(result);
+        setMandate((prev) =>
+          prev ? { ...prev, mandate_state: result.mandate_state } : prev,
+        );
+
+        if (isMandateInitiated(result.mandate_state)) return;
+
+        setCampaignPaymentWaiting(null);
+        setCampaignPaymentOutcome(resolveCampaignOutcomeFromStatus(result));
+      } catch {
+        // Keep polling on transient errors while the user may still be paying.
+      }
+    };
+
+    const initialDelayId = window.setTimeout(() => {
+      void poll();
+      intervalId = window.setInterval(
+        () => void poll(),
+        MANDATE_STATUS_POLL_INTERVAL_MS,
+      );
+    }, MANDATE_STATUS_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(initialDelayId);
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+    };
+  }, [isCampaign, campaignPaymentWaiting, mandate?.id, token, organisationId]);
 
   const handleLoginClick = () => {
     setShowLogin(true);
@@ -598,11 +983,55 @@ export const Subscriptions = ({
   const closeActiveSubscriptionModal = () =>
     setActiveSubscriptionModal({ open: false, message: "" });
 
+  const userContact = resolveUserContact(location.search, organisationId);
+
+  const handlePaySecureClose = () => {
+    if (isCampaign) {
+      const q = new URLSearchParams();
+      q.set("organisation_id", organisationId);
+      if (fbclidFromUrl) q.set("fbclid", fbclidFromUrl);
+      navigate(`/campaign?${q.toString()}`);
+      return;
+    }
+    navigate(-1);
+  };
+
+  const paySecureShellClass = isCampaign
+    ? "min-h-dvh max-h-dvh overflow-y-auto overscroll-contain bg-black"
+    : "container mx-auto px-4 py-24";
+
+  const paySecureInnerClass = isCampaign
+    ? "mx-auto flex min-h-dvh max-w-lg flex-col px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.5rem,env(safe-area-inset-top))]"
+    : "mx-auto mb-10 max-w-md";
+
+  const campaignWaitAmountLabel = planDetailsState.data
+    ? formatRupeeWhole(getTrialTokenRupee(planDetailsState.data))
+    : "₹ 0";
+
   return (
-    <div className="container mx-auto px-4 py-24">
+    <div className={paySecureShellClass}>
+      {campaignPaymentWaiting && isCampaign && (
+        <CampaignPaymentWaitingModal
+          method={campaignPaymentWaiting}
+          amountLabel={campaignWaitAmountLabel}
+          onCancel={handleCampaignPaymentWaitCancel}
+        />
+      )}
+      {campaignPaymentOutcome?.type === "success" && isCampaign && (
+        <CampaignPaymentSuccessModal
+          message={campaignPaymentOutcome.message}
+          onDone={handleCampaignPaymentSuccessDone}
+        />
+      )}
+      {campaignPaymentOutcome?.type === "failed" && isCampaign && (
+        <CampaignPaymentFailedModal
+          message={campaignPaymentOutcome.message}
+          onTryAgain={() => setCampaignPaymentOutcome(null)}
+        />
+      )}
       {activeSubscriptionModal.open && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="active-subscription-modal-title"
@@ -616,7 +1045,7 @@ export const Subscriptions = ({
               id="active-subscription-modal-title"
               className="text-lg font-semibold text-white"
             >
-              Active subscription
+              Active Subscription
             </h3>
             <p className="mt-3 text-sm leading-relaxed text-white/80">
               {activeSubscriptionModal.message}
@@ -662,10 +1091,8 @@ export const Subscriptions = ({
         for the selected plan.
       </p> */}
       {isLoggedIn && (
-        <div className="mx-auto mb-10 max-w-md">
-          <h2 className="mb-5 text-center text-lg font-semibold tracking-tight text-white">
-            Pay Securely
-          </h2>
+        <div className={paySecureInnerClass}>
+          <PaySecureHeader onClose={handlePaySecureClose} />
 
           {!planId && (
             <p className="text-center text-sm text-brand-muted">
@@ -693,7 +1120,28 @@ export const Subscriptions = ({
           )}
 
           {planId && planDetailsState.data && !planDetailsState.loading && (
-            <PaySecureTimelineCard plan={planDetailsState.data} />
+            <>
+              <PaySecureTimelineCard plan={planDetailsState.data} />
+              <PaySecureNotifyBanner />
+              {hasPaySecureContact(userContact) && <PaySecureActivationBox />}
+              <PaySecureContactRow
+                email={userContact.email}
+                phone={userContact.phone}
+              />
+              {isCampaign && (
+                <>
+                  {mandateInitError && (
+                    <p className="mt-3 text-center text-xs text-red-400" role="alert">
+                      {mandateInitError}
+                    </p>
+                  )}
+                  <CampaignPaymentMethods
+                    disabled={mandateInitLoading}
+                    onSelect={handleCampaignPaymentSelect}
+                  />
+                </>
+              )}
+            </>
           )}
         </div>
       )}
@@ -988,28 +1436,20 @@ export const Subscriptions = ({
                 <div className="text-xs text-brand-muted space-y-1">
                   <p>
                     <span className="font-semibold text-white">
-                      Subscription ID:
+                      Mandate ID:
                     </span>{" "}
-                    {mandateStatus.subscriptionId}
+                    {mandateStatus.id}
                   </p>
                   <p>
                     <span className="font-semibold text-white">State:</span>{" "}
-                    {mandateStatus.state}
+                    {mandateStatus.mandate_state}
                   </p>
-                  <p>
-                    <span className="font-semibold text-white">Code:</span>{" "}
-                    {mandateStatus.code}
-                  </p>
-                  <p>
-                    <span className="font-semibold text-white">Message:</span>{" "}
-                    {mandateStatus.message}
-                  </p>
-                  {mandateStatus.nextDebitOn && (
+                  {mandateStatus.pg_info?.state && (
                     <p>
                       <span className="font-semibold text-white">
-                        Next Debit On:
+                        PG state:
                       </span>{" "}
-                      {new Date(mandateStatus.nextDebitOn).toLocaleString()}
+                      {mandateStatus.pg_info.state}
                     </p>
                   )}
                 </div>

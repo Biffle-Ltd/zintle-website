@@ -80,7 +80,7 @@ export function CampaignVideo({
         el.muted = muted;
         const player = MediaPlayer().create();
         dashPlayerRef.current = player;
-        player.initialize(el, src, false);
+        player.initialize(el, src, autoPlay);
         player.setMute(muted);
 
         const onEnded = () => {

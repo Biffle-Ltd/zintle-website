@@ -1,4 +1,5 @@
 import { isBiffleOrganisationId } from "./organisationIdFromUrl";
+import { clearAllLoginContactStorage } from "./loginContactStorage";
 
 export const ZINTLE_JWT_STORAGE_KEY = "zintle_jwt";
 export const BIFFLE_JWT_STORAGE_KEY = "biffle_jwt";
@@ -26,6 +27,7 @@ export function setJwtForOrganisation(
 export function clearAllJwtStorage(): void {
   localStorage.removeItem(ZINTLE_JWT_STORAGE_KEY);
   localStorage.removeItem(BIFFLE_JWT_STORAGE_KEY);
+  clearAllLoginContactStorage();
 }
 
 export function hasAnyJwtInStorage(): boolean {

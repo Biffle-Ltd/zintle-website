@@ -4,6 +4,10 @@ import type { MonetizationPlanDetails } from "./Subscriptions";
 import { HOST } from "../utils/host";
 import { headerSafeToken } from "../utils/headerSafeToken";
 import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
+import {
+  CampaignCtaDisclaimer,
+  CampaignPrimaryCta,
+} from "../components/CampaignCta";
 import { CampaignVideo } from "../components/CampaignVideo";
 import { isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
 import { getJwtFromStorage } from "../utils/authStorage";
@@ -402,11 +406,11 @@ export function Campaign({
                 src={videoUrl}
                 className="h-full w-full object-cover object-top block"
                 playsInline
-                muted={false}
+                muted
                 loop
                 autoPlay
-                controls
-                preload="metadata"
+                controls={true}
+                preload="auto"
               />
             ) : (
               <img
@@ -428,12 +432,6 @@ export function Campaign({
   const hintStrongClass = isBiffle
     ? "text-gray-800 font-medium"
     : "text-white/90 font-medium";
-
-  const ctaStyle: React.CSSProperties = isBiffle
-    ? { background: BIFFLE_GRADIENT_H }
-    : {
-        background: `linear-gradient(90deg, ${ACCENT_ORANGE}, ${ACCENT_PINK})`,
-      };
 
   return (
     <div className={shellClass} style={shellStyle}>
@@ -491,15 +489,16 @@ export function Campaign({
                 URL to start checkout after login.
               </p>
             )}
-            <button
-              type="button"
-              disabled={!canCheckout}
-              onClick={handleStartFreeTrial}
-              className="rounded-full px-10 py-3 text-base font-bold text-white shadow-lg shadow-black/20 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity active:opacity-90"
-              style={ctaStyle}
-            >
-              Start Free Trial
-            </button>
+            <div className="w-full flex flex-col items-stretch gap-2">
+              <CampaignPrimaryCta
+                isBiffle={isBiffle}
+                disabled={!canCheckout}
+                onClick={handleStartFreeTrial}
+              >
+                Start Free Trial
+              </CampaignPrimaryCta>
+              {canCheckout && <CampaignCtaDisclaimer isBiffle={isBiffle} />}
+            </div>
           </div>
         </div>
       </main>

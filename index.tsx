@@ -21,6 +21,7 @@ import { Subscriptions } from "./pages/Subscriptions";
 import { Campaign } from "./pages/Campaign";
 import { PaymentStatus } from "./pages/PaymentStatus";
 import { PaymentStatusPopup } from "./components/PaymentStatusPopup";
+import { PhoneOtpLoginScreen } from "./components/PhoneOtpLoginScreen";
 import {
   parseCoinPixelContext,
   sendCoinPaymentFailed,
@@ -43,7 +44,6 @@ import {
   clearAllJwtStorage,
   getJwtFromStorage,
   hasAnyJwtInStorage,
-  setJwtForOrganisation,
 } from "./utils/authStorage";
 import { HOST } from "./utils/host";
 
@@ -966,95 +966,40 @@ const CoinStore = ({
   const navigate = useNavigate();
 
   const isBiffle = isBiffleOrganisationId(organisationId);
-  const biffleBtnStyle = {
-    background: "linear-gradient(90deg, #7c3aed, #ec4899)",
-  } as const;
 
   const abandonCampaignRedirectAndClose = () => {
     sessionStorage.removeItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
     onClose();
   };
 
-  const [step, setStep] = useState<"store" | "login" | "otp" | "success">(
-    initialStep,
-  );
+  const [step, setStep] = useState<"store" | "login" | "success">(initialStep);
   const [selectedPack, setSelectedPack] = useState<any>(null);
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const countryCode = "91";
-
-  const isAuthStep = step === "login" || step === "otp";
 
   // Helper: isLoggedIn for this organisation's JWT slot
   const isLoggedIn = !!getJwtFromStorage(organisationId);
 
-  // Send OTP API call
-  const handleSendOtp = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const r = await fetch(`${HOST}/api/v1.2/auth/login/otp/request/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Organisation-ID": organisationId,
-        },
-        body: JSON.stringify({
-          country_code: countryCode,
-          phone_number: phone,
-        }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || "Failed to send OTP");
-      setStep("otp");
-    } catch (e: any) {
-      setError(e.message || "Failed to send OTP");
-    } finally {
-      setLoading(false);
-    }
-  };
-  // Verify OTP API call
-  const handleVerifyOtp = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const r = await fetch(`${HOST}/api/v1/auth/login/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Organisation-ID": organisationId,
-        },
-        body: JSON.stringify({
-          provider: "phone",
-          country_code: countryCode,
-          phone_number: phone,
-          otp,
-        }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || "Failed to verify OTP");
-      const jwt = data.token as string | undefined;
-      if (jwt) {
-        setJwtForOrganisation(organisationId, jwt);
-      }
-      const pending = sessionStorage.getItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
-      sessionStorage.removeItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
-      if (pending?.startsWith("/")) {
-        const dest = jwt && isBiffle ? withJwtInQuery(pending, jwt) : pending;
-        navigate(dest);
-      }
-      onClose();
-      // Optionally notify parent UI about login status, if needed
-    } catch (e: any) {
-      setError(e.message || "Failed to verify OTP");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const packs = coinPacks;
+
+  if (step === "login") {
+    return (
+      <PhoneOtpLoginScreen
+        isBiffle={isBiffle}
+        organisationId={organisationId}
+        onClose={abandonCampaignRedirectAndClose}
+        onSuccess={() => {
+          const pending = sessionStorage.getItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
+          sessionStorage.removeItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
+          if (pending?.startsWith("/")) {
+            const jwt = getJwtFromStorage(organisationId);
+            const dest =
+              jwt && isBiffle ? withJwtInQuery(pending, jwt) : pending;
+            navigate(dest);
+          }
+          onClose();
+        }}
+      />
+    );
+  }
 
   const handleBuy = async (pack: any) => {
     setSelectedPack(pack);
@@ -1083,24 +1028,14 @@ const CoinStore = ({
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex overflow-y-auto overscroll-contain ${
-        isAuthStep ? "" : "animate-fade-in items-center justify-center p-4"
-      } ${
-        isAuthStep
-          ? "items-start justify-center px-4 pt-[max(1rem,calc(env(safe-area-inset-top)+12px))] pb-6 md:items-center md:justify-center md:py-4 md:p-4"
-          : ""
-      } ${
+      className={`fixed inset-0 z-[100] flex animate-fade-in overflow-y-auto overscroll-contain items-center justify-center p-4 ${
         isBiffle
           ? "bg-slate-900/70 backdrop-blur-sm"
           : "bg-black/80 backdrop-blur-sm"
       }`}
     >
       <div
-        className={`w-full shrink-0 ${
-          step === "login" || step === "otp" ? "max-w-md" : "max-w-5xl"
-        } max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden relative flex flex-col ${
-          isAuthStep ? "" : "my-auto"
-        } ${
+        className={`w-full shrink-0 max-w-5xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden relative flex flex-col my-auto ${
           isBiffle
             ? "bg-white border border-gray-200"
             : "bg-brand-surface border border-white/10"
@@ -1164,160 +1099,6 @@ const CoinStore = ({
             </div>
           )}
 
-          {step === "login" && (
-            <div className="touch-manipulation">
-              <h3
-                className={
-                  isBiffle
-                    ? "text-2xl font-bold text-gray-900 mb-2"
-                    : "text-2xl font-bold text-white mb-2"
-                }
-              >
-                {isBiffle ? "Log in to Biffle" : "Log in to Zintle"}
-              </h3>
-              <p
-                className={
-                  isBiffle
-                    ? "text-gray-600 mb-6 text-sm"
-                    : "text-brand-muted mb-6 text-sm"
-                }
-              >
-                Enter your mobile number to continue
-              </p>
-              <div className="space-y-4">
-                <div
-                  className={
-                    isBiffle
-                      ? "bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-3"
-                      : "bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3"
-                  }
-                >
-                  <span
-                    className={isBiffle ? "text-gray-500" : "text-gray-400"}
-                  >
-                    +91
-                  </span>
-                  <input
-                    type="tel"
-                    placeholder="Enter mobile number"
-                    enterKeyHint="done"
-                    className={
-                      isBiffle
-                        ? "bg-transparent w-full text-gray-900 outline-none placeholder-gray-400 font-medium"
-                        : "bg-transparent w-full text-white outline-none placeholder-gray-600 font-medium"
-                    }
-                    value={phone}
-                    onChange={(e) =>
-                      setPhone(e.target.value.replace(/\D/g, ""))
-                    }
-                    autoComplete="tel-national"
-                    autoFocus
-                    disabled={loading}
-                  />
-                </div>
-                {error && (
-                  <div
-                    className={
-                      isBiffle ? "text-red-600 text-xs" : "text-red-500 text-xs"
-                    }
-                  >
-                    {error}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={handleSendOtp}
-                  disabled={loading || !phone}
-                  className={
-                    isBiffle
-                      ? "w-full text-white font-bold py-3.5 rounded-xl transition-all shadow-lg"
-                      : "w-full bg-brand-primary hover:bg-brand-secondary text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-brand-primary/25"
-                  }
-                  style={isBiffle ? biffleBtnStyle : undefined}
-                >
-                  {loading ? "Sending..." : "Send OTP"}
-                </button>
-              </div>
-            </div>
-          )}
-          {step === "otp" && (
-            <div className="touch-manipulation">
-              <h3
-                className={
-                  isBiffle
-                    ? "text-2xl font-bold text-gray-900 mb-2"
-                    : "text-2xl font-bold text-white mb-2"
-                }
-              >
-                Enter OTP
-              </h3>
-              <p
-                className={
-                  isBiffle
-                    ? "text-gray-600 mb-6 text-sm"
-                    : "text-brand-muted mb-6 text-sm"
-                }
-              >
-                Please enter the 6-digit code sent to{" "}
-                <b>+91 {phone}</b>
-              </p>
-              <div className="space-y-4">
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  placeholder="OTP"
-                  enterKeyHint="done"
-                  className={
-                    isBiffle
-                      ? "bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-900 outline-none placeholder-gray-400 font-medium w-full text-center tracking-widest text-lg"
-                      : "bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none placeholder-gray-600 font-medium w-full text-center tracking-widest text-lg"
-                  }
-                  value={otp}
-                  onChange={(e) =>
-                    setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
-                  }
-                  autoFocus
-                  disabled={loading}
-                />
-                {error && (
-                  <div
-                    className={
-                      isBiffle ? "text-red-600 text-xs" : "text-red-500 text-xs"
-                    }
-                  >
-                    {error}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={handleVerifyOtp}
-                  disabled={loading || otp.length !== 6}
-                  className={
-                    isBiffle
-                      ? "w-full text-white font-bold py-3.5 rounded-xl transition-all shadow-lg"
-                      : "w-full bg-brand-primary hover:bg-brand-secondary text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-brand-primary/25"
-                  }
-                  style={isBiffle ? biffleBtnStyle : undefined}
-                >
-                  {loading ? "Verifying..." : "Verify OTP"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStep("login")}
-                  disabled={loading}
-                  className={
-                    isBiffle
-                      ? "text-xs text-gray-500 underline"
-                      : "text-xs text-brand-muted underline"
-                  }
-                >
-                  Edit mobile number
-                </button>
-              </div>
-            </div>
-          )}
           {/* {step === "payment" && <PaymentStep />} */}
           {step === "success" && (
             <div className="text-center py-8 animate-fade-in">

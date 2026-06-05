@@ -33,15 +33,12 @@ export const QuickRechargePopup = ({
   onPackPay,
 }: QuickRechargePopupProps) => {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/70">
-      <div
-        className="w-full rounded-t-[28px] bg-[#0f172a] px-5 pt-3 pb-8 shadow-[0_-8px_40px_rgba(0,0,0,0.45)]"
-        role="dialog"
-        aria-label="Quick recharge"
-      >
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/25" />
-
-        <h2 className="mb-5 text-left text-base font-medium text-white">
+    <div
+      className="w-full rounded-t-[28px] bg-[#0f172a] px-5 pb-8 pt-5 shadow-[0_-8px_40px_rgba(0,0,0,0.45)]"
+      role="dialog"
+      aria-label="Quick recharge"
+    >
+      <h2 className="mb-5 text-left text-base font-medium text-white">
           {packs.length > 0
             ? "Tap on the plan to recharge"
             : "No micro coin packs available"}
@@ -100,7 +97,6 @@ export const QuickRechargePopup = ({
             })}
           </div>
         )}
-      </div>
     </div>
   );
 };

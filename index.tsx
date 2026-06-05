@@ -1750,9 +1750,11 @@ const Layout = () => {
   return (
     <div
       className={`bg-brand-bg text-brand-text font-sans ${
-        isCampaignPage || isQuickRechargeCoinsPage
+        isCampaignPage
           ? "h-dvh max-h-dvh overflow-hidden"
-          : isCoinsPage
+          : isQuickRechargeCoinsPage
+            ? "h-auto min-h-0 bg-transparent"
+            : isCoinsPage
             ? ""
             : "min-h-screen"
       }`}

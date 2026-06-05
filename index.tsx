@@ -22,12 +22,22 @@ import { Campaign } from "./pages/Campaign";
 import { PaymentStatus } from "./pages/PaymentStatus";
 import { PaymentStatusPopup } from "./components/PaymentStatusPopup";
 import { PhoneOtpLoginScreen } from "./components/PhoneOtpLoginScreen";
+import { QuickRechargePopup } from "./components/QuickRechargePopup";
 import {
+  CoinStoreMobile,
+  resolveTimerPack,
+} from "./components/CoinStoreMobile";
+import { COIN_ICON_CLASS, ZintleCoinIcon } from "./components/ZintleCoinIcon";
+import {
+  isQuickRechargeFromSearch,
   parseCoinPixelContext,
+  sendCoinPackSelected,
   sendCoinPaymentFailed,
   sendCoinPaymentInitiated,
   sendCoinPaymentSuccess,
   sendCoinStoreViewed,
+  sendQuickRechargePopupViewed,
+  type CoinPackForAnalytics,
   type ParsedCoinPixelContext,
 } from "./utils/pixelEvents";
 import { headerSafeToken } from "./utils/headerSafeToken";
@@ -90,7 +100,7 @@ let lastTrackedCoinPurchaseRef: LastTrackedCoinPurchase | null = null;
 export type CreateOrderPixelOptions = {
   trackCoinPixels?: boolean;
   pixelContext?: ParsedCoinPixelContext | null;
-  coinPack?: { id: number; price: number; coins: number };
+  coinPack?: CoinPackForAnalytics;
 };
 
 // Shared helper to create coin purchase orders
@@ -322,10 +332,7 @@ const createOrderAndInitiatePayment = async (
 
   if (trackCoinPurchase) {
     const { pixelContext, coinPack } = options!;
-    sendCoinPaymentInitiated(pixelContext, {
-      coin_pack_id: coinPack.id,
-      amount: coinPack.price,
-    });
+    sendCoinPaymentInitiated(pixelContext, coinPack);
   }
 
   const orderData = await createCoinOrder(coinPackId, token, organisationId);
@@ -987,7 +994,9 @@ const CoinStore = ({
         organisationId={organisationId}
         onClose={abandonCampaignRedirectAndClose}
         onSuccess={() => {
-          const pending = sessionStorage.getItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
+          const pending = sessionStorage.getItem(
+            ZINTLE_POST_LOGIN_REDIRECT_KEY,
+          );
           sessionStorage.removeItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
           if (pending?.startsWith("/")) {
             const jwt = getJwtFromStorage(organisationId);
@@ -1057,8 +1066,8 @@ const CoinStore = ({
           {step === "store" && (
             <div className="animate-fade-in">
               <div className="text-center mb-8">
-                <div className="inline-block p-4 rounded-full bg-brand-gold/10 text-brand-gold text-3xl mb-4">
-                  <i className="fa-solid fa-coins"></i>
+                <div className="mb-4 inline-flex items-center justify-center rounded-full bg-brand-gold/10 p-4 text-3xl leading-none">
+                  <ZintleCoinIcon className={COIN_ICON_CLASS} />
                 </div>
                 <h3 className="text-3xl font-bold text-white mb-2">
                   Recharge Wallet
@@ -1192,11 +1201,9 @@ const CoinSection = ({
                   {pkg.tag}
                 </span>
               )}
-              <div className="flex justify-center mb-4 text-brand-gold text-2xl">
-                <i className="fa-solid fa-coins"></i>
-              </div>
-              <h3 className="text-xl font-bold text-white mb-1">
-                {pkg.coins} Coins
+              <h3 className="mb-4 flex items-center justify-center gap-2 text-xl font-bold leading-none text-white">
+                <ZintleCoinIcon className={COIN_ICON_CLASS} />
+                <span>{pkg.coins} Coins</span>
               </h3>
               <p className="text-2xl font-bold text-white mb-6">₹{pkg.price}</p>
               <button
@@ -1234,13 +1241,41 @@ const CoinsPage = ({
     [location.search, location.pathname],
   );
 
-  const coinStoreViewedSentRef = useRef(false);
+  const quickRecharge = isQuickRechargeFromSearch(location.search);
+  const displayedPacks = useMemo(
+    () => (quickRecharge ? coinPacks.filter((p) => p.is_micropack) : coinPacks),
+    [coinPacks, quickRecharge],
+  );
+
+  const timerPack = useMemo(
+    () => resolveTimerPack(displayedPacks),
+    [displayedPacks],
+  );
+  const exclusiveDeals = useMemo(
+    () =>
+      displayedPacks.filter((p) => p.is_micropack && p.id !== timerPack?.id),
+    [displayedPacks, timerPack],
+  );
+  const topPlans = useMemo(
+    () => displayedPacks.filter((p) => !p.is_micropack),
+    [displayedPacks],
+  );
+  const storeViewedSentRef = useRef(false);
 
   useEffect(() => {
-    if (!pixelContext || coinStoreViewedSentRef.current) return;
-    coinStoreViewedSentRef.current = true;
-    sendCoinStoreViewed(pixelContext);
-  }, [pixelContext]);
+    if (
+      !pixelContext ||
+      storeViewedSentRef.current ||
+      displayedPacks.length === 0
+    )
+      return;
+    storeViewedSentRef.current = true;
+    if (quickRecharge) {
+      sendQuickRechargePopupViewed(pixelContext, displayedPacks);
+    } else {
+      sendCoinStoreViewed(pixelContext, displayedPacks);
+    }
+  }, [pixelContext, displayedPacks, quickRecharge]);
 
   // Use token from query params if available, otherwise fall back to localStorage
   const token = tokenFromQuery || getJwtFromStorage(organisationId);
@@ -1248,20 +1283,28 @@ const CoinsPage = ({
 
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
 
-  // Update selected package when coinPacks change
   useEffect(() => {
-    if (coinPacks.length > 0) {
-      const first = coinPacks[0];
-      const hasValidSelection =
-        selectedPackage &&
-        selectedPackage.id != null &&
-        coinPacks.some((p) => p.id === selectedPackage?.id);
-      if (!hasValidSelection && first?.id != null) {
-        setSelectedPackage(first);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coinPacks]);
+    if (quickRecharge) return;
+    setSelectedPackage((prev) => {
+      if (prev) return prev;
+      return timerPack ?? exclusiveDeals[0] ?? topPlans[0] ?? null;
+    });
+  }, [quickRecharge, timerPack, exclusiveDeals, topPlans]);
+
+  const handlePackSelect = (pkg: any, index: number) => {
+    setSelectedPackage(pkg);
+    sendCoinPackSelected(pixelContext, pkg, index);
+  };
+
+  const handleDesktopRecharge = async (pkg: any, index: number) => {
+    handlePackSelect(pkg, index);
+    await handlePayClick(pkg);
+  };
+
+  const handleQuickRechargePay = async (pkg: any, index: number) => {
+    handlePackSelect(pkg, index);
+    await handlePayClick(pkg);
+  };
 
   const handlePayClick = async (pkg?: any) => {
     const packageToUse = pkg;
@@ -1287,8 +1330,10 @@ const CoinsPage = ({
           pixelContext,
           coinPack: {
             id: packageToUse.id,
+            name: packageToUse.name,
             price: packageToUse.price,
             coins: packageToUse.coins,
+            bonus_coins: packageToUse.bonus_coins ?? 0,
           },
         },
         organisationId,
@@ -1298,54 +1343,40 @@ const CoinsPage = ({
     }
   };
 
+  if (quickRecharge) {
+    return (
+      <QuickRechargePopup
+        packs={displayedPacks}
+        selectedPackageId={selectedPackage?.id ?? null}
+        onPackSelect={handlePackSelect}
+        onPackPay={handleQuickRechargePay}
+      />
+    );
+  }
+
+  const handleMobileRecharge = () => {
+    if (selectedPackage) void handlePayClick(selectedPackage);
+  };
+
   return (
-    <div className="min-h-screen bg-brand-bg pb-24 md:pb-8">
-      <div className="container mx-auto px-4 pt-8 md:pt-12 pb-8 md:pb-20">
-        <h2 className="text-2xl md:text-3xl font-bold text-center text-white mb-8 md:mb-12">
+    <div className="bg-brand-bg md:min-h-screen md:pb-8">
+      <CoinStoreMobile
+        timerPack={timerPack}
+        exclusiveDeals={exclusiveDeals}
+        topPlans={topPlans}
+        selectedPackageId={selectedPackage?.id ?? null}
+        onPackSelect={handlePackSelect}
+        onRecharge={handleMobileRecharge}
+      />
+
+      <div className="container mx-auto hidden px-4 pb-8 pt-12 md:block md:pb-20">
+        <h2 className="mb-12 text-center text-3xl font-bold text-white">
           Coin Packages
         </h2>
 
-        {/* Mobile: Single column stacked layout */}
-        <div className="md:hidden space-y-4 max-w-md mx-auto">
-          {coinPacks.map((pkg, i) => {
-            const isSelected = selectedPackage?.id === pkg.id;
-            return (
-              <div
-                key={i}
-                onClick={() => setSelectedPackage(pkg)}
-                className={`relative glass-card rounded-2xl p-5 cursor-pointer transition-all ${
-                  isSelected
-                    ? "border-2 border-brand-gold shadow-[0_0_20px_rgba(255,215,0,0.3)]"
-                    : "border border-white/10"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  {/* Left: Coins with icon */}
-                  <div className="flex items-center gap-3">
-                    <div className="flex justify-center text-brand-gold text-2xl">
-                      <i className="fa-solid fa-coins"></i>
-                    </div>
-
-                    <span className="text-2xl font-bold italic text-white">
-                      {pkg.coins}
-                    </span>
-                  </div>
-
-                  {/* Right: Price badge */}
-                  <div className="px-4 py-2 rounded-lg bg-white/10 border border-white/20 backdrop-blur-sm">
-                    <span className="text-lg font-bold text-white">
-                      ₹ {pkg.price}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
         {/* Desktop: Grid layout (same as CoinSection) */}
         <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
-          {coinPacks.map((pkg, i) => (
+          {displayedPacks.map((pkg, i) => (
             <div
               key={i}
               className={`relative glass-card rounded-3xl p-6 text-center transition-transform hover:-translate-y-1 ${
@@ -1365,15 +1396,13 @@ const CoinsPage = ({
                   {pkg.tag}
                 </span>
               )}
-              <div className="flex justify-center mb-4 text-brand-gold text-2xl">
-                <i className="fa-solid fa-coins"></i>
-              </div>
-              <h3 className="text-xl font-bold text-white mb-1">
-                {pkg.coins} Coins
+              <h3 className="mb-4 flex items-center justify-center gap-2 text-xl font-bold leading-none text-white">
+                <ZintleCoinIcon className={COIN_ICON_CLASS} />
+                <span>{pkg.coins} Coins</span>
               </h3>
               <p className="text-2xl font-bold text-white mb-6">₹{pkg.price}</p>
               <button
-                onClick={() => handlePayClick(pkg)}
+                onClick={() => handleDesktopRecharge(pkg, i)}
                 className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20"
               >
                 {isLoggedIn ? "Recharge" : "Login"}
@@ -1382,27 +1411,6 @@ const CoinsPage = ({
           ))}
         </div>
       </div>
-
-      {/* Fixed bottom action bar (mobile only) */}
-      {selectedPackage && (
-        <div className="fixed bottom-0 left-0 right-0 md:hidden bg-brand-bg border-t border-white/10 p-4 z-50 pb-12">
-          <div className="flex items-center gap-4 max-w-md mx-auto">
-            {/* Left icon button */}
-            <button className="w-12 h-12 rounded-full bg-black/50 border border-white/10 flex items-center justify-center text-white hover:bg-black/70 transition-colors">
-              <i className="fa-solid fa-credit-card text-lg"></i>
-            </button>
-
-            {/* Pay button */}
-            <button
-              type="button"
-              onClick={() => handlePayClick(selectedPackage)}
-              className="flex-1 bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-brand-primary/20"
-            >
-              {isLoggedIn ? "Recharge" : "Login"}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -1643,14 +1651,17 @@ const mapCoinPack = (p: any) => ({
   coins: p.coin_value,
   price: p.amount,
   bonus: p.bonus_coins,
+  bonus_coins: p.bonus_coins ?? 0,
   product_id: p.product_id,
   name: p.name,
+  icon_url: p.icon_url ?? null,
+  is_micropack: Boolean(p.is_micropack ?? p.isMicropack),
   color: "bg-brand-surface",
   tag: p.isBonusPack
     ? "Bonus Pack"
     : p.isTrialPack
       ? "Trial Pack"
-      : p.isMicropack
+      : (p.is_micropack ?? p.isMicropack)
         ? "Micropack"
         : undefined,
   highlight: p.isBonusPack || false,
@@ -1667,6 +1678,8 @@ const Layout = () => {
     [location.search, location.pathname],
   );
   const isCoinsPage = location.pathname === "/coins";
+  const isQuickRechargeCoinsPage =
+    isCoinsPage && isQuickRechargeFromSearch(location.search);
   const isSubscriptionsPage = location.pathname === "/subscriptions";
   const isCampaignPage =
     (location.pathname.replace(/\/+$/, "") || "/") === "/campaign";
@@ -1737,7 +1750,11 @@ const Layout = () => {
   return (
     <div
       className={`bg-brand-bg text-brand-text font-sans ${
-        isCampaignPage ? "h-dvh max-h-dvh overflow-hidden" : "min-h-screen"
+        isCampaignPage || isQuickRechargeCoinsPage
+          ? "h-dvh max-h-dvh overflow-hidden"
+          : isCoinsPage
+            ? ""
+            : "min-h-screen"
       }`}
     >
       {!isCoinsPage &&

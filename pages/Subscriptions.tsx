@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { CampaignPaymentFailedModal } from "../components/CampaignPaymentFailedModal";
 import { CampaignPaymentSuccessModal } from "../components/CampaignPaymentSuccessModal";
@@ -8,9 +8,14 @@ type PaymentInstrumentType = "UPI_COLLECT" | "UPI_INTENT" | "UPI_QR";
 type DeviceOS = "IOS" | "ANDROID";
 import { HOST } from "../utils/host";
 import { headerSafeToken } from "../utils/headerSafeToken";
+import {
+  buildCampaignReLoginRedirect,
+  handleCampaignUnauthorized,
+} from "../utils/campaignAuth";
 import { triggerCampaignFbRedirect } from "../utils/campaignFbRedirect";
 import { getOrganisationIdFromSearch } from "../utils/organisationIdFromUrl";
-import { getJwtFromStorage } from "../utils/authStorage";
+import { clearJwtForOrganisation, getJwtFromStorage } from "../utils/authStorage";
+import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
 import { getLoginPhoneForOrganisation } from "../utils/loginContactStorage";
 import {
   fetchMandateStatus,
@@ -673,6 +678,36 @@ export const Subscriptions = ({
     data: MonetizationPlanDetails | null;
   }>({ loading: false, error: null, data: null });
 
+  const promptCampaignReLogin = useCallback(() => {
+    clearJwtForOrganisation(organisationId);
+    const redirect = buildCampaignReLoginRedirect(
+      location.pathname,
+      location.search,
+    );
+    sessionStorage.setItem(ZINTLE_POST_LOGIN_REDIRECT_KEY, redirect);
+    setCampaignPaymentWaiting(null);
+    setCampaignPaymentOutcome(null);
+    setMandate(null);
+    setMandateInitError(null);
+    setMandateInitLoading(false);
+    setPlanDetailsState({
+      loading: false,
+      error: "Session expired. Please log in again.",
+      data: null,
+    });
+    if (tokenFromQuery) {
+      navigate(redirect, { replace: true });
+    }
+    setShowLogin(true);
+  }, [
+    location.pathname,
+    location.search,
+    navigate,
+    organisationId,
+    setShowLogin,
+    tokenFromQuery,
+  ]);
+
   useEffect(() => {
     if (!isLoggedIn || !planId) {
       setPlanDetailsState({ loading: false, error: null, data: null });
@@ -710,6 +745,12 @@ export const Subscriptions = ({
         );
         const json: unknown = await r.json().catch(() => ({}));
         if (cancelled) return;
+        if (
+          isCampaign &&
+          handleCampaignUnauthorized(r.status, organisationId, promptCampaignReLogin)
+        ) {
+          return;
+        }
         if (!r.ok) {
           const rec =
             json && typeof json === "object"
@@ -748,7 +789,15 @@ export const Subscriptions = ({
     return () => {
       cancelled = true;
     };
-  }, [isLoggedIn, planId, token, organisationId, location.search]);
+  }, [
+    isLoggedIn,
+    isCampaign,
+    planId,
+    token,
+    organisationId,
+    location.search,
+    promptCampaignReLogin,
+  ]);
 
 
   const handleInitiateMandate = async (options?: MandateInitOptions) => {
@@ -804,6 +853,13 @@ export const Subscriptions = ({
         },
       );
       const data = (await r.json()) as MandateInitiateApiResponse;
+
+      if (
+        isCampaign &&
+        handleCampaignUnauthorized(r.status, organisationId, promptCampaignReLogin)
+      ) {
+        return;
+      }
 
       if (
         r.status === 400 &&
@@ -919,6 +975,7 @@ export const Subscriptions = ({
         mandateId: mandate.id,
         authToken: headerSafeToken(token),
         organisationId,
+        onUnauthorized: isCampaign ? promptCampaignReLogin : undefined,
       });
       setMandateStatus(result);
     } catch (e: unknown) {
@@ -944,6 +1001,7 @@ export const Subscriptions = ({
           mandateId: mandate.id,
           authToken: headerSafeToken(token),
           organisationId,
+          onUnauthorized: promptCampaignReLogin,
         });
         if (cancelled) return;
 
@@ -974,7 +1032,14 @@ export const Subscriptions = ({
       window.clearTimeout(initialDelayId);
       if (intervalId !== undefined) window.clearInterval(intervalId);
     };
-  }, [isCampaign, campaignPaymentWaiting, mandate?.id, token, organisationId]);
+  }, [
+    isCampaign,
+    campaignPaymentWaiting,
+    mandate?.id,
+    token,
+    organisationId,
+    promptCampaignReLogin,
+  ]);
 
   const handleLoginClick = () => {
     setShowLogin(true);

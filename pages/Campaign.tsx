@@ -10,6 +10,7 @@ import {
 } from "../components/CampaignCta";
 import { CampaignVideo } from "../components/CampaignVideo";
 import { isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
+import { handleCampaignUnauthorized } from "../utils/campaignAuth";
 import { getJwtFromStorage } from "../utils/authStorage";
 
 const PAGE_BG = "#162a44";
@@ -143,6 +144,13 @@ export function Campaign({
         );
         const json = (await r.json()) as FreePlanInfoResponse;
         if (cancelled) return;
+        if (
+          handleCampaignUnauthorized(r.status, organisationId, () =>
+            setShowLogin(true),
+          )
+        ) {
+          return;
+        }
         if (!r.ok || json.success === false) {
           setActivePlan(null);
           setFetchError("Could not load plan details. Try again later.");
@@ -409,7 +417,6 @@ export function Campaign({
                 muted
                 loop
                 autoPlay
-                controls={true}
                 preload="auto"
               />
             ) : (

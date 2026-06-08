@@ -1,3 +1,5 @@
+import { isCampaignReAuthStatus } from "./campaignAuth";
+
 /** Mandate object returned by GET …/mandate/status/ */
 export type MandateStatusData = {
   id: number;
@@ -65,8 +67,9 @@ export async function fetchMandateStatus(params: {
   mandateId: number;
   authToken: string | null;
   organisationId: string;
+  onUnauthorized?: () => void;
 }): Promise<MandateStatusData> {
-  const { host, mandateId, authToken, organisationId } = params;
+  const { host, mandateId, authToken, organisationId, onUnauthorized } = params;
 
   const r = await fetch(
     `${host}/api/v1/monetization/subscriptions/mandate/status/?mandate_id=${mandateId}`,
@@ -80,6 +83,10 @@ export async function fetchMandateStatus(params: {
   );
 
   const body = (await r.json()) as MandateStatusApiResponse;
+  if (isCampaignReAuthStatus(r.status)) {
+    onUnauthorized?.();
+    throw new Error("Session expired. Please log in again.");
+  }
   if (!r.ok || !body.success || !body.data) {
     throw new Error(body.error_message ?? "Failed to fetch mandate status");
   }

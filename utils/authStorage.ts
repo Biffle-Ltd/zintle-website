@@ -24,6 +24,16 @@ export function setJwtForOrganisation(
   }
 }
 
+export function clearJwtForOrganisation(
+  organisationId: string | undefined,
+): void {
+  if (isBiffleOrganisationId(organisationId)) {
+    localStorage.removeItem(BIFFLE_JWT_STORAGE_KEY);
+  } else {
+    localStorage.removeItem(ZINTLE_JWT_STORAGE_KEY);
+  }
+}
+
 export function clearAllJwtStorage(): void {
   localStorage.removeItem(ZINTLE_JWT_STORAGE_KEY);
   localStorage.removeItem(BIFFLE_JWT_STORAGE_KEY);

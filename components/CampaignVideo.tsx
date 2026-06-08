@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { MediaPlayerClass } from "dashjs";
 import { isDashManifestUrl } from "../utils/isDashManifestUrl";
 
@@ -9,9 +9,10 @@ type Props = {
   muted?: boolean;
   loop?: boolean;
   autoPlay?: boolean;
-  controls?: boolean;
   preload?: "none" | "metadata" | "auto";
 };
+
+const PLAY_PAUSE_CONTROL_HIDE_MS = 1000;
 
 /**
  * Progressive URLs (e.g. .mp4, .webm) use the native video element.
@@ -21,19 +22,100 @@ export function CampaignVideo({
   src,
   className,
   playsInline = true,
-  muted = false,
+  muted: mutedProp = false,
   loop = true,
   autoPlay = true,
-  controls = true,
   preload = "metadata",
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const dashPlayerRef = useRef<MediaPlayerClass | null>(null);
+  const hasUnmutedViaGesture = useRef(false);
+  const hidePlayPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const useDash = isDashManifestUrl(src);
+
+  const [isMuted, setIsMuted] = useState(mutedProp);
+  const [isPlaying, setIsPlaying] = useState(autoPlay);
+  const [showPlayPauseControl, setShowPlayPauseControl] = useState(false);
+
+  const applyMute = useCallback((next: boolean) => {
+    const el = videoRef.current;
+    if (el) el.muted = next;
+    try {
+      dashPlayerRef.current?.setMute(next);
+    } catch {
+      /* ignore */
+    }
+    setIsMuted(next);
+    if (!next) hasUnmutedViaGesture.current = true;
+  }, []);
+
+  const togglePlay = useCallback(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (el.paused) void el.play().catch(() => {});
+    else el.pause();
+  }, []);
+
+  const revealPlayPauseControl = useCallback(() => {
+    setShowPlayPauseControl(true);
+    if (hidePlayPauseTimerRef.current) {
+      clearTimeout(hidePlayPauseTimerRef.current);
+    }
+    hidePlayPauseTimerRef.current = setTimeout(() => {
+      setShowPlayPauseControl(false);
+      hidePlayPauseTimerRef.current = null;
+    }, PLAY_PAUSE_CONTROL_HIDE_MS);
+  }, []);
+
+  const handleVideoSurfaceClick = useCallback(() => {
+    togglePlay();
+    revealPlayPauseControl();
+  }, [togglePlay, revealPlayPauseControl]);
+
+  const toggleMute = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    applyMute(!isMuted);
+  };
+
+  useEffect(() => {
+    hasUnmutedViaGesture.current = false;
+    setIsMuted(mutedProp);
+    setShowPlayPauseControl(false);
+    if (hidePlayPauseTimerRef.current) {
+      clearTimeout(hidePlayPauseTimerRef.current);
+      hidePlayPauseTimerRef.current = null;
+    }
+  }, [src, mutedProp]);
+
+  useEffect(() => {
+    return () => {
+      if (hidePlayPauseTimerRef.current) {
+        clearTimeout(hidePlayPauseTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = isMuted;
+    try {
+      dashPlayerRef.current?.setMute(isMuted);
+    } catch {
+      /* ignore */
+    }
+  }, [isMuted]);
 
   useEffect(() => {
     const el = videoRef.current;
     if (!el || !src.trim()) return;
+
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    el.addEventListener("play", onPlay);
+    el.addEventListener("pause", onPause);
 
     const teardownDash = () => {
       if (dashPlayerRef.current) {
@@ -77,11 +159,11 @@ export function CampaignVideo({
         const { MediaPlayer } = await import("dashjs");
         if (cancelled || videoRef.current !== el) return;
 
-        el.muted = muted;
+        el.muted = mutedProp;
         const player = MediaPlayer().create();
         dashPlayerRef.current = player;
         player.initialize(el, src, autoPlay);
-        player.setMute(muted);
+        player.setMute(mutedProp);
 
         const onEnded = () => {
           if (!loop) return;
@@ -118,32 +200,73 @@ export function CampaignVideo({
         dispose?.();
         teardownDash();
         clearNativeSrc();
+        el.removeEventListener("play", onPlay);
+        el.removeEventListener("pause", onPause);
       };
     }
 
     teardownDash();
     el.src = src;
     el.preload = preload;
-    el.muted = muted;
+    el.muted = mutedProp;
     const detachNative = attachPlayWhenReady();
 
     return () => {
       detachNative();
       clearNativeSrc();
+      el.removeEventListener("play", onPlay);
+      el.removeEventListener("pause", onPause);
     };
-  }, [src, autoPlay, loop, preload, muted]);
+  }, [src, autoPlay, loop, preload, mutedProp]);
 
   return (
-    <video
-      ref={videoRef}
-      className={className}
-      playsInline={playsInline}
-      muted={muted}
-      loop={useDash ? false : loop}
-      autoPlay={useDash ? false : autoPlay}
-      controls={controls}
-      preload={preload}
-      {...(useDash ? {} : { src })}
-    />
+    <div
+      className="relative h-full w-full cursor-pointer"
+      onClick={handleVideoSurfaceClick}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          handleVideoSurfaceClick();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label={isPlaying ? "Pause video" : "Play video"}
+    >
+      <video
+        ref={videoRef}
+        className={className}
+        playsInline={playsInline}
+        muted={isMuted}
+        loop={useDash ? false : loop}
+        autoPlay={useDash ? false : autoPlay}
+        controls={false}
+        preload={preload}
+        {...(useDash ? {} : { src })}
+      />
+      <div
+        className={`pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${
+          showPlayPauseControl ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm sm:h-[4.5rem] sm:w-[4.5rem]">
+          <i
+            className={`fa-solid ${isPlaying ? "fa-pause" : "fa-play"} text-2xl ${isPlaying ? "" : "ml-1"}`}
+            aria-hidden
+          />
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={toggleMute}
+        className="absolute right-2.5 top-2.5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+        aria-label={isMuted ? "Unmute" : "Mute"}
+      >
+        <i
+          className={`fa-solid ${isMuted ? "fa-volume-xmark" : "fa-volume-high"} text-sm`}
+          aria-hidden
+        />
+      </button>
+    </div>
   );
 }

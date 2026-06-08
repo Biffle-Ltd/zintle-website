@@ -12,7 +12,7 @@ type Props = {
   preload?: "none" | "metadata" | "auto";
 };
 
-const PLAY_PAUSE_CONTROL_HIDE_MS = 1000;
+const PLAY_PAUSE_CONTROL_HIDE_MS = 2000;
 
 /**
  * Progressive URLs (e.g. .mp4, .webm) use the native video element.
@@ -70,9 +70,16 @@ export function CampaignVideo({
   }, []);
 
   const handleVideoSurfaceClick = useCallback(() => {
+    if (!hasUnmutedViaGesture.current && isMuted) {
+      applyMute(false);
+      revealPlayPauseControl();
+      return;
+    }
     togglePlay();
     revealPlayPauseControl();
-  }, [togglePlay, revealPlayPauseControl]);
+  }, [applyMute, isMuted, togglePlay, revealPlayPauseControl]);
+
+  const playPauseControlVisible = !isPlaying || showPlayPauseControl;
 
   const toggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -246,7 +253,7 @@ export function CampaignVideo({
       />
       <div
         className={`pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${
-          showPlayPauseControl ? "opacity-100" : "opacity-0"
+          playPauseControlVisible ? "opacity-100" : "opacity-0"
         }`}
       >
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm sm:h-[4.5rem] sm:w-[4.5rem]">

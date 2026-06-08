@@ -72,7 +72,6 @@ export function CampaignVideo({
   const handleVideoSurfaceClick = useCallback(() => {
     if (!hasUnmutedViaGesture.current && isMuted) {
       applyMute(false);
-      revealPlayPauseControl();
       return;
     }
     togglePlay();
@@ -266,7 +265,7 @@ export function CampaignVideo({
       <button
         type="button"
         onClick={toggleMute}
-        className="absolute right-2.5 top-2.5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
+        className="absolute bottom-2.5 right-2.5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-colors hover:bg-black/60"
         aria-label={isMuted ? "Unmute" : "Mute"}
       >
         <i

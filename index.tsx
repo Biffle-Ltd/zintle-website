@@ -51,6 +51,7 @@ import {
   withJwtInQuery,
 } from "./utils/postLoginRedirect";
 import { isCampaignPostLoginRedirect } from "./utils/campaignPixelEvents";
+import { sendMetaPixelPageView } from "./utils/metaPixel";
 import {
   clearAllJwtStorage,
   getJwtFromStorage,
@@ -1696,6 +1697,10 @@ const Layout = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(hasAnyJwtInStorage());
   const [coinPacks, setCoinPacks] = useState(defaultCoinPacks);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    sendMetaPixelPageView(organisationId);
+  }, [organisationId, location.pathname]);
 
   // Fetch coin packs on mount/when logged in changes
   useEffect(() => {

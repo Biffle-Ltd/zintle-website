@@ -2,13 +2,8 @@
  * Meta Pixel + Biffle analytics events for the campaign / free-trial flow only.
  */
 
-declare global {
-  interface Window {
-    fbq?: (...args: unknown[]) => void;
-  }
-}
-
 import type { AppInfo, DeviceInfo } from "./pixelEvents";
+import { sendMetaPixelCustomEvent } from "./metaPixel";
 import { getJwtFromStorage } from "./authStorage";
 import { getLoginPhoneForOrganisation } from "./loginContactStorage";
 import { sendUserCenterAnalyticsEvent } from "./coinAnalyticsApi";
@@ -239,26 +234,12 @@ function toAnalyticsContext(ctx: ParsedCampaignPixelContext) {
   };
 }
 
-function sendCampaignPixelEvent(
-  eventName: CampaignPixelEventName,
-  payload: Record<string, unknown>,
-): void {
-  const fbq = typeof window !== "undefined" ? window.fbq : undefined;
-  if (typeof fbq !== "function") return;
-  try {
-    fbq("trackCustom", eventName, payload);
-    console.log("Campaign pixel event sent", eventName, payload);
-  } catch {
-    console.error("Failed to send campaign pixel event", eventName, payload);
-  }
-}
-
 function sendCampaignEvent(
   ctx: ParsedCampaignPixelContext,
   eventName: CampaignPixelEventName,
   eventParams: Record<string, unknown>,
 ): void {
-  sendCampaignPixelEvent(eventName, eventParams);
+  sendMetaPixelCustomEvent(ctx.organisation_id, eventName, eventParams);
   sendUserCenterAnalyticsEvent(
     toAnalyticsContext(ctx),
     eventName,

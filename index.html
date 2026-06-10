@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;700&family=Playfair+Display:wght@700;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;700&family=Playfair+Display:wght@700;900&display=swap"
       rel="stylesheet"
     />
     <!-- Icons -->
@@ -147,7 +147,7 @@
     <!-- End Meta Pixel Code (script) -->
   </head>
   <body
-    class="bg-brand-bg text-brand-text font-sans antialiased selection:bg-brand-primary selection:text-white"
+    class="text-brand-text font-sans antialiased selection:bg-brand-primary selection:text-white"
   >
     <!-- Meta Pixel noscript fallback (invalid inside <head> per HTML5; must be in body) -->
     <noscript
@@ -158,6 +158,8 @@
         alt=""
         src="https://www.facebook.com/tr?id=1223829379897212&amp;ev=PageView&amp;noscript=1"
     /></noscript>
+    <!-- Atmospheric background — rendered outside React so nothing can cover it -->
+    <div id="znw-bg" aria-hidden="true"></div>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
     <script src="https://ebz-static.s3.ap-south-1.amazonaws.com/easecheckout/v2.0.0/easebuzz-checkout-v2.min.js"></script>

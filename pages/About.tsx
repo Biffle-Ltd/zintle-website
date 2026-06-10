@@ -1,141 +1,108 @@
 import React from "react";
 
 export const About = () => (
-  <div className="container mx-auto px-4 py-24">
-    <h1 className="text-3xl font-bold text-white mb-6">About Us</h1>
-    <div className="prose prose-invert max-w-none text-brand-muted space-y-6">
-      <p className="text-lg font-medium text-white">
-        Zintle.ai — Where Curiosity Meets Depth
-      </p>
-      <p>
-        At Zintle.ai, we are redefining how people explore ideas and master
-        skills through conversation. We believe true understanding is born not
-        from passive consumption, but from dynamic, personalized dialogue. Our
-        platform is built on a simple, powerful vision: to connect human
-        curiosity with intelligent conversation, creating a new standard for
-        meaningful digital interaction.
-      </p>
+  <div>
+    <header className="znw-page-header">
+      <div className="znw-wrap znw-narrow" style={{ textAlign: "center" }}>
+        <div className="znw-eyebrow">✨ About Zintle</div>
+        <h1 className="znw-h1">A trusted voice <span className="grad-text">for every Indian</span></h1>
+        <p className="znw-lede">Zintle is India's conversational guidance &amp; companionship platform — built for the next half-billion Indians coming online. We connect you, in your own language, with <strong>verified human experts</strong> and <strong>always-available AI personas</strong> for the questions that matter most in everyday life.</p>
+        <p style={{ fontSize: 15, fontStyle: "italic", marginTop: 14 }} className="grad-text">Apni baat. Apni bhasha. Apna expert.</p>
+        <nav className="znw-toc">
+          {[["#mission","Our mission"],["#why","Why Zintle"],["#topics","What you can talk about"],["#experience","The experience"],["#access","Coins & PRO"],["#community","Our community"],["#trust","Trust & safety"]].map(([h, l]) => <a key={h} href={h}>{l}</a>)}
+        </nav>
+      </div>
+    </header>
 
-      <h3 className="text-xl font-bold text-white">The Heart of Our Mission</h3>
-      <p>
-        We founded Zintle.ai to solve a fundamental gap in the age of
-        information overload: the lack of access to deep, contextual, and
-        responsive dialogue on the topics we care about. Traditional
-        resources—articles, static videos, even standard chatbots—offer fixed
-        perspectives. We’ve built something radically different: a platform
-        where conversations breathe, evolve, and challenge you. Whether you're
-        discussing quantum physics with a specialist AI or debating economic
-        policy, our technology ensures every exchange builds on your knowledge,
-        adapts to your level, and pushes you toward genuine mastery.
-      </p>
+    <main style={{ padding: "38px 0 30px" }}>
+      <div className="znw-wrap znw-narrow">
 
-      <h3 className="text-xl font-bold text-white">What Makes Zintle Unique</h3>
-      <p>
-        Zintle.ai transcends conventional chatbots and expert forums through our
-        proprietary conversational intelligence that blends deep domain
-        expertise with adaptive dialogue. Unlike scripted tools or fleeting
-        social interactions, our experts and AI personas develop context,
-        remember your journey, and engage with authentic depth. The distinction
-        lies in three core innovations:
-      </p>
-      <ul className="list-disc pl-5 space-y-2">
-        <li>
-          <strong>Contextual Depth Engine</strong> - Conversations maintain
-          coherence and build logically over time, with AI and expert responses
-          grounded in a deep understanding of the topic’s nuances and your
-          unique learning path.
-        </li>
-        <li>
-          <strong>Adaptive Dialogue Framework</strong> - Interactions
-          dynamically adjust in complexity, tone, and focus based on your
-          goals—from casual exploration to rigorous debate or skill acquisition.
-        </li>
-        <li>
-          <strong>Dual-Source Intelligence</strong> - We uniquely integrate the
-          structured knowledge of verified human experts with the scalability
-          and responsiveness of specialized AI, creating a hybrid model that
-          ensures both accuracy and engaging exploration.
-        </li>
-      </ul>
+        <section className="znw-sec" id="mission">
+          <h2><span className="em">🎯</span> The heart of our mission</h2>
+          <p className="intro">We founded Zintle to close a simple gap: most Indians have no warm, trusted place to turn to for the questions they can't ask anyone else — about love and marriage, career and money, family and faith, loneliness and stress.</p>
+          <p>Traditional resources — articles, static videos, generic chatbots — hand back fixed answers that don't speak your language or understand your situation. We've built something different: conversations that listen, remember and respond. Whether you want to make sense of your kundli, talk through a relationship, get advice on a career decision, or simply have someone to talk to late at night, every exchange is personal, private and on your terms.</p>
+          <div className="znw-callout">
+            <p><span className="t">Our vision</span>To give every Indian a trusted voice to turn to — for the questions they can't ask anyone else. We do it by blending the trust of verified human experts with the warmth and round-the-clock availability of AI, all in your own language and at a price you can afford.</p>
+          </div>
+        </section>
 
-      <h3 className="text-xl font-bold text-white">
-        The Zintle Experience &amp; Access Models for Users
-      </h3>
-      <p>
-        Imagine refining your chess strategy with a grandmaster’s AI
-        counterpart, exploring ethical dilemmas in biotechnology with a guided
-        philosopher, or workshopping your novel with a conversational tool
-        trained on narrative craft— all through natural, progressive dialogue.
-      </p>
-      <p>
-        To sustain and elevate this experience, we've built a thoughtful access
-        model:
-      </p>
-      <ul className="list-disc pl-5 space-y-2">
-        <li>
-          <strong>Zintle Premium Subscription</strong> - Unlock unlimited
-          conversations across our entire library of expert chatbots and AI
-          personas. Dive into any topic—from astrophysics to creative
-          writing—without limits, and enjoy an ad-free, priority environment.
-        </li>
-        <li>
-          <strong>Conversation Coins</strong> - For moments when you need an
-          extra layer of depth, our optional coin system lets you "gift" to an
-          expert or AI persona to unlock advanced insights, specialized tips, or
-          deeper analytical responses. Think of it as a key to elevated
-          understanding within any dialogue.
-        </li>
-      </ul>
-      <h3 className="text-xl font-bold text-white">
-        Our Platform Is Designed For:
-      </h3>
-      <ul className="list-disc pl-5 space-y-2">
-        <li>
-          <strong>Topic-Specific Immersion</strong> - Dive deep into domains
-          like technology, philosophy, arts, science, and business with focused
-          AI personas and expert sessions.
-        </li>
-        <li>
-          <strong>Structured Learning Paths</strong> - Move from fundamentals to
-          advanced concepts through curated conversational journeys that
-          challenge and expand your thinking.
-        </li>
-        <li>
-          <strong>Collaborative Knowledge Ecosystem</strong> - A space for
-          experts to share their insights meaningfully and for users to
-          contribute to evolving dialogues, creating a living library of
-          understanding.
-        </li>
-      </ul>
+        <section className="znw-sec" id="why">
+          <h2><span className="em">💡</span> What makes Zintle different</h2>
+          <p className="intro">Zintle goes beyond both single-topic apps and generic chatbots. We bring faith, feelings, relationships, career and companionship together in one trusted app — built Bharat-first, not metro-first.</p>
+          <div className="znw-dgrid">
+            {[
+              ["🤝","Human + AI together","Verified human experts provide trust and high-value depth; specialised AI personas answer instantly, 24×7."],
+              ["🗣️","Vernacular by default","Hinglish and regional languages aren't an afterthought — they're the starting point. Every persona is designed for a Tier-2/3 user first."],
+              ["🧠","It remembers your story","Your conversations build over time. Zintle keeps your context and history — so every return is more useful than the last."],
+              ["💸","Priced for everyone","No ₹999 upfront commitment. Built for ₹10–₹100 decisions that mirror the UPI habits Indians already use."],
+            ].map(([ic, h, p]) => (
+              <div key={String(h)} className="znw-dcard">
+                <div className="dt"><div className="di">{ic}</div><h4>{h}</h4></div>
+                <div className="row">{p}</div>
+              </div>
+            ))}
+          </div>
+        </section>
 
-      <h3 className="text-xl font-bold text-white">Our Growing Community</h3>
-      <p>
-        Zintle.ai has become a vibrant hub for lifelong learners, professionals,
-        and curious minds. From industry experts hosting deep-dive sessions to
-        enthusiasts debating the frontiers of their fields, our community is
-        united by a shared passion for depth over distraction, and substance
-        over soundbites.
-      </p>
+        <section className="znw-sec" id="topics">
+          <h2><span className="em">🌐</span> What you can talk about</h2>
+          <p className="intro">One trusted identity, one wallet, one memory of you — across more of life's recurring needs than any single-topic app.</p>
+          <ul className="znw-clean">
+            <li><span className="mk">◆</span> <strong>Faith &amp; the stars.</strong> Astrology, tarot, numerology, kundli, vastu and palmistry — guidance rooted in the traditions Indians trust.</li>
+            <li><span className="mk">◆</span> <strong>Love, marriage &amp; relationships.</strong> Talk through the moments that weigh on you, with empathy and without judgement.</li>
+            <li><span className="mk">◆</span> <strong>Career &amp; money.</strong> Think out loud about decisions, direction and the choices that shape your future.</li>
+            <li><span className="mk">◆</span> <strong>Companionship &amp; wellbeing.</strong> Someone to check in with, share your day with, or lean on when life feels heavy — anytime.</li>
+          </ul>
+        </section>
 
-      <h3 className="text-xl font-bold text-white">Join Our Dialogue</h3>
-      <p>
-        Zintle.ai is more than a platform—it’s a commitment to fostering richer
-        understanding in a fragmented digital world. We are building a future
-        where anyone can engage in conversations that illuminate, challenge, and
-        inspire.
-      </p>
-      <p>
-        Whether you’re here to master a skill, explore a passion, or engage with
-        leading minds, we invite you to be part of this new chapter in connected
-        knowledge.
-      </p>
-      <p>
-        Discovering what happens when searching for answers becomes a
-        conversation that transforms them. Your deeper dialogue begins now.
-      </p>
-      <p className="font-bold text-brand-primary">
-        Zintle.ai — Depth Through Conversation.
-      </p>
-    </div>
+        <section className="znw-sec" id="experience">
+          <h2><span className="em">💬</span> The Zintle experience</h2>
+          <p>Picture starting your morning with your horoscope and a quick check-in, talking through a marriage question with a verified counsellor in the evening, and asking your AI companion for encouragement before a big exam — all in your own language, all in one app.</p>
+          <p>Conversations happen through text, voice messages and calls. Some guides are AI; some are verified human experts. We always tell you which is which, so you know exactly who you're talking to.</p>
+        </section>
+
+        <section className="znw-sec" id="access">
+          <h2><span className="em">🪙</span> How access works</h2>
+          <p className="intro">Zintle is designed for the way India already pays — small, simple, when-you-need-it.</p>
+          <div className="znw-dgrid">
+            <div className="znw-dcard">
+              <div className="dt"><div className="di">🪙</div><h4>Conversation Coins</h4></div>
+              <div className="row">A simple wallet for pay-per-use moments. Top up small amounts to start per-minute sessions with experts, unlock deeper responses, or send a gift to a guide you value. Pay only for the depth you want.</div>
+            </div>
+            <div className="znw-dcard">
+              <div className="dt"><div className="di">⭐</div><h4>Zintle PRO</h4></div>
+              <div className="row">An affordable subscription for regulars — a smoother, priority experience and more value across your favourite guides and topics, without rethinking your budget.</div>
+            </div>
+          </div>
+        </section>
+
+        <section className="znw-sec" id="community">
+          <h2><span className="em">🌏</span> Our growing community</h2>
+          <p>From students and homemakers to working professionals across India's towns and cities, Zintle is becoming a place people return to — not for soundbites, but for conversations that actually help.</p>
+          <div className="znw-stats3">
+            <div className="znw-stat3"><div className="n grad-text">22+</div><div className="l">Languages on our roadmap, Bharat-first</div></div>
+            <div className="znw-stat3"><div className="n grad-text">24×7</div><div className="l">AI companions, always available</div></div>
+            <div className="znw-stat3"><div className="n grad-text">1</div><div className="l">Wallet &amp; memory across every topic</div></div>
+          </div>
+        </section>
+
+        <section className="znw-sec" id="trust">
+          <h2><span className="em">🛡️</span> Trust &amp; responsible companionship</h2>
+          <p>In faith and emotional topics, trust matters more than anything. We earn it with verified experts, clear disclosure that AI personas are AI, and safety rails that protect the people who use us.</p>
+          <div className="znw-callout warn">
+            <p><span className="t">Care comes first</span>Zintle is intended for users 18 and older. We guard against unhealthy dependency, avoid manipulative spend loops, and escalate to human support and helplines when it matters. Our guidance is for support and reflection — not a substitute for professional medical, legal or financial advice.</p>
+          </div>
+        </section>
+
+        <div className="znw-callout safe" style={{ marginTop: 2 }}>
+          <p><span className="t">Join our dialogue</span>Zintle is more than an app — it's a promise that no Indian has to face life's hardest questions alone. Whether you're seeking guidance, comfort or connection, your deeper conversation begins now.</p>
+        </div>
+
+        <div style={{ textAlign: "center", margin: "32px 0 6px" }}>
+          <a href="https://play.google.com/store/apps/details?id=ai.zintle" target="_blank" rel="noopener noreferrer" className="pill pill-grad" style={{ height: 50, padding: "0 30px", fontSize: 15, display: "inline-flex", alignItems: "center" }}>Start your first chat</a>
+        </div>
+
+      </div>
+    </main>
   </div>
 );

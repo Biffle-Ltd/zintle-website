@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { CampaignPaymentFailedModal } from "../components/CampaignPaymentFailedModal";
 import { CampaignPaymentSuccessModal } from "../components/CampaignPaymentSuccessModal";
@@ -30,6 +30,13 @@ import {
   resolveMandateRedirectUrl,
   UPI_APP_PACKAGES,
 } from "../utils/upiMandateLaunch";
+import {
+  enrichCampaignPixelContext,
+  parseCampaignPixelContext,
+  parseIsCampaignParam,
+  sendCampaignStartTrial,
+  sendCampaignTrialPurchaseInitiated,
+} from "../utils/campaignPixelEvents";
 
 // NOTE: Plan listing is disabled. Plan UI uses `plan_details` (URL JSON) when
 // present, else GET /plans/{plan_id}/details/.
@@ -595,12 +602,6 @@ const postMandateToReactNative = (
   }
 };
 
-function parseIsCampaignParam(raw: string | null): boolean {
-  if (raw == null || String(raw).trim() === "") return false;
-  const v = String(raw).trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes";
-}
-
 export const Subscriptions = ({
   setShowLogin,
 }: {
@@ -677,6 +678,17 @@ export const Subscriptions = ({
     error: string | null;
     data: MonetizationPlanDetails | null;
   }>({ loading: false, error: null, data: null });
+
+  const startTrialEventSentRef = useRef(false);
+
+  const buildCampaignEventContext = useCallback(() => {
+    const base = parseCampaignPixelContext(location.search, location.pathname, {
+      organisationId,
+      plan_id: planId,
+      token: headerSafeToken(token),
+    });
+    return enrichCampaignPixelContext(base, organisationId);
+  }, [location.pathname, location.search, organisationId, planId, token]);
 
   const promptCampaignReLogin = useCallback(() => {
     clearJwtForOrganisation(organisationId);
@@ -912,6 +924,11 @@ export const Subscriptions = ({
 
   const handleCampaignPaymentSelect = (method: CampaignPaymentMethod) => {
     if (!isCampaign) return;
+    sendCampaignTrialPurchaseInitiated(
+      buildCampaignEventContext(),
+      planDetailsState.data,
+      method,
+    );
     const targetAppOverride =
       method === "phonepe"
         ? UPI_APP_PACKAGES.phonepe
@@ -1013,7 +1030,22 @@ export const Subscriptions = ({
         if (isMandateInitiated(result.mandate_state)) return;
 
         setCampaignPaymentWaiting(null);
-        setCampaignPaymentOutcome(resolveCampaignOutcomeFromStatus(result));
+        const outcome = resolveCampaignOutcomeFromStatus(result);
+        setCampaignPaymentOutcome(outcome);
+        if (
+          outcome.type === "success" &&
+          !startTrialEventSentRef.current
+        ) {
+          startTrialEventSentRef.current = true;
+          sendCampaignStartTrial(
+            buildCampaignEventContext(),
+            planDetailsState.data,
+            {
+              mandate_id: result.id,
+              mandate_state: result.mandate_state,
+            },
+          );
+        }
       } catch {
         // Keep polling on transient errors while the user may still be paying.
       }
@@ -1039,6 +1071,8 @@ export const Subscriptions = ({
     token,
     organisationId,
     promptCampaignReLogin,
+    buildCampaignEventContext,
+    planDetailsState.data,
   ]);
 
   const handleLoginClick = () => {

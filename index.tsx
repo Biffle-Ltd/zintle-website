@@ -50,6 +50,7 @@ import {
   ZINTLE_POST_LOGIN_REDIRECT_KEY,
   withJwtInQuery,
 } from "./utils/postLoginRedirect";
+import { isCampaignPostLoginRedirect } from "./utils/campaignPixelEvents";
 import {
   clearAllJwtStorage,
   getJwtFromStorage,
@@ -987,11 +988,16 @@ const CoinStore = ({
 
   const packs = coinPacks;
 
+  const isCampaignLoginFlow = isCampaignPostLoginRedirect(
+    sessionStorage.getItem(ZINTLE_POST_LOGIN_REDIRECT_KEY),
+  );
+
   if (step === "login") {
     return (
       <PhoneOtpLoginScreen
         isBiffle={isBiffle}
         organisationId={organisationId}
+        isCampaignFlow={isCampaignLoginFlow}
         onClose={abandonCampaignRedirectAndClose}
         onSuccess={() => {
           const pending = sessionStorage.getItem(

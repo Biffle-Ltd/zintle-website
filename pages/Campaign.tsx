@@ -139,7 +139,7 @@ export function Campaign({
         const rawJwt = getJwtFromStorage(organisationId);
         const jwt = headerSafeToken(rawJwt);
         const r = await fetch(
-          `${HOST}/api/v1/monetization/plans/free-plan/info/`,
+          `${HOST}/api/v1/monetization/plans/free-plan/info/?source=campaign`,
           {
             method: "GET",
             headers: {

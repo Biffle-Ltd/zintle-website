@@ -50,6 +50,8 @@ import {
   ZINTLE_POST_LOGIN_REDIRECT_KEY,
   withJwtInQuery,
 } from "./utils/postLoginRedirect";
+import { isCampaignPostLoginRedirect } from "./utils/campaignPixelEvents";
+import { sendMetaPixelPageView } from "./utils/metaPixel";
 import {
   clearAllJwtStorage,
   getJwtFromStorage,
@@ -1215,11 +1217,16 @@ const CoinStore = ({
   const isLoggedIn = !!getJwtFromStorage(organisationId);
   const packs = coinPacks;
 
+  const isCampaignLoginFlow = isCampaignPostLoginRedirect(
+    sessionStorage.getItem(ZINTLE_POST_LOGIN_REDIRECT_KEY),
+  );
+
   if (step === "login") {
     return (
       <PhoneOtpLoginScreen
         isBiffle={isBiffle}
         organisationId={organisationId}
+        isCampaignFlow={isCampaignLoginFlow}
         onClose={abandonCampaignRedirectAndClose}
         onSuccess={() => {
           const pending = sessionStorage.getItem(
@@ -2104,6 +2111,10 @@ const Layout = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(hasAnyJwtInStorage());
   const [coinPacks, setCoinPacks] = useState(defaultCoinPacks);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    sendMetaPixelPageView(organisationId);
+  }, [organisationId, location.pathname]);
 
   // Fetch coin packs on mount/when logged in changes
   useEffect(() => {

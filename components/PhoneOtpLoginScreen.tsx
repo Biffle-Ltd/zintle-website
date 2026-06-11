@@ -4,6 +4,12 @@ import { campaignCtaGradientStyle } from "./CampaignCta";
 import { HOST } from "../utils/host";
 import { setJwtForOrganisation } from "../utils/authStorage";
 import { setLoginPhoneForOrganisation } from "../utils/loginContactStorage";
+import {
+  enrichCampaignPixelContext,
+  parseCampaignPixelContext,
+  sendCampaignLoginSuccessful,
+  sendCampaignOtpRequested,
+} from "../utils/campaignPixelEvents";
 
 const OTP_LENGTH = 6;
 const PHONE_LENGTH = 10;
@@ -127,11 +133,14 @@ function OtpDigitBoxes({
 export function PhoneOtpLoginScreen({
   isBiffle,
   organisationId,
+  isCampaignFlow = false,
   onClose,
   onSuccess,
 }: {
   isBiffle: boolean;
   organisationId: string;
+  /** When true, emit campaign-only analytics / pixel events. */
+  isCampaignFlow?: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -158,6 +167,17 @@ export function PhoneOtpLoginScreen({
     if (!phone.trim()) return;
     setLoading(true);
     setError(null);
+    if (isCampaignFlow) {
+      const base = parseCampaignPixelContext(
+        window.location.search,
+        window.location.pathname,
+        { organisationId, phone_number: phone },
+      );
+      sendCampaignOtpRequested(
+        enrichCampaignPixelContext(base, organisationId),
+        phone,
+      );
+    }
     try {
       const r = await fetch(`${HOST}/api/v1.2/auth/login/otp/request/`, {
         method: "POST",
@@ -180,7 +200,7 @@ export function PhoneOtpLoginScreen({
     } finally {
       setLoading(false);
     }
-  }, [phone, organisationId]);
+  }, [phone, organisationId, isCampaignFlow]);
 
   const handleVerifyOtp = useCallback(
     async (code?: string) => {
@@ -207,6 +227,18 @@ export function PhoneOtpLoginScreen({
         const jwt = data.token as string | undefined;
         if (jwt) setJwtForOrganisation(organisationId, jwt);
         setLoginPhoneForOrganisation(organisationId, COUNTRY_CODE, phone);
+        if (isCampaignFlow) {
+          const base = parseCampaignPixelContext(
+            window.location.search,
+            window.location.pathname,
+            { organisationId, phone_number: phone },
+          );
+          const ctx = enrichCampaignPixelContext(
+            { ...base, token: jwt ?? null },
+            organisationId,
+          );
+          sendCampaignLoginSuccessful(ctx);
+        }
         onSuccess();
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Failed to verify OTP";
@@ -215,7 +247,7 @@ export function PhoneOtpLoginScreen({
         setLoading(false);
       }
     },
-    [otp, phone, organisationId, onSuccess],
+    [otp, phone, organisationId, onSuccess, isCampaignFlow],
   );
 
   const handleEditPhone = () => {

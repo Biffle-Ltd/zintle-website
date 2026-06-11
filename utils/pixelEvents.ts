@@ -9,13 +9,9 @@
  * - payment_gateway / payment_method: matches PAYMENT_GATEWAY in index.tsx.
  */
 
-declare global {
-  interface Window {
-    fbq?: (...args: unknown[]) => void;
-  }
-}
 import { PAYMENT_GATEWAY } from "../index";
 import { sendCoinAnalyticsEvent } from "./coinAnalyticsApi";
+import { sendMetaPixelCustomEvent } from "./metaPixel";
 import { getOrganisationIdFromSearch } from "./organisationIdFromUrl";
 
 export type DeviceInfo = {
@@ -223,18 +219,11 @@ export function parseCoinPixelContext(
 }
 
 export function sendPixelEvent(
+  organisationId: string,
   eventName: CoinPixelEventName,
   payload: Record<string, unknown>,
 ): void {
-  const fbq = typeof window !== "undefined" ? window.fbq : undefined;
-  if (typeof fbq !== "function") return;
-
-  try {
-    fbq("trackCustom", eventName, payload);
-    console.log("Pixel event sent", eventName, payload);
-  } catch {
-    console.error("Failed to send pixel event", eventName, payload);
-  }
+  sendMetaPixelCustomEvent(organisationId, eventName, payload);
 }
 
 export function sendCoinStoreViewed(
@@ -243,7 +232,7 @@ export function sendCoinStoreViewed(
 ): void {
   if (!ctx) return;
   const eventParams = buildStoreViewedEventParams(ctx, packs);
-  sendPixelEvent("coin_store_viewed", eventParams);
+  sendPixelEvent(ctx.organisation_id, "coin_store_viewed", eventParams);
   sendCoinAnalyticsEvent(ctx, "coin_store_viewed", eventParams);
 }
 
@@ -253,7 +242,7 @@ export function sendQuickRechargePopupViewed(
 ): void {
   if (!ctx) return;
   const eventParams = buildStoreViewedEventParams(ctx, packs);
-  sendPixelEvent("quick_recharge_popup_viewed", eventParams);
+  sendPixelEvent(ctx.organisation_id, "quick_recharge_popup_viewed", eventParams);
   sendCoinAnalyticsEvent(ctx, "quick_recharge_popup_viewed", eventParams);
 }
 
@@ -267,7 +256,7 @@ export function sendCoinPackSelected(
     ...buildBaseEventParams(ctx),
     event_info: buildCoinPackSelectedEventInfo(pack, position),
   };
-  sendPixelEvent("coin_pack_selected", eventParams);
+  sendPixelEvent(ctx.organisation_id, "coin_pack_selected", eventParams);
   sendCoinAnalyticsEvent(ctx, "coin_pack_selected", eventParams);
 }
 
@@ -280,7 +269,7 @@ export function sendCoinPaymentInitiated(
     ...buildBaseEventParams(ctx),
     event_info: buildCoinPaymentInitiatedEventInfo(pack),
   };
-  sendPixelEvent("coin_payment_initiated", eventParams);
+  sendPixelEvent(ctx.organisation_id, "coin_payment_initiated", eventParams);
   sendCoinAnalyticsEvent(ctx, "coin_payment_initiated", eventParams);
 }
 
@@ -309,7 +298,7 @@ export function sendCoinPaymentSuccess(
     platform: ctx.platform,
     device_id: ctx.device_id,
   };
-  sendPixelEvent("coin_payment_success", eventParams);
+  sendPixelEvent(ctx.organisation_id, "coin_payment_success", eventParams);
   sendCoinAnalyticsEvent(ctx, "coin_payment_success", eventParams);
 }
 
@@ -328,6 +317,6 @@ export function sendCoinPaymentFailed(
     platform: ctx.platform,
     device_id: ctx.device_id,
   };
-  sendPixelEvent("coin_payment_failed", eventParams);
+  sendPixelEvent(ctx.organisation_id, "coin_payment_failed", eventParams);
   sendCoinAnalyticsEvent(ctx, "coin_payment_failed", eventParams);
 }

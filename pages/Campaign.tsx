@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { MonetizationPlanDetails } from "./Subscriptions";
 import { HOST } from "../utils/host";
 import { headerSafeToken } from "../utils/headerSafeToken";
@@ -12,6 +12,11 @@ import { CampaignVideo } from "../components/CampaignVideo";
 import { isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
 import { handleCampaignUnauthorized } from "../utils/campaignAuth";
 import { getJwtFromStorage } from "../utils/authStorage";
+import {
+  enrichCampaignPixelContext,
+  parseCampaignPixelContext,
+  sendCampaignFreeTrialViewed,
+} from "../utils/campaignPixelEvents";
 
 const PAGE_BG = "#162a44";
 const ACCENT_ORANGE = "#f58220";
@@ -114,8 +119,10 @@ export function Campaign({
   setShowLogin: (v: boolean) => void;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const fbclidFromUrl = searchParams.get("fbclid")?.trim() ?? "";
+  const freeTrialViewedSentRef = useRef(false);
 
   const [activePlan, setActivePlan] = useState<MonetizationPlanDetails | null>(
     null,
@@ -132,7 +139,7 @@ export function Campaign({
         const rawJwt = getJwtFromStorage(organisationId);
         const jwt = headerSafeToken(rawJwt);
         const r = await fetch(
-          `${HOST}/api/v1/monetization/plans/free-plan/info/`,
+          `${HOST}/api/v1/monetization/plans/free-plan/info/?source=campaign`,
           {
             method: "GET",
             headers: {
@@ -182,6 +189,23 @@ export function Campaign({
       cancelled = true;
     };
   }, [organisationId]);
+
+  const handleCampaignMediaReady = useCallback(() => {
+    if (!activePlan?.id || freeTrialViewedSentRef.current) return;
+    freeTrialViewedSentRef.current = true;
+    const base = parseCampaignPixelContext(location.search, location.pathname, {
+      organisationId,
+      plan_id: activePlan.id,
+    });
+    const ctx = enrichCampaignPixelContext(base, organisationId);
+    sendCampaignFreeTrialViewed(ctx, {
+      plan_id: activePlan.id,
+      plan_name: activePlan.plan_name,
+      price: activePlan.price,
+      free_plan_duration: activePlan.free_plan_duration,
+      trial_token_amount: activePlan.trial_token_amount,
+    });
+  }, [activePlan, location.pathname, location.search, organisationId]);
 
   const checkoutPath = useMemo(() => {
     if (!activePlan?.id) return null;
@@ -418,6 +442,7 @@ export function Campaign({
                 loop
                 autoPlay
                 preload="auto"
+                onMediaReady={handleCampaignMediaReady}
               />
             ) : (
               <img
@@ -425,6 +450,7 @@ export function Campaign({
                 alt=""
                 className="h-full w-full object-cover object-top block"
                 loading="lazy"
+                onLoad={handleCampaignMediaReady}
               />
             )}
           </div>

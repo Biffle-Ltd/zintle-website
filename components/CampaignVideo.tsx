@@ -10,6 +10,8 @@ type Props = {
   loop?: boolean;
   autoPlay?: boolean;
   preload?: "none" | "metadata" | "auto";
+  /** Fires once when the video (or stream) has loaded enough to play. */
+  onMediaReady?: () => void;
 };
 
 const PLAY_PAUSE_CONTROL_HIDE_MS = 2000;
@@ -26,8 +28,11 @@ export function CampaignVideo({
   loop = true,
   autoPlay = true,
   preload = "metadata",
+  onMediaReady,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const onMediaReadyRef = useRef(onMediaReady);
+  const mediaReadyNotifiedRef = useRef(false);
   const dashPlayerRef = useRef<MediaPlayerClass | null>(null);
   const hasUnmutedViaGesture = useRef(false);
   const hidePlayPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -38,6 +43,16 @@ export function CampaignVideo({
   const [isMuted, setIsMuted] = useState(mutedProp);
   const [isPlaying, setIsPlaying] = useState(autoPlay);
   const [showPlayPauseControl, setShowPlayPauseControl] = useState(false);
+
+  useEffect(() => {
+    onMediaReadyRef.current = onMediaReady;
+  }, [onMediaReady]);
+
+  const notifyMediaReady = useCallback(() => {
+    if (mediaReadyNotifiedRef.current) return;
+    mediaReadyNotifiedRef.current = true;
+    onMediaReadyRef.current?.();
+  }, []);
 
   const applyMute = useCallback((next: boolean) => {
     const el = videoRef.current;
@@ -86,6 +101,7 @@ export function CampaignVideo({
   };
 
   useEffect(() => {
+    mediaReadyNotifiedRef.current = false;
     hasUnmutedViaGesture.current = false;
     setIsMuted(mutedProp);
     setShowPlayPauseControl(false);
@@ -120,8 +136,13 @@ export function CampaignVideo({
 
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
+    const onLoaded = () => notifyMediaReady();
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
+    el.addEventListener("loadeddata", onLoaded, { once: true });
+    if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      notifyMediaReady();
+    }
 
     const teardownDash = () => {
       if (dashPlayerRef.current) {
@@ -208,6 +229,7 @@ export function CampaignVideo({
         clearNativeSrc();
         el.removeEventListener("play", onPlay);
         el.removeEventListener("pause", onPause);
+        el.removeEventListener("loadeddata", onLoaded);
       };
     }
 
@@ -222,8 +244,9 @@ export function CampaignVideo({
       clearNativeSrc();
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
+      el.removeEventListener("loadeddata", onLoaded);
     };
-  }, [src, autoPlay, loop, preload, mutedProp]);
+  }, [src, autoPlay, loop, preload, mutedProp, notifyMediaReady]);
 
   return (
     <div

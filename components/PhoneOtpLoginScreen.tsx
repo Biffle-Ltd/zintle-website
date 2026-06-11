@@ -64,9 +64,7 @@ function OtpDigitBoxes({
     if (autoFocus) inputRef.current?.focus();
   }, [autoFocus]);
 
-  const activeIndex = focused
-    ? Math.min(digits.length, OTP_LENGTH - 1)
-    : -1;
+  const activeIndex = focused ? Math.min(digits.length, OTP_LENGTH - 1) : -1;
 
   const boxBase = isBiffle
     ? "border-gray-200 bg-gray-50 text-gray-900"
@@ -228,7 +226,7 @@ export function PhoneOtpLoginScreen({
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex flex-col h-dvh max-h-dvh overflow-hidden touch-manipulation ${shellClass}`}
+      className={`fixed inset-0 z-[300] flex flex-col h-dvh max-h-dvh overflow-hidden touch-manipulation ${shellClass}`}
     >
       <button
         type="button"
@@ -263,9 +261,7 @@ export function PhoneOtpLoginScreen({
                 <span className="text-2xl font-extrabold tracking-tight text-white italic">
                   ZINTLE
                 </span>
-                <span
-                  className="text-xs font-bold uppercase tracking-wide text-white px-2.5 py-1 rounded-md bg-brand-primary"
-                >
+                <span className="text-xs font-bold uppercase tracking-wide text-white px-2.5 py-1 rounded-md bg-brand-primary">
                   PRO
                 </span>
               </>
@@ -306,7 +302,9 @@ export function PhoneOtpLoginScreen({
                 disabled={loading || otpSent}
                 value={phone}
                 onChange={(e) =>
-                  setPhone(e.target.value.replace(/\D/g, "").slice(0, PHONE_LENGTH))
+                  setPhone(
+                    e.target.value.replace(/\D/g, "").slice(0, PHONE_LENGTH),
+                  )
                 }
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !otpSent && phone.trim()) {
@@ -338,7 +336,10 @@ export function PhoneOtpLoginScreen({
                     aria-hidden
                   />
                 ) : (
-                  <i className="fa-solid fa-chevron-right text-sm" aria-hidden />
+                  <i
+                    className="fa-solid fa-chevron-right text-sm"
+                    aria-hidden
+                  />
                 )}
               </AuthRoundButton>
             )}

@@ -6,10 +6,10 @@ export const PAYMENT_GATEWAY_MAP = {
 export type PaymentGateway = keyof typeof PAYMENT_GATEWAY_MAP;
 
 export function getPaymentGatewayFromUrl(): PaymentGateway {
-  const raw = new URLSearchParams(window.location.search)
-    .get("payment_gateway")
-    ?.trim();
-  if (raw && raw in PAYMENT_GATEWAY_MAP) return raw as PaymentGateway;
+  // const raw = new URLSearchParams(window.location.search)
+  //   .get("payment_gateway")
+  //   ?.trim();
+  // if (raw && raw in PAYMENT_GATEWAY_MAP) return raw as PaymentGateway;
   return "Easebuzz";
 }
 

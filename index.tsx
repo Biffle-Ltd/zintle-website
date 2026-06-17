@@ -58,6 +58,10 @@ import {
   hasAnyJwtInStorage,
 } from "./utils/authStorage";
 import { HOST } from "./utils/host";
+import {
+  openPhonePeIframeCheckout,
+  shouldUsePhonePeIframe,
+} from "./utils/phonePeIframeCheckout";
 
 const { VITE_EASEBUZZ_KEY, VITE_EASEBUZZ_ENV } = (import.meta as any).env;
 const EASEBUZZ_KEY = VITE_EASEBUZZ_KEY;
@@ -247,32 +251,19 @@ const validateCoinPackPayment = async (
   }
 };
 
-/** PhonePe PayPage iframe — `tokenUrl` is the `redirectUrl` from initiate-payment (see PhonePe docs). */
+/** PhonePe PayPage iframe for coin purchases (see PhonePe docs). */
 const launchPhonePeIframeCheckout = (
-  paymentData: any,
+  tokenUrl: string,
+  orderUuid: string | null | undefined,
   organisationId: string = DEFAULT_ORGANISATION_ID,
   token?: string | null,
 ) => {
-  const orderUuid = paymentData?.order_uuid;
-  try {
-    const tokenUrl = paymentData.access_token;
-    if (!tokenUrl) {
-      return;
-    }
-    const PhonePeCheckout = (window as any).PhonePeCheckout;
-    if (!PhonePeCheckout?.transact) {
-      console.error("PhonePe checkout script not loaded");
-      return;
-    }
-    PhonePeCheckout.transact({
-      tokenUrl,
-      type: "IFRAME",
-      callback: (response: string) => {
-        void validateCoinPackPayment(orderUuid, organisationId, token);
-      },
-    });
-  } catch (err) {
-    console.error("Error in PhonePe iframe checkout", err);
+  const onClose = () => {
+    void validateCoinPackPayment(orderUuid, organisationId, token);
+  };
+
+  const opened = openPhonePeIframeCheckout(tokenUrl, onClose);
+  if (!opened) {
     void validateCoinPackPayment(orderUuid, organisationId, token);
   }
 };
@@ -365,8 +356,20 @@ const createOrderAndInitiatePayment = async (
   if (PAYMENT_GATEWAY === "Easebuzz") {
     launchEasebuzzCheckout(payment, organisationId, token);
   } else if (PAYMENT_GATEWAY === "PhonePe") {
-    // launchPhonePeIframeCheckout(payment, organisationId, token);
-    window.open(payment.access_token, "_blank", "noopener,noreferrer");
+    const tokenUrl = payment?.access_token;
+    if (!tokenUrl) {
+      return { order, payment };
+    }
+    if (shouldUsePhonePeIframe(window.location.search)) {
+      launchPhonePeIframeCheckout(
+        tokenUrl,
+        order.order_uuid,
+        organisationId,
+        token,
+      );
+    } else {
+      window.open(tokenUrl, "_blank", "noopener,noreferrer");
+    }
   }
   return { order, payment };
 };

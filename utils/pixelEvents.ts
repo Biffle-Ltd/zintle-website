@@ -9,7 +9,7 @@
  * - payment_gateway / payment_method: matches PAYMENT_GATEWAY in index.tsx.
  */
 
-import { PAYMENT_GATEWAY } from "../index";
+import { PAYMENT_GATEWAY } from "./paymentGateway";
 import { sendCoinAnalyticsEvent } from "./coinAnalyticsApi";
 import { sendMetaPixelCustomEvent } from "./metaPixel";
 import { getOrganisationIdFromSearch } from "./organisationIdFromUrl";

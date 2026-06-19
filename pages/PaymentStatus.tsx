@@ -65,7 +65,7 @@ export const PaymentStatus = () => {
         return;
       }
 
-      const gateway = getPaymentGatewayFromUrl();
+      const gateway = getPaymentGatewayFromUrl(location.search);
       const rawToken = getJwtFromStorage(organisationId);
       const jwtToken = headerSafeToken(rawToken);
 
@@ -124,7 +124,7 @@ export const PaymentStatus = () => {
     return () => {
       cancelled = true;
     };
-  }, [orderUuid, organisationId]);
+  }, [orderUuid, organisationId, location.search]);
 
   const handleClose = () => {
     const q = new URLSearchParams();

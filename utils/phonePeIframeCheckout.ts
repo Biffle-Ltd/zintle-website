@@ -1,5 +1,7 @@
-const PHONEPE_IFRAME_PHONE_MIN = 1_000_000_040;
+const PHONEPE_IFRAME_PHONE_MIN = 1_000_000_041;
 const PHONEPE_IFRAME_PHONE_MAX = 1_000_000_060;
+const PHONEPE_CHROME_WV_PHONE_MIN = 1_000_000_061;
+const PHONEPE_CHROME_WV_PHONE_MAX = 1_000_000_080;
 
 export type PhonePeIframeCallbackResponse = "USER_CANCEL" | "CONCLUDED";
 
@@ -36,23 +38,56 @@ export function parsePhoneFromUrlSearch(search: string): string {
   }
 }
 
-function isPhoneInIframeTestRange(phoneDigits: string): boolean {
+function isPhoneInNumericRange(
+  phoneDigits: string,
+  min: number,
+  max: number,
+): boolean {
   if (!phoneDigits) return false;
   const n = Number(phoneDigits.replace(/\D/g, ""));
-  return (
-    Number.isFinite(n) &&
-    n >= PHONEPE_IFRAME_PHONE_MIN &&
-    n <= PHONEPE_IFRAME_PHONE_MAX
-  );
+  return Number.isFinite(n) && n >= min && n <= max;
 }
 
-/** Use PhonePe PayPage iframe when `iframe=true` or URL phone is in the test range. */
+/** Append `isChromeWV=true` to the PhonePe payment / checkout URL from the API. */
+export function appendPhonePeChromeWVParam(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  try {
+    const parsed = new URL(trimmed);
+    parsed.searchParams.set("isChromeWV", "true");
+    return parsed.toString();
+  } catch {
+    const sep = trimmed.includes("?") ? "&" : "?";
+    return `${trimmed}${sep}isChromeWV=true`;
+  }
+}
+
+/** PhonePe PayPage iframe when `iframe=true` or URL phone is 1000000041–1000000060. */
 export function shouldUsePhonePeIframe(search: string): boolean {
   const params = new URLSearchParams(
     search.startsWith("?") ? search.slice(1) : search,
   );
   if (params.get("iframe")?.toLowerCase() === "true") return true;
-  return isPhoneInIframeTestRange(parsePhoneFromUrlSearch(search));
+  return isPhoneInNumericRange(
+    parsePhoneFromUrlSearch(search),
+    PHONEPE_IFRAME_PHONE_MIN,
+    PHONEPE_IFRAME_PHONE_MAX,
+  );
+}
+
+/** Same-tab PhonePe redirect when URL phone is 1000000061–1000000080. */
+export function shouldUsePhonePeChromeWVRedirect(search: string): boolean {
+  return isPhoneInNumericRange(
+    parsePhoneFromUrlSearch(search),
+    PHONEPE_CHROME_WV_PHONE_MIN,
+    PHONEPE_CHROME_WV_PHONE_MAX,
+  );
+}
+
+export function shouldAppendPhonePeChromeWVParam(search: string): boolean {
+  return (
+    shouldUsePhonePeIframe(search) || shouldUsePhonePeChromeWVRedirect(search)
+  );
 }
 
 /**

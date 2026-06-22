@@ -59,7 +59,10 @@ import {
 } from "./utils/authStorage";
 import { HOST } from "./utils/host";
 import {
+  appendPhonePeChromeWVParam,
   openPhonePeIframeCheckout,
+  shouldAppendPhonePeChromeWVParam,
+  shouldUsePhonePeChromeWVRedirect,
   shouldUsePhonePeIframe,
 } from "./utils/phonePeIframeCheckout";
 
@@ -358,13 +361,20 @@ const createOrderAndInitiatePayment = async (
     if (!tokenUrl) {
       return { order, payment };
     }
-    if (shouldUsePhonePeIframe(window.location.search)) {
+    const search = window.location.search;
+    const paymentUrl = shouldAppendPhonePeChromeWVParam(search)
+      ? appendPhonePeChromeWVParam(tokenUrl)
+      : tokenUrl;
+
+    if (shouldUsePhonePeIframe(search)) {
       launchPhonePeIframeCheckout(
-        tokenUrl,
+        paymentUrl,
         order.order_uuid,
         organisationId,
         token,
       );
+    } else if (shouldUsePhonePeChromeWVRedirect(search)) {
+      window.location.href = paymentUrl;
     } else {
       window.open(tokenUrl, "_blank", "noopener,noreferrer");
     }

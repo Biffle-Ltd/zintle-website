@@ -61,9 +61,6 @@ import { HOST } from "./utils/host";
 import {
   appendPhonePeChromeWVParam,
   openPhonePeIframeCheckout,
-  shouldAppendPhonePeChromeWVParam,
-  shouldUsePhonePeChromeWVRedirect,
-  shouldUsePhonePeIframe,
 } from "./utils/phonePeIframeCheckout";
 
 const { VITE_EASEBUZZ_KEY, VITE_EASEBUZZ_ENV } = (import.meta as any).env;
@@ -361,23 +358,12 @@ const createOrderAndInitiatePayment = async (
     if (!tokenUrl) {
       return { order, payment };
     }
-    const search = window.location.search;
-    const paymentUrl = shouldAppendPhonePeChromeWVParam(search)
-      ? appendPhonePeChromeWVParam(tokenUrl)
-      : tokenUrl;
-
-    if (shouldUsePhonePeIframe(search)) {
-      launchPhonePeIframeCheckout(
-        paymentUrl,
-        order.order_uuid,
-        organisationId,
-        token,
-      );
-    } else if (shouldUsePhonePeChromeWVRedirect(search)) {
-      window.location.href = paymentUrl;
-    } else {
-      window.open(tokenUrl, "_blank", "noopener,noreferrer");
-    }
+    launchPhonePeIframeCheckout(
+      appendPhonePeChromeWVParam(tokenUrl),
+      order.order_uuid,
+      organisationId,
+      token,
+    );
   }
   return { order, payment };
 };

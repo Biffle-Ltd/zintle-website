@@ -1,8 +1,3 @@
-const PHONEPE_IFRAME_PHONE_MIN = 1_000_000_041;
-const PHONEPE_IFRAME_PHONE_MAX = 1_000_000_060;
-const PHONEPE_CHROME_WV_PHONE_MIN = 1_000_000_061;
-const PHONEPE_CHROME_WV_PHONE_MAX = 1_000_000_080;
-
 export type PhonePeIframeCallbackResponse = "USER_CANCEL" | "CONCLUDED";
 
 type PhonePeCheckoutApi = {
@@ -13,40 +8,6 @@ type PhonePeCheckoutApi = {
   }) => void;
   closePage?: () => void;
 };
-
-/** Phone number from URL only (`user` JSON or `phone` / `phone_number` query). */
-export function parsePhoneFromUrlSearch(search: string): string {
-  const params = new URLSearchParams(
-    search.startsWith("?") ? search.slice(1) : search,
-  );
-  const direct =
-    params.get("phone_number") ??
-    params.get("phone") ??
-    params.get("phonenumber");
-  if (direct?.trim()) return direct.replace(/\D/g, "");
-
-  const raw = params.get("user");
-  if (!raw?.trim()) return "";
-  try {
-    const decoded = decodeURIComponent(raw.replace(/\+/g, " "));
-    const user = JSON.parse(decoded) as Record<string, unknown>;
-    return user?.phone_number != null
-      ? String(user.phone_number).replace(/\D/g, "")
-      : "";
-  } catch {
-    return "";
-  }
-}
-
-function isPhoneInNumericRange(
-  phoneDigits: string,
-  min: number,
-  max: number,
-): boolean {
-  if (!phoneDigits) return false;
-  const n = Number(phoneDigits.replace(/\D/g, ""));
-  return Number.isFinite(n) && n >= min && n <= max;
-}
 
 /** Append `isChromeWV=true` to the PhonePe payment / checkout URL from the API. */
 export function appendPhonePeChromeWVParam(url: string): string {
@@ -60,34 +21,6 @@ export function appendPhonePeChromeWVParam(url: string): string {
     const sep = trimmed.includes("?") ? "&" : "?";
     return `${trimmed}${sep}isChromeWV=true`;
   }
-}
-
-/** PhonePe PayPage iframe when `iframe=true` or URL phone is 1000000041–1000000060. */
-export function shouldUsePhonePeIframe(search: string): boolean {
-  const params = new URLSearchParams(
-    search.startsWith("?") ? search.slice(1) : search,
-  );
-  if (params.get("iframe")?.toLowerCase() === "true") return true;
-  return isPhoneInNumericRange(
-    parsePhoneFromUrlSearch(search),
-    PHONEPE_IFRAME_PHONE_MIN,
-    PHONEPE_IFRAME_PHONE_MAX,
-  );
-}
-
-/** Same-tab PhonePe redirect when URL phone is 1000000061–1000000080. */
-export function shouldUsePhonePeChromeWVRedirect(search: string): boolean {
-  return isPhoneInNumericRange(
-    parsePhoneFromUrlSearch(search),
-    PHONEPE_CHROME_WV_PHONE_MIN,
-    PHONEPE_CHROME_WV_PHONE_MAX,
-  );
-}
-
-export function shouldAppendPhonePeChromeWVParam(search: string): boolean {
-  return (
-    shouldUsePhonePeIframe(search) || shouldUsePhonePeChromeWVRedirect(search)
-  );
 }
 
 /**

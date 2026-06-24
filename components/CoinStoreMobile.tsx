@@ -33,6 +33,16 @@ export type CoinStorePack = {
   is_micropack?: boolean;
 };
 
+export type SubscriptionPlan = {
+  id: number;
+  plan_name: string;
+  plan_description?: string;
+  price: number;
+  plan_duration: number;
+  coin_value?: number;
+  subscription_id?: string;
+};
+
 function formatRupee(amount: number): string {
   const n = Number(amount);
   if (!Number.isFinite(n)) return "₹ 0";
@@ -86,6 +96,9 @@ type CoinStoreMobileProps = {
   selectedPackageId: number | null;
   onPackSelect: (pkg: CoinStorePack, index: number) => void;
   onRecharge: () => void;
+  isMember: boolean;
+  weeklyPlan8: SubscriptionPlan | null;
+  weeklyPlan5: SubscriptionPlan | null;
 };
 
 function LimitedOfferCard({
@@ -165,6 +178,105 @@ function LimitedOfferCard({
           </span>
         </div>
       </div>
+    </button>
+  );
+}
+
+function WeeklyPlanLimitedOfferCard({
+  plan,
+  selected,
+  onSelect,
+}: {
+  plan: SubscriptionPlan;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const [endMs] = useState(() => getCoinStoreTimerEndMs());
+  const [remainingMs, setRemainingMs] = useState(() =>
+    Math.max(0, endMs - Date.now()),
+  );
+
+  useEffect(() => {
+    const tick = () => setRemainingMs(Math.max(0, endMs - Date.now()));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [endMs]);
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`relative w-full overflow-hidden rounded-[20px] text-left transition-transform active:scale-[0.99] ${
+        selected
+          ? "ring-2 ring-white/80 ring-offset-2 ring-offset-[#000D26]"
+          : ""
+      }`}
+    >
+      <div className="relative bg-gradient-to-r from-[#FF5A3C] via-[#FF4D5E] to-[#FF7A52] px-4 pb-4 pt-4">
+        <div
+          className="pointer-events-none absolute right-3 top-3 flex items-start gap-0.5 opacity-40"
+          aria-hidden
+        >
+          <BannerSparkleIcon className="h-8 w-8 shrink-0" />
+          <BannerSparkleIcon className="h-6 w-6 shrink-0 -mt-0.5" />
+        </div>
+
+        <div className="relative z-[1] pr-12">
+          <p className="text-[13px] font-semibold tracking-wide text-white">
+            Weekly Plan
+          </p>
+          <div className="mt-2.5 inline-flex items-center gap-2.5 rounded-full bg-white px-4 py-2 shadow-sm">
+            <i
+              className="fa-solid fa-stopwatch text-[15px] text-[#0B1121]"
+              aria-hidden
+            />
+            <span className="text-[15px] font-bold tabular-nums text-[#0B1121]">
+              {formatCountdown(remainingMs)}
+            </span>
+          </div>
+        </div>
+
+        <div className="relative z-[1] mt-4 flex items-center justify-between rounded-2xl bg-[#00000033] px-4 py-3.5">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex items-center gap-2.5 text-[28px] font-bold leading-none text-white">
+              <ZintleCoinIcon className={COIN_ICON_CLASS} />
+              <span>{plan.coin_value ?? 0}</span>
+            </div>
+          </div>
+          <span className="shrink-0 pl-2 text-xl font-bold text-white">
+            {formatRupee(plan.price)}
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function WeeklyPlanCard({
+  plan,
+  selected,
+  onSelect,
+}: {
+  plan: SubscriptionPlan;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex w-full items-center justify-between rounded-2xl bg-[#0f1f3d] px-4 py-4 text-left transition-all active:scale-[0.99] ${
+        selected ? "ring-2 ring-[#3B82F6]/80" : "ring-1 ring-white/5"
+      }`}
+    >
+      <div className="flex items-center gap-2 text-xl font-bold leading-none text-white">
+        <ZintleCoinIcon className={COIN_ICON_CLASS} />
+        <span>{plan.coin_value ?? 0}</span>
+      </div>
+      <span className="text-base font-semibold text-white">
+        {formatRupee(plan.price)}
+      </span>
     </button>
   );
 }
@@ -284,6 +396,9 @@ export const CoinStoreMobile = ({
   selectedPackageId,
   onPackSelect,
   onRecharge,
+  isMember,
+  weeklyPlan8,
+  weeklyPlan5,
 }: CoinStoreMobileProps) => {
   const indexedPacks = useMemo(() => {
     const rows: {
@@ -305,7 +420,8 @@ export const CoinStoreMobile = ({
   return (
     <div className="flex flex-col bg-[#000D26] md:hidden">
       <main className="space-y-6 px-4 pt-4 pb-32">
-        {indexedPacks.some((r) => r.kind === "timer") && timerPack && (
+        {/* Limited Offer slot — member: timer card, non-member: plan 8 card */}
+        {isMember && indexedPacks.some((r) => r.kind === "timer") && timerPack && (
           <LimitedOfferCard
             pack={timerPack}
             selected={selectedPackageId === timerPack.id}
@@ -316,31 +432,69 @@ export const CoinStoreMobile = ({
             index={0}
           />
         )}
+        {!isMember && weeklyPlan8 && (
+          <WeeklyPlanLimitedOfferCard
+            plan={weeklyPlan8}
+            selected={selectedPackageId === weeklyPlan8.id}
+            onSelect={() =>
+              onPackSelect(
+                { id: weeklyPlan8.id, coins: 0, price: weeklyPlan8.price, name: weeklyPlan8.plan_name },
+                0
+              )
+            }
+          />
+        )}
 
-        {exclusiveDeals.length > 0 && (
+        {/* Weekly Plans section — non-members only, above Exclusive Deals */}
+        {!isMember && weeklyPlan5 && (
           <section>
-            <h2 className="mb-3 text-base font-bold text-white">
-              Exclusive Deals
-            </h2>
+            <h2 className="mb-3 text-base font-bold text-white">Weekly Plans</h2>
             <div className="space-y-3">
-              {exclusiveDeals.map((pack) => {
-                const row = indexedPacks.find((r) => r.pack.id === pack.id);
-                const idx = row?.index ?? 0;
-                return (
-                  <Fragment key={pack.id}>
-                    <ExclusiveDealCard
-                      pack={pack}
-                      selected={selectedPackageId === pack.id}
-                      onSelect={() => onPackSelect(pack, idx)}
-                      index={idx}
-                    />
-                  </Fragment>
-                );
-              })}
+              <WeeklyPlanCard
+                plan={weeklyPlan5}
+                selected={selectedPackageId === weeklyPlan5.id}
+                onSelect={() =>
+                  onPackSelect(
+                    { id: weeklyPlan5.id, coins: 0, price: weeklyPlan5.price, name: weeklyPlan5.plan_name },
+                    1
+                  )
+                }
+              />
             </div>
           </section>
         )}
 
+        {/* Exclusive Deals — always shown, but hide ₹29 pack when non-member weekly plan is displayed */}
+        {(() => {
+          const filteredDeals = !isMember && weeklyPlan5
+            ? exclusiveDeals.filter((p) => p.price !== weeklyPlan5.price)
+            : exclusiveDeals;
+          return filteredDeals.length > 0 && (
+            <section>
+              <h2 className="mb-3 text-base font-bold text-white">
+                Exclusive Deals
+              </h2>
+              <div className="space-y-3">
+                {filteredDeals.map((pack) => {
+                  const row = indexedPacks.find((r) => r.pack.id === pack.id);
+                  const idx = row?.index ?? 0;
+                  return (
+                    <Fragment key={pack.id}>
+                      <ExclusiveDealCard
+                        pack={pack}
+                        selected={selectedPackageId === pack.id}
+                        onSelect={() => onPackSelect(pack, idx)}
+                        index={idx}
+                      />
+                    </Fragment>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* Top Plans — always shown */}
         {topPlans.length > 0 && (
           <section>
             <h2 className="mb-3 text-base font-bold text-white">Top Plans</h2>

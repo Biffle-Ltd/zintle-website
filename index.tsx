@@ -25,7 +25,9 @@ import { PhoneOtpLoginScreen } from "./components/PhoneOtpLoginScreen";
 import { QuickRechargePopup } from "./components/QuickRechargePopup";
 import {
   CoinStoreMobile,
+  getCoinPackStoreIndex,
   resolveTimerPack,
+  TIMER_COIN_PRODUCT_ID,
 } from "./components/CoinStoreMobile";
 import { COIN_ICON_CLASS, ZintleCoinIcon } from "./components/ZintleCoinIcon";
 import {
@@ -94,6 +96,14 @@ type LastTrackedCoinPurchase = {
 };
 
 let lastTrackedCoinPurchaseRef: LastTrackedCoinPurchase | null = null;
+
+const COIN_PAYMENT_POLL_INTERVAL_MS = 5000;
+const COIN_PAYMENT_POLL_MAX_ATTEMPTS = 8;
+
+function isCoinPaymentPendingStatus(status: string | undefined): boolean {
+  const normalized = (status ?? "").toUpperCase();
+  return normalized === "PENDING" || normalized === "INITIATED";
+}
 
 export type CreateOrderPixelOptions = {
   trackCoinPixels?: boolean;
@@ -178,7 +188,7 @@ const validateCoinPackPayment = async (
   organisationId: string = DEFAULT_ORGANISATION_ID,
   token?: string | null,
   gateway: PaymentGateway = getPaymentGatewayFromUrl(),
-) => {
+): Promise<string | undefined> => {
   if (!orderUuid) {
     return;
   }
@@ -192,7 +202,7 @@ const validateCoinPackPayment = async (
       endpoint = "easebuzz/payment/validate/";
     }
     if (!endpoint) {
-      return;
+      return undefined;
     }
     const r = await fetch(`${HOST}/api/v1.2/monetization/${endpoint}`, {
       method: "POST",
@@ -206,7 +216,7 @@ const validateCoinPackPayment = async (
     const data = await r.json().catch(() => null);
     if (!r.ok) {
       console.error("Payment validation failed", { status: r.status, data });
-      return;
+      return undefined;
     }
     console.log("Payment validated", data);
 
@@ -231,16 +241,56 @@ const validateCoinPackPayment = async (
           failure_reason: failReason,
         });
         lastTrackedCoinPurchaseRef = null;
-      } else {
+      } else if (paymentStatus === "CANCELLED") {
         lastTrackedCoinPurchaseRef = null;
       }
+      // PENDING / INITIATED: keep ref so post-checkout polling can fire success/failed.
     }
 
     if (paymentStatus) {
       showPaymentStatusCallback?.(paymentStatus);
     }
+    return paymentStatus;
   } catch (err) {
     console.error("Failed to validate payment", err);
+    return undefined;
+  }
+};
+
+const pollCoinPackPaymentAfterCheckout = async (
+  orderUuid: string | null | undefined,
+  organisationId: string = DEFAULT_ORGANISATION_ID,
+  token?: string | null,
+  gateway: PaymentGateway = getPaymentGatewayFromUrl(),
+) => {
+  if (!orderUuid) return;
+
+  for (let attempt = 0; attempt < COIN_PAYMENT_POLL_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, COIN_PAYMENT_POLL_INTERVAL_MS),
+      );
+    }
+
+    const paymentStatus = await validateCoinPackPayment(
+      orderUuid,
+      organisationId,
+      token,
+      gateway,
+    );
+
+    const stillTracking =
+      lastTrackedCoinPurchaseRef?.orderUuid === String(orderUuid);
+    if (!stillTracking) return;
+
+    if (!isCoinPaymentPendingStatus(paymentStatus)) {
+      lastTrackedCoinPurchaseRef = null;
+      return;
+    }
+  }
+
+  if (lastTrackedCoinPurchaseRef?.orderUuid === String(orderUuid)) {
+    lastTrackedCoinPurchaseRef = null;
   }
 };
 
@@ -252,12 +302,22 @@ const launchPhonePeIframeCheckout = (
   token?: string | null,
 ) => {
   const onClose = () => {
-    void validateCoinPackPayment(orderUuid, organisationId, token, "PhonePe");
+    void pollCoinPackPaymentAfterCheckout(
+      orderUuid,
+      organisationId,
+      token,
+      "PhonePe",
+    );
   };
 
   const opened = openPhonePeIframeCheckout(tokenUrl, onClose);
   if (!opened) {
-    void validateCoinPackPayment(orderUuid, organisationId, token, "PhonePe");
+    void pollCoinPackPaymentAfterCheckout(
+      orderUuid,
+      organisationId,
+      token,
+      "PhonePe",
+    );
   }
 };
 
@@ -277,12 +337,22 @@ const launchEasebuzzCheckout = (
       console.warn("Missing Easebuzz access key in payment response", {
         accessToken,
       });
-      void validateCoinPackPayment(orderUuid, organisationId, token, "Easebuzz");
+      void pollCoinPackPaymentAfterCheckout(
+        orderUuid,
+        organisationId,
+        token,
+        "Easebuzz",
+      );
       return;
     }
     if (!merchantKey) {
       console.warn("Missing Easebuzz merchant key (set VITE_EASEBUZZ_KEY)");
-      void validateCoinPackPayment(orderUuid, organisationId, token, "Easebuzz");
+      void pollCoinPackPaymentAfterCheckout(
+        orderUuid,
+        organisationId,
+        token,
+        "Easebuzz",
+      );
       return;
     }
 
@@ -293,14 +363,24 @@ const launchEasebuzzCheckout = (
     const options = {
       access_key: accessKey,
       onResponse: () => {
-        void validateCoinPackPayment(orderUuid, organisationId, token, "Easebuzz");
+        void pollCoinPackPaymentAfterCheckout(
+          orderUuid,
+          organisationId,
+          token,
+          "Easebuzz",
+        );
       },
       theme: "#123456",
     };
     easebuzzCheckout.initiatePayment(options);
   } catch (err) {
     console.error("Error occurred in Easebuzz checkout", err);
-    void validateCoinPackPayment(orderUuid, organisationId, token, "Easebuzz");
+    void pollCoinPackPaymentAfterCheckout(
+      orderUuid,
+      organisationId,
+      token,
+      "Easebuzz",
+    );
   }
 };
 
@@ -1501,11 +1581,13 @@ const CoinsPage = ({
   setShowCoins,
   setShowLogin,
   coinPacks,
+  coinPacksLoading,
   organisationId = DEFAULT_ORGANISATION_ID,
 }: {
   setShowCoins: (v: boolean) => void;
   setShowLogin: (v: boolean) => void;
   coinPacks: any[];
+  coinPacksLoading: boolean;
   organisationId?: string;
 }) => {
   const location = useLocation();
@@ -1537,6 +1619,7 @@ const CoinsPage = ({
     [displayedPacks],
   );
   const storeViewedSentRef = useRef(false);
+  const defaultPackSelectedRef = useRef(false);
 
   useEffect(() => {
     if (
@@ -1560,12 +1643,35 @@ const CoinsPage = ({
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
 
   useEffect(() => {
-    if (quickRecharge) return;
-    setSelectedPackage((prev) => {
-      if (prev) return prev;
-      return timerPack ?? exclusiveDeals[0] ?? topPlans[0] ?? null;
+    if (quickRecharge || displayedPacks.length === 0) return;
+
+    const coin100Pack = displayedPacks.find(
+      (p) => p.product_id === TIMER_COIN_PRODUCT_ID,
+    );
+    if (!coin100Pack) return;
+
+    setSelectedPackage((prev) => prev ?? coin100Pack);
+
+    if (defaultPackSelectedRef.current || !pixelContext) return;
+    defaultPackSelectedRef.current = true;
+
+    const index = getCoinPackStoreIndex(
+      coin100Pack.id,
+      timerPack,
+      exclusiveDeals,
+      topPlans,
+    );
+    sendCoinPackSelected(pixelContext, coin100Pack, index, {
+      selected_by_default: true,
     });
-  }, [quickRecharge, timerPack, exclusiveDeals, topPlans]);
+  }, [
+    quickRecharge,
+    displayedPacks,
+    pixelContext,
+    timerPack,
+    exclusiveDeals,
+    topPlans,
+  ]);
 
   const handlePackSelect = (pkg: any, index: number) => {
     setSelectedPackage(pkg);
@@ -1618,6 +1724,17 @@ const CoinsPage = ({
       console.error("Failed to create coin order from CoinsPage", e);
     }
   };
+
+  if (coinPacksLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-brand-bg p-6">
+        <div className="flex items-center gap-2 text-sm text-brand-muted">
+          <i className="fa-solid fa-spinner fa-spin" aria-hidden />
+          Loading coin packs…
+        </div>
+      </div>
+    );
+  }
 
   if (quickRecharge) {
     return (
@@ -1949,121 +2066,6 @@ const Footer = () => {
   );
 };
 
-const defaultCoinPackData = [
-  {
-    id: 17,
-    name: "40 coins micro pack bundle",
-    description: "",
-    coin_value: 90.0,
-    bonus_coins: 0.0,
-    icon_url: null,
-    is_active: true,
-    amount: 29.0,
-    product_id: "coin_29",
-    isTrialPack: false,
-    isBonusPack: false,
-    isMicropack: true,
-  },
-  {
-    id: 14,
-    name: "90 coins micro pack bundle",
-    description: "",
-    coin_value: 160.0,
-    bonus_coins: 0.0,
-    icon_url: null,
-    is_active: true,
-    amount: 49.0,
-    product_id: "coin_49",
-    isTrialPack: false,
-    isBonusPack: false,
-    isMicropack: true,
-  },
-  {
-    id: 15,
-    name: "150 coins micro pack bundle",
-    description: "",
-    coin_value: 240.0,
-    bonus_coins: 0.0,
-    icon_url: null,
-    is_active: true,
-    amount: 79.0,
-    product_id: "coin_79",
-    isTrialPack: false,
-    isBonusPack: false,
-    isMicropack: true,
-  },
-  {
-    id: 16,
-    name: "300 coins micro pack bundle",
-    description: "",
-    coin_value: 400.0,
-    bonus_coins: 0.0,
-    icon_url: null,
-    is_active: true,
-    amount: 149.0,
-    product_id: "coin_149",
-    isTrialPack: false,
-    isBonusPack: false,
-    isMicropack: true,
-  },
-  {
-    id: 18,
-    name: "coin_5000",
-    description: "",
-    coin_value: 15000.0,
-    bonus_coins: 0.0,
-    icon_url: null,
-    is_active: true,
-    amount: 4999.0,
-    product_id: "coin_4999",
-    isTrialPack: false,
-    isBonusPack: false,
-    isMicropack: false,
-  },
-  {
-    id: 19,
-    name: "coin_10000",
-    description: "",
-    coin_value: 35000.0,
-    bonus_coins: 0.0,
-    icon_url: null,
-    is_active: true,
-    amount: 9999.0,
-    product_id: "coin_9999",
-    isTrialPack: false,
-    isBonusPack: false,
-    isMicropack: false,
-  },
-  {
-    id: 20,
-    name: "coin_20000",
-    description: "",
-    coin_value: 70000.0,
-    bonus_coins: 0.0,
-    icon_url: null,
-    is_active: true,
-    amount: 19999.0,
-    product_id: "coin_19999",
-    isTrialPack: false,
-    isBonusPack: false,
-    isMicropack: false,
-  },
-  {
-    id: 21,
-    name: "coin_50000",
-    description: "",
-    coin_value: 175000.0,
-    bonus_coins: 0.0,
-    icon_url: null,
-    is_active: true,
-    amount: 49999.0,
-    product_id: "coin_49999",
-    isTrialPack: false,
-    isBonusPack: false,
-    isMicropack: false,
-  },
-];
-
 const mapCoinPack = (p: any) => ({
   id: p.id,
   coins: p.coin_value,
@@ -2085,10 +2087,6 @@ const mapCoinPack = (p: any) => ({
   highlight: p.isBonusPack || false,
 });
 
-const defaultCoinPacks = defaultCoinPackData
-  .filter((p) => p.is_active)
-  .map(mapCoinPack);
-
 const Layout = () => {
   const location = useLocation();
   const organisationId = useMemo(
@@ -2106,7 +2104,8 @@ const Layout = () => {
   const [showLogin, setShowLogin] = useState(false);
   const [showCoins, setShowCoins] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(hasAnyJwtInStorage());
-  const [coinPacks, setCoinPacks] = useState(defaultCoinPacks);
+  const [coinPacks, setCoinPacks] = useState<any[]>([]);
+  const [coinPacksLoading, setCoinPacksLoading] = useState(true);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
 
   useEffect(() => {
@@ -2115,7 +2114,10 @@ const Layout = () => {
 
   // Fetch coin packs on mount/when logged in changes
   useEffect(() => {
+    let cancelled = false;
+
     const fetchPacks = async () => {
+      setCoinPacksLoading(true);
       try {
         const searchParams = new URLSearchParams(location.search);
         const tokenFromQuery = searchParams.get("id");
@@ -2131,18 +2133,26 @@ const Layout = () => {
           },
         );
         const data = await r.json();
+        if (cancelled) return;
         if (data.success && Array.isArray(data.data)) {
           setCoinPacks(
             data.data
               .filter((p: any) => p.is_active)
               .map((p: any) => mapCoinPack(p)),
           );
+        } else {
+          setCoinPacks([]);
         }
-      } catch (e) {
-        // fallback to defaultCoinPacks
+      } catch {
+        if (!cancelled) setCoinPacks([]);
+      } finally {
+        if (!cancelled) setCoinPacksLoading(false);
       }
     };
-    fetchPacks();
+    void fetchPacks();
+    return () => {
+      cancelled = true;
+    };
   }, [isLoggedIn, organisationId, location.search]);
 
   // Check JWT changes after CoinStore closes
@@ -2245,6 +2255,7 @@ const Layout = () => {
               setShowCoins={setShowCoins}
               setShowLogin={setShowLogin}
               coinPacks={coinPacks}
+              coinPacksLoading={coinPacksLoading}
               organisationId={organisationId}
             />
           }

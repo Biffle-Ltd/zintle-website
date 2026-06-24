@@ -255,6 +255,28 @@ function TopPlanCard({
   );
 }
 
+export function getCoinPackStoreIndex(
+  packId: number,
+  timerPack: CoinStorePack | null,
+  exclusiveDeals: CoinStorePack[],
+  topPlans: CoinStorePack[],
+): number {
+  let index = 0;
+  if (timerPack) {
+    if (timerPack.id === packId) return index;
+    index += 1;
+  }
+  for (const pack of exclusiveDeals) {
+    if (pack.id === packId) return index;
+    index += 1;
+  }
+  for (const pack of topPlans) {
+    if (pack.id === packId) return index;
+    index += 1;
+  }
+  return 0;
+}
+
 export const CoinStoreMobile = ({
   timerPack,
   exclusiveDeals,

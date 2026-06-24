@@ -130,6 +130,7 @@ function buildStoreViewedEventParams(
 function buildCoinPackSelectedEventInfo(
   pack: CoinPackForAnalytics,
   position: number,
+  options?: { selected_by_default?: boolean },
 ): Record<string, unknown> {
   return {
     coinpack_id: pack.id,
@@ -140,6 +141,7 @@ function buildCoinPackSelectedEventInfo(
     bonus_pct: false,
     is_limited_plan: false,
     position,
+    ...(options?.selected_by_default ? { selected_by_default: true } : {}),
   };
 }
 
@@ -250,11 +252,12 @@ export function sendCoinPackSelected(
   ctx: ParsedCoinPixelContext | null,
   pack: CoinPackForAnalytics,
   position: number,
+  options?: { selected_by_default?: boolean },
 ): void {
   if (!ctx) return;
   const eventParams: Record<string, unknown> = {
     ...buildBaseEventParams(ctx),
-    event_info: buildCoinPackSelectedEventInfo(pack, position),
+    event_info: buildCoinPackSelectedEventInfo(pack, position, options),
   };
   sendPixelEvent(ctx.organisation_id, "coin_pack_selected", eventParams);
   sendCoinAnalyticsEvent(ctx, "coin_pack_selected", eventParams);

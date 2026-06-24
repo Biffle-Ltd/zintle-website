@@ -1615,8 +1615,11 @@ const CoinsPage = ({
     [displayedPacks, timerPack],
   );
   const topPlans = useMemo(
-    () => displayedPacks.filter((p) => !p.is_micropack),
-    [displayedPacks],
+    () =>
+      displayedPacks.filter(
+        (p) => !p.is_micropack && p.id !== timerPack?.id,
+      ),
+    [displayedPacks, timerPack],
   );
   const storeViewedSentRef = useRef(false);
   const defaultPackSelectedRef = useRef(false);

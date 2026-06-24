@@ -111,6 +111,76 @@ export type CreateOrderPixelOptions = {
   coinPack?: CoinPackForAnalytics;
 };
 
+// --- Membership status fetch helper ---
+
+type MembershipStatusResult = {
+  isMember: boolean;
+};
+
+async function fetchMembershipStatus(
+  token: string,
+  organisationId: string,
+  signal?: AbortSignal
+): Promise<MembershipStatusResult> {
+  const jwtToken = headerSafeToken(token);
+  const response = await fetch(
+    `${HOST}/api/v1/user_center/details/get-user-details/`,
+    {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
+        "X-Organisation-ID": organisationId,
+      },
+      signal,
+    }
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const json = await response.json();
+  return { isMember: Boolean(json?.data?.is_member) };
+}
+
+// --- Subscription plans fetch helper ---
+
+export type SubscriptionPlan = {
+  id: number;
+  plan_name: string;
+  plan_description?: string;
+  price: number;
+  plan_duration: number;
+  coin_value?: number;
+  subscription_id?: string;
+};
+
+async function fetchSubscriptionPlans(
+  token: string,
+  organisationId: string,
+  signal?: AbortSignal
+): Promise<{ plan8: SubscriptionPlan | null; plan5: SubscriptionPlan | null }> {
+  const jwtToken = headerSafeToken(token);
+  const response = await fetch(
+    `${HOST}/api/v1/monetization/plans/details/?plan_ids=10,9`,
+    {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
+        "X-Organisation-ID": organisationId,
+      },
+      signal,
+    }
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const json = await response.json();
+  const plans: any[] = json?.data?.plans ?? [];
+  const plan8 = plans.find((p: any) => p.id === 10) ?? null;
+  const plan5 = plans.find((p: any) => p.id === 9) ?? null;
+  // Normalize price from string to number
+  if (plan8 && typeof plan8.price === "string") plan8.price = parseFloat(plan8.price);
+  if (plan5 && typeof plan5.price === "string") plan5.price = parseFloat(plan5.price);
+  return { plan8, plan5 };
+}
+
 // Shared helper to create coin purchase orders
 const createCoinOrder = async (
   coinPackId: number | string,
@@ -1645,35 +1715,141 @@ const CoinsPage = ({
 
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
 
+  // Membership state
+  const [membershipLoading, setMembershipLoading] = useState(true);
+  const [isMember, setIsMember] = useState(true);
+  const [weeklyPlan8, setWeeklyPlan8] = useState<SubscriptionPlan | null>(null);
+  const [weeklyPlan5, setWeeklyPlan5] = useState<SubscriptionPlan | null>(null);
+
+  // Membership check on mount — use URL param if provided, otherwise call API
   useEffect(() => {
-    if (quickRecharge || displayedPacks.length === 0) return;
+    if (!token) {
+      setMembershipLoading(false);
+      return;
+    }
 
-    const coin100Pack = displayedPacks.find(
-      (p) => p.product_id === TIMER_COIN_PRODUCT_ID,
-    );
-    if (!coin100Pack) return;
+    // If is_member is passed as a URL query param, use it directly (skip API call)
+    const isMemberParam = searchParams.get("is_member");
+    console.log("[CoinStore] is_member URL param:", isMemberParam, "| token present:", !!token, "| orgId:", organisationId);
+    if (isMemberParam !== null) {
+      const memberStatus = isMemberParam.toLowerCase() === "true" || isMemberParam === "1";
+      console.log("[CoinStore] Using URL param is_member:", memberStatus);
+      setIsMember(memberStatus);
 
-    setSelectedPackage((prev) => prev ?? coin100Pack);
+      if (!memberStatus) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
 
-    if (defaultPackSelectedRef.current || !pixelContext) return;
-    defaultPackSelectedRef.current = true;
+        fetchSubscriptionPlans(token, organisationId, controller.signal)
+          .then(({ plan8, plan5 }) => {
+            console.log("[CoinStore] Plans fetched:", { plan8, plan5 });
+            setWeeklyPlan8(plan8);
+            setWeeklyPlan5(plan5);
+          })
+          .catch((err) => {
+            console.error("[CoinStore] Plans fetch failed for non-member:", err);
+            // Plans fetch failed — still show non-member view, just without plan cards
+          })
+          .finally(() => {
+            clearTimeout(timeout);
+            setMembershipLoading(false);
+          });
 
-    const index = getCoinPackStoreIndex(
-      coin100Pack.id,
-      timerPack,
-      exclusiveDeals,
-      topPlans,
-    );
-    sendCoinPackSelected(pixelContext, coin100Pack, index, {
-      selected_by_default: true,
-    });
+        return () => {
+          controller.abort();
+          clearTimeout(timeout);
+        };
+      } else {
+        setMembershipLoading(false);
+      }
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    fetchMembershipStatus(token, organisationId, controller.signal)
+      .then(({ isMember: memberStatus }) => {
+        setIsMember(memberStatus);
+        if (!memberStatus) {
+          return fetchSubscriptionPlans(token, organisationId, controller.signal)
+            .then(({ plan8, plan5 }) => {
+              setWeeklyPlan8(plan8);
+              setWeeklyPlan5(plan5);
+            })
+            .catch(() => {
+              // Plans fetch failed → fall back to coin pack display
+              setIsMember(true);
+            });
+        }
+      })
+      .catch(() => {
+        // Membership check failed → treat as member
+        setIsMember(true);
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        setMembershipLoading(false);
+      });
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeout);
+    };
+  }, [token, organisationId]);
+
+  useEffect(() => {
+    if (membershipLoading || quickRecharge || displayedPacks.length === 0) return;
+
+    // For non-members, default select the ₹100 weekly plan (plan 10)
+    if (!isMember && weeklyPlan8) {
+      setSelectedPackage((prev: any) =>
+        prev ?? { id: weeklyPlan8.id, coins: 0, price: weeklyPlan8.price, name: weeklyPlan8.plan_name }
+      );
+
+      if (defaultPackSelectedRef.current || !pixelContext) return;
+      defaultPackSelectedRef.current = true;
+      sendCoinPackSelected(
+        pixelContext,
+        { id: weeklyPlan8.id, coins: weeklyPlan8.coin_value ?? 0, price: weeklyPlan8.price },
+        0,
+        { selected_by_default: true }
+      );
+      return;
+    }
+
+    // For members, default select the timer coin pack
+    if (isMember) {
+      const coin100Pack = displayedPacks.find(
+        (p) => p.product_id === TIMER_COIN_PRODUCT_ID,
+      );
+      if (!coin100Pack) return;
+
+      setSelectedPackage((prev: any) => prev ?? coin100Pack);
+
+      if (defaultPackSelectedRef.current || !pixelContext) return;
+      defaultPackSelectedRef.current = true;
+
+      const index = getCoinPackStoreIndex(
+        coin100Pack.id,
+        timerPack,
+        exclusiveDeals,
+        topPlans,
+      );
+      sendCoinPackSelected(pixelContext, coin100Pack, index, {
+        selected_by_default: true,
+      });
+    }
   }, [
+    membershipLoading,
     quickRecharge,
     displayedPacks,
     pixelContext,
     timerPack,
     exclusiveDeals,
     topPlans,
+    isMember,
+    weeklyPlan8,
   ]);
 
   const handlePackSelect = (pkg: any, index: number) => {
@@ -1728,6 +1904,14 @@ const CoinsPage = ({
     }
   };
 
+  if (membershipLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#000D26] md:hidden">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+      </div>
+    );
+  }
+
   if (coinPacksLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-brand-bg p-6">
@@ -1763,6 +1947,9 @@ const CoinsPage = ({
         selectedPackageId={selectedPackage?.id ?? null}
         onPackSelect={handlePackSelect}
         onRecharge={handleMobileRecharge}
+        isMember={isMember}
+        weeklyPlan8={weeklyPlan8}
+        weeklyPlan5={weeklyPlan5}
       />
 
       <div className="container mx-auto hidden px-4 pb-8 pt-12 md:block md:pb-20">

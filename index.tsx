@@ -2012,8 +2012,8 @@ const CoinsPage = ({
             }),
           );
         }
-        // Direct navigation — same approach as Subscriptions page
-        window.location.href = redirectUrl;
+        // Use openMandateRedirectUrl which handles upi:// → intent:// conversion
+        openMandateRedirectUrl(redirectUrl, targetApp);
         // Start polling for mandate status
         void pollMandateStatus(mandateData.id);
       } else {

@@ -1999,7 +1999,21 @@ const CoinsPage = ({
       const redirectUrl = resolveMandateRedirectUrl(mandateData);
       console.log("[CoinStore] Mandate redirect URL:", redirectUrl);
       if (redirectUrl) {
-        openMandateRedirectUrl(redirectUrl, targetApp);
+        // Post to React Native WebView if available (native app handles intent)
+        const w = window as Window & {
+          ReactNativeWebView?: { postMessage: (msg: string) => void };
+        };
+        if (w.ReactNativeWebView?.postMessage) {
+          w.ReactNativeWebView.postMessage(
+            JSON.stringify({
+              mandateId: String(mandateData.id),
+              status: mandateData.mandate_state,
+              redirectUrl,
+            }),
+          );
+        }
+        // Direct navigation — same approach as Subscriptions page
+        window.location.href = redirectUrl;
         // Start polling for mandate status
         void pollMandateStatus(mandateData.id);
       } else {

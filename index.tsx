@@ -64,6 +64,17 @@ import {
   appendPhonePeChromeWVParam,
   openPhonePeIframeCheckout,
 } from "./utils/phonePeIframeCheckout";
+import {
+  openMandateRedirectUrl,
+  resolveMandateRedirectUrl,
+} from "./utils/upiMandateLaunch";
+import {
+  fetchMandateStatus,
+  isMandateActive,
+  isMandateFailure,
+  isMandateInitiated,
+  MANDATE_STATUS_POLL_INTERVAL_MS,
+} from "./utils/mandateStatus";
 
 const { VITE_EASEBUZZ_KEY, VITE_EASEBUZZ_ENV } = (import.meta as any).env;
 const EASEBUZZ_KEY = VITE_EASEBUZZ_KEY;
@@ -1935,7 +1946,94 @@ const CoinsPage = ({
   }
 
   const handleMobileRecharge = () => {
-    if (selectedPackage) void handlePayClick(selectedPackage);
+    if (!selectedPackage) return;
+
+    // Subscription plans (IDs 9, 10) use mandate flow, not one-time coin purchase
+    const isSubscriptionPlan =
+      !isMember && (selectedPackage.id === 9 || selectedPackage.id === 10);
+
+    if (isSubscriptionPlan) {
+      void handleSubscriptionMandateInit(selectedPackage.id);
+    } else {
+      void handlePayClick(selectedPackage);
+    }
+  };
+
+  const handleSubscriptionMandateInit = async (planId: number) => {
+    if (!isLoggedIn) {
+      setShowLogin(true);
+      return;
+    }
+    try {
+      const authToken = headerSafeToken(token);
+      const r = await fetch(
+        `${HOST}/api/v1/monetization/subscriptions/mandate/initiate/`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+            "X-Organisation-ID": organisationId,
+          },
+          body: JSON.stringify({
+            plan_id: planId,
+            payment_instrument_type: "UPI_INTENT",
+            device_os: "ANDROID",
+            target_app: "com.phonepe.app",
+          }),
+        },
+      );
+      const data = await r.json();
+      if (!r.ok || !data.success || !data.data) {
+        const errMsg = data.error_message ?? "Failed to initiate subscription";
+        console.error("[CoinStore] Mandate initiation failed:", errMsg);
+        showPaymentStatusCallback?.("FAILED");
+        return;
+      }
+      const mandateData = data.data;
+      const redirectUrl = resolveMandateRedirectUrl(mandateData);
+      if (redirectUrl) {
+        openMandateRedirectUrl(redirectUrl, "com.phonepe.app");
+        // Start polling for mandate status
+        void pollMandateStatus(mandateData.id);
+      } else {
+        console.error("[CoinStore] No redirect URL in mandate response", mandateData);
+        showPaymentStatusCallback?.("FAILED");
+      }
+    } catch (e) {
+      console.error("[CoinStore] Mandate initiation error:", e);
+      showPaymentStatusCallback?.("FAILED");
+    }
+  };
+
+  const pollMandateStatus = async (mandateId: number) => {
+    const authToken = headerSafeToken(token);
+    for (let attempt = 0; attempt < 12; attempt++) {
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, MANDATE_STATUS_POLL_INTERVAL_MS),
+      );
+      try {
+        const result = await fetchMandateStatus({
+          host: HOST,
+          mandateId,
+          authToken,
+          organisationId,
+        });
+        if (isMandateActive(result.mandate_state)) {
+          showPaymentStatusCallback?.("SUCCESS");
+          return;
+        }
+        if (isMandateFailure(result.mandate_state)) {
+          showPaymentStatusCallback?.("FAILED");
+          return;
+        }
+        // Still INITIATED — keep polling
+      } catch {
+        // Transient error, keep polling
+      }
+    }
+    // Timed out
+    showPaymentStatusCallback?.("PENDING");
   };
 
   return (

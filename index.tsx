@@ -1946,11 +1946,13 @@ const CoinsPage = ({
   }
 
   const handleMobileRecharge = () => {
+    console.log("[CoinStore] handleMobileRecharge called, selectedPackage:", selectedPackage, "isMember:", isMember);
     if (!selectedPackage) return;
 
     // Subscription plans (IDs 9, 10) use mandate flow
     const isSubscriptionPlan =
       !isMember && (selectedPackage.id === 9 || selectedPackage.id === 10);
+    console.log("[CoinStore] isSubscriptionPlan:", isSubscriptionPlan, "selectedPackage.id:", selectedPackage.id);
 
     if (isSubscriptionPlan) {
       void handleSubscriptionMandateInit(selectedPackage.id);

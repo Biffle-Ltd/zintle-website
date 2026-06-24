@@ -1948,7 +1948,7 @@ const CoinsPage = ({
   const handleMobileRecharge = () => {
     if (!selectedPackage) return;
 
-    // Subscription plans (IDs 9, 10) use mandate flow, not one-time coin purchase
+    // Subscription plans (IDs 9, 10) use mandate flow
     const isSubscriptionPlan =
       !isMember && (selectedPackage.id === 9 || selectedPackage.id === 10);
 
@@ -1966,6 +1966,7 @@ const CoinsPage = ({
     }
     try {
       const authToken = headerSafeToken(token);
+      const targetApp = new URLSearchParams(location.search).get("target_app") || "com.phonepe.app";
       const r = await fetch(
         `${HOST}/api/v1/monetization/subscriptions/mandate/initiate/`,
         {
@@ -1979,11 +1980,13 @@ const CoinsPage = ({
             plan_id: planId,
             payment_instrument_type: "UPI_INTENT",
             device_os: "ANDROID",
-            target_app: "com.phonepe.app",
+            target_app: targetApp,
           }),
         },
       );
       const data = await r.json();
+      console.log("[CoinStore] Mandate initiate response:", data);
+
       if (!r.ok || !data.success || !data.data) {
         const errMsg = data.error_message ?? "Failed to initiate subscription";
         console.error("[CoinStore] Mandate initiation failed:", errMsg);
@@ -1992,8 +1995,9 @@ const CoinsPage = ({
       }
       const mandateData = data.data;
       const redirectUrl = resolveMandateRedirectUrl(mandateData);
+      console.log("[CoinStore] Mandate redirect URL:", redirectUrl);
       if (redirectUrl) {
-        openMandateRedirectUrl(redirectUrl, "com.phonepe.app");
+        openMandateRedirectUrl(redirectUrl, targetApp);
         // Start polling for mandate status
         void pollMandateStatus(mandateData.id);
       } else {

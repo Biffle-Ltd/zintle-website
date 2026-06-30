@@ -23,13 +23,20 @@ import { PaymentStatus } from "./pages/PaymentStatus";
 import { PaymentStatusPopup } from "./components/PaymentStatusPopup";
 import { PhoneOtpLoginScreen } from "./components/PhoneOtpLoginScreen";
 import { QuickRechargePopup } from "./components/QuickRechargePopup";
+import { QuickRechargePopupBiffle } from "./components/QuickRechargePopupBiffle";
 import {
   CoinStoreMobile,
   getCoinPackStoreIndex,
   resolveTimerPack,
   TIMER_COIN_PRODUCT_ID,
 } from "./components/CoinStoreMobile";
+import { CoinStoreMobileBiffle } from "./components/CoinStoreMobileBiffle";
+import { campaignCtaGradientStyle } from "./components/CampaignCta";
 import { COIN_ICON_CLASS, ZintleCoinIcon } from "./components/ZintleCoinIcon";
+import {
+  BIFFLE_COIN_ICON_CLASS,
+  BiffleCoinIcon,
+} from "./components/BiffleCoinIcon";
 import {
   isQuickRechargeFromSearch,
   parseCoinPixelContext,
@@ -46,7 +53,9 @@ import { headerSafeToken } from "./utils/headerSafeToken";
 import {
   DEFAULT_ORGANISATION_ID,
   getOrganisationIdFromSearch,
+  getWeeklySubscriptionPlanIds,
   isBiffleOrganisationId,
+  isWeeklySubscriptionPlanId,
 } from "./utils/organisationIdFromUrl";
 import {
   ZINTLE_POST_LOGIN_REDIRECT_KEY,
@@ -169,8 +178,10 @@ async function fetchSubscriptionPlans(
   signal?: AbortSignal
 ): Promise<{ plan8: SubscriptionPlan | null; plan5: SubscriptionPlan | null }> {
   const jwtToken = headerSafeToken(token);
+  const { premiumPlanId, basicPlanId } =
+    getWeeklySubscriptionPlanIds(organisationId);
   const response = await fetch(
-    `${HOST}/api/v1/monetization/plans/details/?plan_ids=10,9`,
+    `${HOST}/api/v1/monetization/plans/details/?plan_ids=${premiumPlanId},${basicPlanId}`,
     {
       method: "GET",
       headers: {
@@ -184,8 +195,10 @@ async function fetchSubscriptionPlans(
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const json = await response.json();
   const plans: any[] = json?.data?.plans ?? [];
-  const plan8 = plans.find((p: any) => p.id === 10) ?? null;
-  const plan5 = plans.find((p: any) => p.id === 9) ?? null;
+  const plan8 =
+    plans.find((p: any) => Number(p.id) === premiumPlanId) ?? null;
+  const plan5 =
+    plans.find((p: any) => Number(p.id) === basicPlanId) ?? null;
   // Normalize price from string to number
   if (plan8 && typeof plan8.price === "string") plan8.price = parseFloat(plan8.price);
   if (plan5 && typeof plan5.price === "string") plan5.price = parseFloat(plan5.price);
@@ -1671,6 +1684,7 @@ const CoinsPage = ({
   coinPacksLoading: boolean;
   organisationId?: string;
 }) => {
+  const isBiffle = isBiffleOrganisationId(organisationId);
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const tokenFromQuery = searchParams.get("id");
@@ -1810,7 +1824,25 @@ const CoinsPage = ({
   }, [token, organisationId]);
 
   useEffect(() => {
-    if (membershipLoading || quickRecharge || displayedPacks.length === 0) return;
+    if (membershipLoading || displayedPacks.length === 0) return;
+
+    if (quickRecharge) {
+      if (!isMember && weeklyPlan8) {
+        setSelectedPackage((prev: any) =>
+          prev ?? {
+            id: weeklyPlan8.id,
+            coins: 0,
+            price: weeklyPlan8.price,
+            name: weeklyPlan8.plan_name,
+          },
+        );
+      } else if (isMember && timerPack) {
+        setSelectedPackage((prev: any) => prev ?? timerPack);
+      } else if (displayedPacks[0]) {
+        setSelectedPackage((prev: any) => prev ?? displayedPacks[0]);
+      }
+      return;
+    }
 
     // For non-members, default select the ₹100 weekly plan (plan 10)
     if (!isMember && weeklyPlan8) {
@@ -1917,16 +1949,24 @@ const CoinsPage = ({
 
   if (membershipLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#000D26] md:hidden">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+      <div
+        className={`flex min-h-screen items-center justify-center md:hidden ${isBiffle ? "bg-[#F5F5F5]" : "bg-[#000D26]"}`}
+      >
+        <div
+          className={`h-8 w-8 animate-spin rounded-full border-2 ${isBiffle ? "border-gray-300 border-t-violet-600" : "border-white/20 border-t-white"}`}
+        />
       </div>
     );
   }
 
   if (coinPacksLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-brand-bg p-6">
-        <div className="flex items-center gap-2 text-sm text-brand-muted">
+      <div
+        className={`flex min-h-screen items-center justify-center p-6 ${isBiffle ? "bg-[#F5F5F5]" : "bg-brand-bg"}`}
+      >
+        <div
+          className={`flex items-center gap-2 text-sm ${isBiffle ? "text-gray-500" : "text-brand-muted"}`}
+        >
           <i className="fa-solid fa-spinner fa-spin" aria-hidden />
           Loading coin packs…
         </div>
@@ -1934,24 +1974,14 @@ const CoinsPage = ({
     );
   }
 
-  if (quickRecharge) {
-    return (
-      <QuickRechargePopup
-        packs={displayedPacks}
-        selectedPackageId={selectedPackage?.id ?? null}
-        onPackSelect={handlePackSelect}
-        onPackPay={handleQuickRechargePay}
-      />
-    );
-  }
-
   const handleMobileRecharge = () => {
     console.log("[CoinStore] handleMobileRecharge called, selectedPackage:", selectedPackage, "isMember:", isMember);
     if (!selectedPackage) return;
 
-    // Subscription plans (IDs 9, 10) use mandate flow
+    // Subscription weekly plans use mandate flow (org-specific plan IDs)
     const isSubscriptionPlan =
-      !isMember && (selectedPackage.id === 9 || selectedPackage.id === 10);
+      !isMember &&
+      isWeeklySubscriptionPlanId(selectedPackage.id, organisationId);
     console.log("[CoinStore] isSubscriptionPlan:", isSubscriptionPlan, "selectedPackage.id:", selectedPackage.id);
 
     if (isSubscriptionPlan) {
@@ -2056,61 +2086,131 @@ const CoinsPage = ({
     showPaymentStatusCallback?.("PENDING");
   };
 
-  return (
-    <div className="bg-brand-bg md:min-h-screen md:pb-8">
-      <CoinStoreMobile
-        timerPack={timerPack}
-        exclusiveDeals={exclusiveDeals}
-        topPlans={topPlans}
+  if (quickRecharge) {
+    const popup = isBiffle ? (
+      <QuickRechargePopupBiffle
+        packs={displayedPacks}
         selectedPackageId={selectedPackage?.id ?? null}
         onPackSelect={handlePackSelect}
-        onRecharge={handleMobileRecharge}
+        onContinue={handleMobileRecharge}
         isMember={isMember}
         weeklyPlan8={weeklyPlan8}
         weeklyPlan5={weeklyPlan5}
+        timerPack={timerPack}
       />
+    ) : (
+      <QuickRechargePopup
+        packs={displayedPacks}
+        selectedPackageId={selectedPackage?.id ?? null}
+        onPackSelect={handlePackSelect}
+        onPackPay={handleQuickRechargePay}
+      />
+    );
+
+    return (
+      <div className="fixed inset-x-0 bottom-0 z-50">{popup}</div>
+    );
+  }
+
+  const coinStoreMobileProps = {
+    timerPack,
+    exclusiveDeals,
+    topPlans,
+    selectedPackageId: selectedPackage?.id ?? null,
+    onPackSelect: handlePackSelect,
+    onRecharge: handleMobileRecharge,
+    isMember,
+    weeklyPlan8,
+    weeklyPlan5,
+  };
+
+  return (
+    <div
+      className={`md:min-h-screen md:pb-8 ${isBiffle ? "bg-[#F5F5F5]" : "bg-brand-bg"}`}
+    >
+      {isBiffle ? (
+        <CoinStoreMobileBiffle {...coinStoreMobileProps} />
+      ) : (
+        <CoinStoreMobile {...coinStoreMobileProps} />
+      )}
 
       <div className="container mx-auto hidden px-4 pb-8 pt-12 md:block md:pb-20">
-        <h2 className="mb-12 text-center text-3xl font-bold text-white">
+        <h2
+          className={`mb-12 text-center text-3xl font-bold ${isBiffle ? "text-gray-900" : "text-white"}`}
+        >
           Coin Packages
         </h2>
 
-        {/* Desktop: Grid layout (same as CoinSection) */}
-        <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
-          {displayedPacks.map((pkg, i) => (
-            <div
-              key={i}
-              className={`relative glass-card rounded-3xl p-6 text-center transition-transform hover:-translate-y-1 ${
-                pkg.highlight
-                  ? "border-2 border-brand-gold shadow-[0_0_20px_rgba(255,215,0,0.3)]"
-                  : "hover:bg-white/5"
-              }`}
-            >
-              {pkg.tag && (
-                <span
-                  className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold px-3 py-1 rounded-full ${
-                    pkg.highlight
-                      ? "bg-brand-gold text-black"
-                      : "text-green-600 bg-green-100"
-                  }`}
-                >
-                  {pkg.tag}
-                </span>
-              )}
-              <h3 className="mb-4 flex items-center justify-center gap-2 text-xl font-bold leading-none text-white">
-                <ZintleCoinIcon className={COIN_ICON_CLASS} />
-                <span>{pkg.coins} Coins</span>
-              </h3>
-              <p className="text-2xl font-bold text-white mb-6">₹{pkg.price}</p>
-              <button
-                onClick={() => handleDesktopRecharge(pkg, i)}
-                className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20"
+        {isBiffle ? (
+          <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+            {displayedPacks.map((pkg, i) => (
+              <div
+                key={i}
+                className={`relative rounded-3xl border bg-white p-6 text-center transition-transform hover:-translate-y-1 ${
+                  pkg.highlight
+                    ? "border-2 border-[#FACC15] shadow-md"
+                    : "border-gray-200 hover:shadow-md"
+                }`}
               >
-                {isLoggedIn ? "Recharge" : "Login"}
-              </button>
-            </div>
-          ))}
-        </div>
+                {pkg.tag && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-violet-600 px-3 py-1 text-xs font-bold text-white">
+                    {pkg.tag}
+                  </span>
+                )}
+                <h3 className="mb-4 flex items-center justify-center gap-2 text-xl font-bold leading-none text-gray-900">
+                  <BiffleCoinIcon className={BIFFLE_COIN_ICON_CLASS} />
+                  <span>{pkg.coins} Coins</span>
+                </h3>
+                <p className="mb-6 text-2xl font-bold text-gray-900">
+                  ₹{pkg.price}
+                </p>
+                <button
+                  onClick={() => handleDesktopRecharge(pkg, i)}
+                  className="w-full rounded-xl py-3 font-bold text-white transition-opacity hover:opacity-90"
+                  style={campaignCtaGradientStyle(true)}
+                >
+                  {isLoggedIn ? "Pay" : "Login"}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+            {displayedPacks.map((pkg, i) => (
+              <div
+                key={i}
+                className={`relative glass-card rounded-3xl p-6 text-center transition-transform hover:-translate-y-1 ${
+                  pkg.highlight
+                    ? "border-2 border-brand-gold shadow-[0_0_20px_rgba(255,215,0,0.3)]"
+                    : "hover:bg-white/5"
+                }`}
+              >
+                {pkg.tag && (
+                  <span
+                    className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold px-3 py-1 rounded-full ${
+                      pkg.highlight
+                        ? "bg-brand-gold text-black"
+                        : "text-green-600 bg-green-100"
+                    }`}
+                  >
+                    {pkg.tag}
+                  </span>
+                )}
+                <h3 className="mb-4 flex items-center justify-center gap-2 text-xl font-bold leading-none text-white">
+                  <ZintleCoinIcon className={COIN_ICON_CLASS} />
+                  <span>{pkg.coins} Coins</span>
+                </h3>
+                <p className="text-2xl font-bold text-white mb-6">₹{pkg.price}</p>
+                <button
+                  onClick={() => handleDesktopRecharge(pkg, i)}
+                  className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20"
+                >
+                  {isLoggedIn ? "Recharge" : "Login"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2493,7 +2593,7 @@ const Layout = () => {
         isCampaignPage
           ? "h-dvh max-h-dvh overflow-hidden"
           : isQuickRechargeCoinsPage
-            ? "h-auto min-h-0 bg-transparent"
+            ? "min-h-dvh bg-transparent"
             : isCoinsPage
               ? ""
               : "min-h-screen"

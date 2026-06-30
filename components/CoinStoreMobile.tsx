@@ -97,8 +97,8 @@ type CoinStoreMobileProps = {
   onPackSelect: (pkg: CoinStorePack, index: number) => void;
   onRecharge: () => void;
   isMember: boolean;
-  weeklyPlan8: SubscriptionPlan | null;
-  weeklyPlan5: SubscriptionPlan | null;
+  featuredWeeklyPlan: SubscriptionPlan | null;
+  basicWeeklyPlan: SubscriptionPlan | null;
 };
 
 function LimitedOfferCard({
@@ -397,8 +397,8 @@ export const CoinStoreMobile = ({
   onPackSelect,
   onRecharge,
   isMember,
-  weeklyPlan8,
-  weeklyPlan5,
+  featuredWeeklyPlan,
+  basicWeeklyPlan,
 }: CoinStoreMobileProps) => {
   const indexedPacks = useMemo(() => {
     const rows: {
@@ -420,7 +420,7 @@ export const CoinStoreMobile = ({
   return (
     <div className="flex flex-col bg-[#000D26] md:hidden">
       <main className="space-y-6 px-4 pt-4 pb-32">
-        {/* Limited Offer slot — member: timer card, non-member: plan 8 card */}
+        {/* Limited Offer slot — member: timer card, non-member: featured weekly plan */}
         {isMember && indexedPacks.some((r) => r.kind === "timer") && timerPack && (
           <LimitedOfferCard
             pack={timerPack}
@@ -432,13 +432,18 @@ export const CoinStoreMobile = ({
             index={0}
           />
         )}
-        {!isMember && weeklyPlan8 && (
+        {!isMember && featuredWeeklyPlan && (
           <WeeklyPlanLimitedOfferCard
-            plan={weeklyPlan8}
-            selected={selectedPackageId === weeklyPlan8.id}
+            plan={featuredWeeklyPlan}
+            selected={selectedPackageId === featuredWeeklyPlan.id}
             onSelect={() =>
               onPackSelect(
-                { id: weeklyPlan8.id, coins: 0, price: weeklyPlan8.price, name: weeklyPlan8.plan_name },
+                {
+                  id: featuredWeeklyPlan.id,
+                  coins: 0,
+                  price: featuredWeeklyPlan.price,
+                  name: featuredWeeklyPlan.plan_name,
+                },
                 0
               )
             }
@@ -446,16 +451,21 @@ export const CoinStoreMobile = ({
         )}
 
         {/* Weekly Plans section — non-members only, above Exclusive Deals */}
-        {!isMember && weeklyPlan5 && (
+        {!isMember && basicWeeklyPlan && (
           <section>
             <h2 className="mb-3 text-base font-bold text-white">Weekly Plans</h2>
             <div className="space-y-3">
               <WeeklyPlanCard
-                plan={weeklyPlan5}
-                selected={selectedPackageId === weeklyPlan5.id}
+                plan={basicWeeklyPlan}
+                selected={selectedPackageId === basicWeeklyPlan.id}
                 onSelect={() =>
                   onPackSelect(
-                    { id: weeklyPlan5.id, coins: 0, price: weeklyPlan5.price, name: weeklyPlan5.plan_name },
+                    {
+                      id: basicWeeklyPlan.id,
+                      coins: 0,
+                      price: basicWeeklyPlan.price,
+                      name: basicWeeklyPlan.plan_name,
+                    },
                     1
                   )
                 }
@@ -464,10 +474,10 @@ export const CoinStoreMobile = ({
           </section>
         )}
 
-        {/* Exclusive Deals — always shown, but hide ₹29 pack when non-member weekly plan is displayed */}
+        {/* Exclusive Deals — hide coin pack matching basic weekly plan price for non-members */}
         {(() => {
-          const filteredDeals = !isMember && weeklyPlan5
-            ? exclusiveDeals.filter((p) => p.price !== weeklyPlan5.price)
+          const filteredDeals = !isMember && basicWeeklyPlan
+            ? exclusiveDeals.filter((p) => p.price !== basicWeeklyPlan.price)
             : exclusiveDeals;
           return filteredDeals.length > 0 && (
             <section>

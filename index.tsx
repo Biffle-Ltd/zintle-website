@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -144,7 +150,7 @@ type MembershipStatusResult = {
 async function fetchMembershipStatus(
   token: string,
   organisationId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<MembershipStatusResult> {
   const jwtToken = headerSafeToken(token);
   const response = await fetch(
@@ -157,7 +163,7 @@ async function fetchMembershipStatus(
         "X-Organisation-ID": organisationId,
       },
       signal,
-    }
+    },
   );
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const json = await response.json();
@@ -1759,9 +1765,7 @@ const CoinsPage = ({
   );
   const topPlans = useMemo(
     () =>
-      displayedPacks.filter(
-        (p) => !p.is_micropack && p.id !== timerPack?.id,
-      ),
+      displayedPacks.filter((p) => !p.is_micropack && p.id !== timerPack?.id),
     [displayedPacks, timerPack],
   );
   const storeViewedSentRef = useRef(false);
@@ -1806,9 +1810,17 @@ const CoinsPage = ({
 
     // If is_member is passed as a URL query param, use it directly (skip API call)
     const isMemberParam = searchParams.get("is_member");
-    console.log("[CoinStore] is_member URL param:", isMemberParam, "| token present:", !!token, "| orgId:", organisationId);
+    console.log(
+      "[CoinStore] is_member URL param:",
+      isMemberParam,
+      "| token present:",
+      !!token,
+      "| orgId:",
+      organisationId,
+    );
     if (isMemberParam !== null) {
-      const memberStatus = isMemberParam.toLowerCase() === "true" || isMemberParam === "1";
+      const memberStatus =
+        isMemberParam.toLowerCase() === "true" || isMemberParam === "1";
       console.log("[CoinStore] Using URL param is_member:", memberStatus);
       setIsMember(memberStatus);
 
@@ -1829,7 +1841,10 @@ const CoinsPage = ({
             },
           )
           .catch((err) => {
-            console.error("[CoinStore] Plans fetch failed for non-member:", err);
+            console.error(
+              "[CoinStore] Plans fetch failed for non-member:",
+              err,
+            );
             // Plans fetch failed — still show non-member view, just without plan cards
           })
           .finally(() => {
@@ -1854,9 +1869,17 @@ const CoinsPage = ({
       .then(({ isMember: memberStatus }) => {
         setIsMember(memberStatus);
         if (!memberStatus) {
-          return fetchSubscriptionPlans(token, organisationId, controller.signal)
+          return fetchSubscriptionPlans(
+            token,
+            organisationId,
+            controller.signal,
+          )
             .then(
-              ({ featuredWeeklyPlan, basicWeeklyPlan, subscriptionPlanIds }) => {
+              ({
+                featuredWeeklyPlan,
+                basicWeeklyPlan,
+                subscriptionPlanIds,
+              }) => {
                 setFeaturedWeeklyPlan(featuredWeeklyPlan);
                 setBasicWeeklyPlan(basicWeeklyPlan);
                 setSubscriptionPlanIds(subscriptionPlanIds);
@@ -1888,13 +1911,14 @@ const CoinsPage = ({
 
     if (quickRecharge) {
       if (!isMember && featuredWeeklyPlan) {
-        setSelectedPackage((prev: any) =>
-          prev ?? {
-            id: featuredWeeklyPlan.id,
-            coins: 0,
-            price: featuredWeeklyPlan.price,
-            name: featuredWeeklyPlan.plan_name,
-          },
+        setSelectedPackage(
+          (prev: any) =>
+            prev ?? {
+              id: featuredWeeklyPlan.id,
+              coins: 0,
+              price: featuredWeeklyPlan.price,
+              name: featuredWeeklyPlan.plan_name,
+            },
         );
       } else if (isMember && timerPack) {
         setSelectedPackage((prev: any) => prev ?? timerPack);
@@ -1906,13 +1930,14 @@ const CoinsPage = ({
 
     // For non-members, default select the featured weekly plan
     if (!isMember && featuredWeeklyPlan) {
-      setSelectedPackage((prev: any) =>
-        prev ?? {
-          id: featuredWeeklyPlan.id,
-          coins: 0,
-          price: featuredWeeklyPlan.price,
-          name: featuredWeeklyPlan.plan_name,
-        },
+      setSelectedPackage(
+        (prev: any) =>
+          prev ?? {
+            id: featuredWeeklyPlan.id,
+            coins: 0,
+            price: featuredWeeklyPlan.price,
+            name: featuredWeeklyPlan.plan_name,
+          },
       );
 
       if (defaultPackSelectedRef.current || !pixelContext) return;
@@ -2050,13 +2075,23 @@ const CoinsPage = ({
   }
 
   const handleMobileRecharge = () => {
-    console.log("[CoinStore] handleMobileRecharge called, selectedPackage:", selectedPackage, "isMember:", isMember);
+    console.log(
+      "[CoinStore] handleMobileRecharge called, selectedPackage:",
+      selectedPackage,
+      "isMember:",
+      isMember,
+    );
     if (!selectedPackage) return;
 
     // Subscription plans from the plans API use mandate flow
     const isSubscriptionPlan =
       !isMember && subscriptionPlanIds.includes(selectedPackage.id);
-    console.log("[CoinStore] isSubscriptionPlan:", isSubscriptionPlan, "selectedPackage.id:", selectedPackage.id);
+    console.log(
+      "[CoinStore] isSubscriptionPlan:",
+      isSubscriptionPlan,
+      "selectedPackage.id:",
+      selectedPackage.id,
+    );
 
     if (isSubscriptionPlan) {
       void handleSubscriptionMandateInit(selectedPackage.id);
@@ -2072,7 +2107,9 @@ const CoinsPage = ({
     }
     try {
       const authToken = headerSafeToken(token);
-      const targetApp = new URLSearchParams(location.search).get("target_app") || "com.phonepe.app";
+      const targetApp =
+        new URLSearchParams(location.search).get("target_app") ||
+        "com.phonepe.app";
       const r = await fetch(
         `${HOST}/api/v1/monetization/subscriptions/mandate/initiate/`,
         {
@@ -2121,7 +2158,10 @@ const CoinsPage = ({
         // Start polling for mandate status
         void pollMandateStatus(mandateData.id);
       } else {
-        console.error("[CoinStore] No redirect URL in mandate response", mandateData);
+        console.error(
+          "[CoinStore] No redirect URL in mandate response",
+          mandateData,
+        );
         showPaymentStatusCallback?.("FAILED");
       }
     } catch (e) {
@@ -2185,9 +2225,7 @@ const CoinsPage = ({
       />
     );
 
-    return (
-      <div className="fixed inset-x-0 bottom-0 z-50">{popup}</div>
-    );
+    return <div className="fixed inset-x-0 bottom-0 z-50">{popup}</div>;
   }
 
   const coinStoreMobileProps = {
@@ -2278,7 +2316,9 @@ const CoinsPage = ({
                   <ZintleCoinIcon className={COIN_ICON_CLASS} />
                   <span>{pkg.coins} Coins</span>
                 </h3>
-                <p className="text-2xl font-bold text-white mb-6">₹{pkg.price}</p>
+                <p className="text-2xl font-bold text-white mb-6">
+                  ₹{pkg.price}
+                </p>
                 <button
                   onClick={() => handleDesktopRecharge(pkg, i)}
                   className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20"

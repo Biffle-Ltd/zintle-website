@@ -1985,11 +1985,6 @@ const CoinsPage = ({
     await handlePayClick(pkg);
   };
 
-  const handleQuickRechargePay = async (pkg: any, index: number) => {
-    handlePackSelect(pkg, index);
-    await handlePayClick(pkg);
-  };
-
   const handlePayClick = async (pkg?: any) => {
     const packageToUse = pkg;
     if (!packageToUse) return;
@@ -2182,7 +2177,11 @@ const CoinsPage = ({
         packs={displayedPacks}
         selectedPackageId={selectedPackage?.id ?? null}
         onPackSelect={handlePackSelect}
-        onPackPay={handleQuickRechargePay}
+        onContinue={handleMobileRecharge}
+        isMember={isMember}
+        featuredWeeklyPlan={featuredWeeklyPlan}
+        basicWeeklyPlan={basicWeeklyPlan}
+        timerPack={timerPack}
       />
     );
 

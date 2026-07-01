@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -103,6 +103,11 @@ export const setPaymentStatusCallback = (
   callback: (status: string) => void,
 ) => {
   showPaymentStatusCallback = callback;
+};
+
+let refreshCoinPacksCallback: (() => void) | null = null;
+export const setRefreshCoinPacksCallback = (callback: (() => void) | null) => {
+  refreshCoinPacksCallback = callback;
 };
 
 type LastTrackedCoinPurchase = {
@@ -378,6 +383,10 @@ const validateCoinPackPayment = async (
         lastTrackedCoinPurchaseRef = null;
       }
       // PENDING / INITIATED: keep ref so post-checkout polling can fire success/failed.
+    }
+
+    if (paymentStatus === "SUCCESS") {
+      refreshCoinPacksCallback?.();
     }
 
     if (paymentStatus) {
@@ -1955,6 +1964,17 @@ const CoinsPage = ({
     featuredWeeklyPlan,
   ]);
 
+  useEffect(() => {
+    if (!selectedPackage?.id) return;
+    if (subscriptionPlanIds.includes(selectedPackage.id)) return;
+    const packStillAvailable = displayedPacks.some(
+      (p) => p.id === selectedPackage.id,
+    );
+    if (!packStillAvailable) {
+      setSelectedPackage(null);
+    }
+  }, [displayedPacks, selectedPackage, subscriptionPlanIds]);
+
   const handlePackSelect = (pkg: any, index: number) => {
     setSelectedPackage(pkg);
     sendCoinPackSelected(pixelContext, pkg, index);
@@ -2554,6 +2574,32 @@ const mapCoinPack = (p: any) => ({
   highlight: p.isBonusPack || false,
 });
 
+async function fetchCoinPackDetails(
+  organisationId: string,
+  search: string,
+): Promise<any[]> {
+  const searchParams = new URLSearchParams(search);
+  const tokenFromQuery = searchParams.get("id");
+  const rawToken = tokenFromQuery || getJwtFromStorage(organisationId);
+  const jwtToken = headerSafeToken(rawToken);
+  const r = await fetch(
+    `${HOST}/api/v1.2/creator_center/details/get-coin-pack-details/`,
+    {
+      headers: {
+        ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
+        "X-Organisation-ID": organisationId,
+      },
+    },
+  );
+  const data = await r.json();
+  if (data.success && Array.isArray(data.data)) {
+    return data.data
+      .filter((p: any) => p.is_active)
+      .map((p: any) => mapCoinPack(p));
+  }
+  return [];
+}
+
 const Layout = () => {
   const location = useLocation();
   const organisationId = useMemo(
@@ -2579,48 +2625,38 @@ const Layout = () => {
     sendMetaPixelPageView(organisationId);
   }, [organisationId, location.pathname]);
 
+  const loadCoinPacks = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!options?.silent) setCoinPacksLoading(true);
+      try {
+        const packs = await fetchCoinPackDetails(
+          organisationId,
+          location.search,
+        );
+        setCoinPacks(packs);
+      } catch {
+        if (!options?.silent) setCoinPacks([]);
+      } finally {
+        if (!options?.silent) setCoinPacksLoading(false);
+      }
+    },
+    [organisationId, location.search],
+  );
+
   // Fetch coin packs on mount/when logged in changes
   useEffect(() => {
-    let cancelled = false;
+    void loadCoinPacks();
+  }, [isLoggedIn, loadCoinPacks]);
 
-    const fetchPacks = async () => {
-      setCoinPacksLoading(true);
-      try {
-        const searchParams = new URLSearchParams(location.search);
-        const tokenFromQuery = searchParams.get("id");
-        const rawToken = tokenFromQuery || getJwtFromStorage(organisationId);
-        const jwtToken = headerSafeToken(rawToken);
-        const r = await fetch(
-          `${HOST}/api/v1.2/creator_center/details/get-coin-pack-details/`,
-          {
-            headers: {
-              ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
-              "X-Organisation-ID": organisationId,
-            },
-          },
-        );
-        const data = await r.json();
-        if (cancelled) return;
-        if (data.success && Array.isArray(data.data)) {
-          setCoinPacks(
-            data.data
-              .filter((p: any) => p.is_active)
-              .map((p: any) => mapCoinPack(p)),
-          );
-        } else {
-          setCoinPacks([]);
-        }
-      } catch {
-        if (!cancelled) setCoinPacks([]);
-      } finally {
-        if (!cancelled) setCoinPacksLoading(false);
-      }
-    };
-    void fetchPacks();
+  // Refresh coin packs after a successful purchase (e.g. one-time packs)
+  useEffect(() => {
+    setRefreshCoinPacksCallback(() => {
+      void loadCoinPacks({ silent: true });
+    });
     return () => {
-      cancelled = true;
+      setRefreshCoinPacksCallback(null);
     };
-  }, [isLoggedIn, organisationId, location.search]);
+  }, [loadCoinPacks]);
 
   // Check JWT changes after CoinStore closes
   useEffect(() => {

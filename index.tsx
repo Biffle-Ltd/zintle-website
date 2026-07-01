@@ -29,6 +29,7 @@ import {
   getCoinPackStoreIndex,
   resolveTimerPack,
   TIMER_COIN_PRODUCT_ID,
+  type SubscriptionPlan,
 } from "./components/CoinStoreMobile";
 import { CoinStoreMobileBiffle } from "./components/CoinStoreMobileBiffle";
 import { campaignCtaGradientStyle } from "./components/CampaignCta";
@@ -53,9 +54,7 @@ import { headerSafeToken } from "./utils/headerSafeToken";
 import {
   DEFAULT_ORGANISATION_ID,
   getOrganisationIdFromSearch,
-  getWeeklySubscriptionPlanIds,
   isBiffleOrganisationId,
-  isWeeklySubscriptionPlanId,
 } from "./utils/organisationIdFromUrl";
 import {
   ZINTLE_POST_LOGIN_REDIRECT_KEY,
@@ -162,26 +161,64 @@ async function fetchMembershipStatus(
 
 // --- Subscription plans fetch helper ---
 
-export type SubscriptionPlan = {
-  id: number;
-  plan_name: string;
-  plan_description?: string;
-  price: number;
-  plan_duration: number;
-  coin_value?: number;
-  subscription_id?: string;
+type CoinStoreSubscriptionPlans = {
+  featuredWeeklyPlan: SubscriptionPlan | null;
+  basicWeeklyPlan: SubscriptionPlan | null;
+  subscriptionPlanIds: number[];
 };
+
+function normalizeSubscriptionPlan(raw: unknown): SubscriptionPlan | null {
+  if (!raw || typeof raw !== "object") return null;
+  const plan = raw as Record<string, unknown>;
+  const id = typeof plan.id === "number" ? plan.id : null;
+  if (id == null) return null;
+
+  const priceRaw = plan.price;
+  const price =
+    typeof priceRaw === "number"
+      ? priceRaw
+      : typeof priceRaw === "string"
+        ? parseFloat(priceRaw)
+        : NaN;
+  if (!Number.isFinite(price)) return null;
+
+  return {
+    id,
+    plan_name: String(plan.plan_name ?? ""),
+    plan_description:
+      typeof plan.plan_description === "string"
+        ? plan.plan_description
+        : undefined,
+    price,
+    plan_duration:
+      typeof plan.plan_duration === "number" ? plan.plan_duration : 0,
+    coin_value:
+      typeof plan.coin_value === "number" ? plan.coin_value : undefined,
+    subscription_id:
+      typeof plan.subscription_id === "string"
+        ? plan.subscription_id
+        : undefined,
+  };
+}
+
+function partitionCoinStoreSubscriptionPlans(
+  plans: SubscriptionPlan[],
+): Pick<CoinStoreSubscriptionPlans, "featuredWeeklyPlan" | "basicWeeklyPlan"> {
+  const sorted = [...plans].sort((a, b) => b.price - a.price);
+  return {
+    featuredWeeklyPlan: sorted[0] ?? null,
+    basicWeeklyPlan: sorted[1] ?? null,
+  };
+}
 
 async function fetchSubscriptionPlans(
   token: string,
   organisationId: string,
-  signal?: AbortSignal
-): Promise<{ plan8: SubscriptionPlan | null; plan5: SubscriptionPlan | null }> {
+  signal?: AbortSignal,
+): Promise<CoinStoreSubscriptionPlans> {
   const jwtToken = headerSafeToken(token);
-  const { premiumPlanId, basicPlanId } =
-    getWeeklySubscriptionPlanIds(organisationId);
   const response = await fetch(
-    `${HOST}/api/v1/monetization/plans/details/?plan_ids=${premiumPlanId},${basicPlanId}`,
+    `${HOST}/api/v1/monetization/plans/subscription-packs/`,
     {
       method: "GET",
       headers: {
@@ -190,19 +227,21 @@ async function fetchSubscriptionPlans(
         "X-Organisation-ID": organisationId,
       },
       signal,
-    }
+    },
   );
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const json = await response.json();
-  const plans: any[] = json?.data?.plans ?? [];
-  const plan8 =
-    plans.find((p: any) => Number(p.id) === premiumPlanId) ?? null;
-  const plan5 =
-    plans.find((p: any) => Number(p.id) === basicPlanId) ?? null;
-  // Normalize price from string to number
-  if (plan8 && typeof plan8.price === "string") plan8.price = parseFloat(plan8.price);
-  if (plan5 && typeof plan5.price === "string") plan5.price = parseFloat(plan5.price);
-  return { plan8, plan5 };
+  const rawPlans: unknown[] = json?.data?.plans ?? [];
+  const plans = rawPlans
+    .map(normalizeSubscriptionPlan)
+    .filter((plan): plan is SubscriptionPlan => plan != null);
+  const { featuredWeeklyPlan, basicWeeklyPlan } =
+    partitionCoinStoreSubscriptionPlans(plans);
+  return {
+    featuredWeeklyPlan,
+    basicWeeklyPlan,
+    subscriptionPlanIds: plans.map((plan) => plan.id),
+  };
 }
 
 // Shared helper to create coin purchase orders
@@ -1743,8 +1782,11 @@ const CoinsPage = ({
   // Membership state
   const [membershipLoading, setMembershipLoading] = useState(true);
   const [isMember, setIsMember] = useState(true);
-  const [weeklyPlan8, setWeeklyPlan8] = useState<SubscriptionPlan | null>(null);
-  const [weeklyPlan5, setWeeklyPlan5] = useState<SubscriptionPlan | null>(null);
+  const [featuredWeeklyPlan, setFeaturedWeeklyPlan] =
+    useState<SubscriptionPlan | null>(null);
+  const [basicWeeklyPlan, setBasicWeeklyPlan] =
+    useState<SubscriptionPlan | null>(null);
+  const [subscriptionPlanIds, setSubscriptionPlanIds] = useState<number[]>([]);
 
   // Membership check on mount — use URL param if provided, otherwise call API
   useEffect(() => {
@@ -1766,11 +1808,17 @@ const CoinsPage = ({
         const timeout = setTimeout(() => controller.abort(), 10000);
 
         fetchSubscriptionPlans(token, organisationId, controller.signal)
-          .then(({ plan8, plan5 }) => {
-            console.log("[CoinStore] Plans fetched:", { plan8, plan5 });
-            setWeeklyPlan8(plan8);
-            setWeeklyPlan5(plan5);
-          })
+          .then(
+            ({ featuredWeeklyPlan, basicWeeklyPlan, subscriptionPlanIds }) => {
+              console.log("[CoinStore] Plans fetched:", {
+                featuredWeeklyPlan,
+                basicWeeklyPlan,
+              });
+              setFeaturedWeeklyPlan(featuredWeeklyPlan);
+              setBasicWeeklyPlan(basicWeeklyPlan);
+              setSubscriptionPlanIds(subscriptionPlanIds);
+            },
+          )
           .catch((err) => {
             console.error("[CoinStore] Plans fetch failed for non-member:", err);
             // Plans fetch failed — still show non-member view, just without plan cards
@@ -1798,10 +1846,13 @@ const CoinsPage = ({
         setIsMember(memberStatus);
         if (!memberStatus) {
           return fetchSubscriptionPlans(token, organisationId, controller.signal)
-            .then(({ plan8, plan5 }) => {
-              setWeeklyPlan8(plan8);
-              setWeeklyPlan5(plan5);
-            })
+            .then(
+              ({ featuredWeeklyPlan, basicWeeklyPlan, subscriptionPlanIds }) => {
+                setFeaturedWeeklyPlan(featuredWeeklyPlan);
+                setBasicWeeklyPlan(basicWeeklyPlan);
+                setSubscriptionPlanIds(subscriptionPlanIds);
+              },
+            )
             .catch(() => {
               // Plans fetch failed → fall back to coin pack display
               setIsMember(true);
@@ -1827,13 +1878,13 @@ const CoinsPage = ({
     if (membershipLoading || displayedPacks.length === 0) return;
 
     if (quickRecharge) {
-      if (!isMember && weeklyPlan8) {
+      if (!isMember && featuredWeeklyPlan) {
         setSelectedPackage((prev: any) =>
           prev ?? {
-            id: weeklyPlan8.id,
+            id: featuredWeeklyPlan.id,
             coins: 0,
-            price: weeklyPlan8.price,
-            name: weeklyPlan8.plan_name,
+            price: featuredWeeklyPlan.price,
+            name: featuredWeeklyPlan.plan_name,
           },
         );
       } else if (isMember && timerPack) {
@@ -1844,19 +1895,28 @@ const CoinsPage = ({
       return;
     }
 
-    // For non-members, default select the ₹100 weekly plan (plan 10)
-    if (!isMember && weeklyPlan8) {
+    // For non-members, default select the featured weekly plan
+    if (!isMember && featuredWeeklyPlan) {
       setSelectedPackage((prev: any) =>
-        prev ?? { id: weeklyPlan8.id, coins: 0, price: weeklyPlan8.price, name: weeklyPlan8.plan_name }
+        prev ?? {
+          id: featuredWeeklyPlan.id,
+          coins: 0,
+          price: featuredWeeklyPlan.price,
+          name: featuredWeeklyPlan.plan_name,
+        },
       );
 
       if (defaultPackSelectedRef.current || !pixelContext) return;
       defaultPackSelectedRef.current = true;
       sendCoinPackSelected(
         pixelContext,
-        { id: weeklyPlan8.id, coins: weeklyPlan8.coin_value ?? 0, price: weeklyPlan8.price },
+        {
+          id: featuredWeeklyPlan.id,
+          coins: featuredWeeklyPlan.coin_value ?? 0,
+          price: featuredWeeklyPlan.price,
+        },
         0,
-        { selected_by_default: true }
+        { selected_by_default: true },
       );
       return;
     }
@@ -1892,7 +1952,7 @@ const CoinsPage = ({
     exclusiveDeals,
     topPlans,
     isMember,
-    weeklyPlan8,
+    featuredWeeklyPlan,
   ]);
 
   const handlePackSelect = (pkg: any, index: number) => {
@@ -1978,10 +2038,9 @@ const CoinsPage = ({
     console.log("[CoinStore] handleMobileRecharge called, selectedPackage:", selectedPackage, "isMember:", isMember);
     if (!selectedPackage) return;
 
-    // Subscription weekly plans use mandate flow (org-specific plan IDs)
+    // Subscription plans from the plans API use mandate flow
     const isSubscriptionPlan =
-      !isMember &&
-      isWeeklySubscriptionPlanId(selectedPackage.id, organisationId);
+      !isMember && subscriptionPlanIds.includes(selectedPackage.id);
     console.log("[CoinStore] isSubscriptionPlan:", isSubscriptionPlan, "selectedPackage.id:", selectedPackage.id);
 
     if (isSubscriptionPlan) {
@@ -2094,8 +2153,8 @@ const CoinsPage = ({
         onPackSelect={handlePackSelect}
         onContinue={handleMobileRecharge}
         isMember={isMember}
-        weeklyPlan8={weeklyPlan8}
-        weeklyPlan5={weeklyPlan5}
+        featuredWeeklyPlan={featuredWeeklyPlan}
+        basicWeeklyPlan={basicWeeklyPlan}
         timerPack={timerPack}
       />
     ) : (
@@ -2120,8 +2179,8 @@ const CoinsPage = ({
     onPackSelect: handlePackSelect,
     onRecharge: handleMobileRecharge,
     isMember,
-    weeklyPlan8,
-    weeklyPlan5,
+    featuredWeeklyPlan,
+    basicWeeklyPlan,
   };
 
   return (

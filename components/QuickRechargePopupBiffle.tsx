@@ -198,13 +198,13 @@ const MicropackCard: React.FC<MicropackCardProps> = ({
 function resolveSelectedPrice(
   selectedPackageId: number | null,
   packs: QuickRechargePack[],
-  weeklyPlan8: SubscriptionPlan | null,
-  weeklyPlan5: SubscriptionPlan | null,
+  featuredWeeklyPlan: SubscriptionPlan | null,
+  basicWeeklyPlan: SubscriptionPlan | null,
   timerPack: QuickRechargePack | null,
 ): number | null {
   if (selectedPackageId == null) return null;
-  if (weeklyPlan8?.id === selectedPackageId) return weeklyPlan8.price;
-  if (weeklyPlan5?.id === selectedPackageId) return weeklyPlan5.price;
+  if (featuredWeeklyPlan?.id === selectedPackageId) return featuredWeeklyPlan.price;
+  if (basicWeeklyPlan?.id === selectedPackageId) return basicWeeklyPlan.price;
   if (timerPack?.id === selectedPackageId) return timerPack.price;
   const match = packs.find((p) => p.id === selectedPackageId);
   return match?.price ?? null;
@@ -216,8 +216,8 @@ type QuickRechargePopupBiffleProps = {
   onPackSelect: (pkg: QuickRechargePack | SubscriptionPlan, index: number) => void;
   onContinue: () => void;
   isMember: boolean;
-  weeklyPlan8: SubscriptionPlan | null;
-  weeklyPlan5: SubscriptionPlan | null;
+  featuredWeeklyPlan: SubscriptionPlan | null;
+  basicWeeklyPlan: SubscriptionPlan | null;
   timerPack: CoinStorePack | null;
 };
 
@@ -227,16 +227,20 @@ export const QuickRechargePopupBiffle = ({
   onPackSelect,
   onContinue,
   isMember,
-  weeklyPlan8,
-  weeklyPlan5,
+  featuredWeeklyPlan,
+  basicWeeklyPlan,
   timerPack,
 }: QuickRechargePopupBiffleProps) => {
   const filteredPacks = useMemo(() => {
-    if (!isMember && weeklyPlan5) {
-      return packs.filter((p) => p.price !== weeklyPlan5.price);
+    let result = packs;
+    if (isMember && timerPack) {
+      result = result.filter((p) => p.id !== timerPack.id);
     }
-    return packs;
-  }, [packs, isMember, weeklyPlan5]);
+    if (!isMember && basicWeeklyPlan) {
+      result = result.filter((p) => p.price !== basicWeeklyPlan.price);
+    }
+    return result;
+  }, [packs, isMember, basicWeeklyPlan, timerPack]);
 
   const bestValuePackId = useMemo(() => {
     const tagged = filteredPacks.find((p) =>
@@ -249,14 +253,16 @@ export const QuickRechargePopupBiffle = ({
     return null;
   }, [filteredPacks]);
 
-  const topRow = filteredPacks.slice(0, 2);
-  const bottomRow = filteredPacks.slice(2, 3);
+  const micropackGridStartIndex =
+    (isMember && timerPack ? 1 : 0) +
+    (!isMember && featuredWeeklyPlan ? 1 : 0) +
+    (!isMember && basicWeeklyPlan ? 1 : 0);
 
   const selectedPrice = resolveSelectedPrice(
     selectedPackageId,
     packs,
-    weeklyPlan8,
-    weeklyPlan5,
+    featuredWeeklyPlan,
+    basicWeeklyPlan,
     timerPack,
   );
 
@@ -270,16 +276,16 @@ export const QuickRechargePopupBiffle = ({
       <h2 className="mb-5 text-lg font-semibold text-[#111827]">Top up coins</h2>
 
       <div className="max-h-[min(70vh,640px)] space-y-3 overflow-y-auto px-0.5 pb-4">
-        {!isMember && weeklyPlan8 && (
+        {!isMember && featuredWeeklyPlan && (
           <BiffleFeaturedWeeklyPlanCard
-            plan={weeklyPlan8}
-            selected={selectedPackageId === weeklyPlan8.id}
+            plan={featuredWeeklyPlan}
+            selected={selectedPackageId === featuredWeeklyPlan.id}
             onSelect={() =>
               onPackSelect(
                 {
-                  id: weeklyPlan8.id,
-                  coins: weeklyPlan8.coin_value ?? 0,
-                  price: weeklyPlan8.price,
+                  id: featuredWeeklyPlan.id,
+                  coins: featuredWeeklyPlan.coin_value ?? 0,
+                  price: featuredWeeklyPlan.price,
                 } as QuickRechargePack,
                 0,
               )
@@ -295,16 +301,16 @@ export const QuickRechargePopupBiffle = ({
           />
         )}
 
-        {!isMember && weeklyPlan5 && (
+        {!isMember && basicWeeklyPlan && (
           <BiffleWeeklyPlanCard
-            plan={weeklyPlan5}
-            selected={selectedPackageId === weeklyPlan5.id}
+            plan={basicWeeklyPlan}
+            selected={selectedPackageId === basicWeeklyPlan.id}
             onSelect={() =>
               onPackSelect(
                 {
-                  id: weeklyPlan5.id,
-                  coins: weeklyPlan5.coin_value ?? 0,
-                  price: weeklyPlan5.price,
+                  id: basicWeeklyPlan.id,
+                  coins: basicWeeklyPlan.coin_value ?? 0,
+                  price: basicWeeklyPlan.price,
                 } as QuickRechargePack,
                 1,
               )
@@ -317,46 +323,31 @@ export const QuickRechargePopupBiffle = ({
             No coin packs available right now.
           </p>
         ) : (
-          <>
-            {topRow.length > 0 && (
-              <div className="grid grid-cols-2 gap-3 px-0.5">
-                {topRow.map((pack, index) => (
-                  <MicropackCard
-                    key={pack.id}
-                    pack={pack}
-                    selected={selectedPackageId === pack.id}
-                    showBestValue={pack.id === bestValuePackId}
-                    onSelect={() => onPackSelect(pack, index + 2)}
-                  />
-                ))}
-              </div>
-            )}
-            {bottomRow.map((pack) => (
-              <div key={pack.id} className="flex justify-center px-0.5">
-                <div className="w-[calc(50%-6px)]">
+          <div className="grid grid-cols-2 gap-3 px-0.5">
+            {filteredPacks.map((pack, index) => {
+              const isLoneLastItem =
+                filteredPacks.length % 2 === 1 &&
+                index === filteredPacks.length - 1;
+
+              return (
+                <div
+                  key={pack.id}
+                  className={
+                    isLoneLastItem ? "col-span-2 mx-auto w-[calc(50%-6px)]" : ""
+                  }
+                >
                   <MicropackCard
                     pack={pack}
                     selected={selectedPackageId === pack.id}
                     showBestValue={pack.id === bestValuePackId}
-                    onSelect={() => onPackSelect(pack, 4)}
+                    onSelect={() =>
+                      onPackSelect(pack, micropackGridStartIndex + index)
+                    }
                   />
                 </div>
-              </div>
-            ))}
-            {filteredPacks.length > 3 && (
-              <div className="grid grid-cols-2 gap-3 px-0.5">
-                {filteredPacks.slice(3).map((pack, index) => (
-                  <MicropackCard
-                    key={pack.id}
-                    pack={pack}
-                    selected={selectedPackageId === pack.id}
-                    showBestValue={pack.id === bestValuePackId}
-                    onSelect={() => onPackSelect(pack, index + 5)}
-                  />
-                ))}
-              </div>
-            )}
-          </>
+              );
+            })}
+          </div>
         )}
       </div>
 

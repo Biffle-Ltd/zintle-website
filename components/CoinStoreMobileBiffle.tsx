@@ -16,8 +16,8 @@ type CoinStoreMobileBiffleProps = {
   onPackSelect: (pkg: CoinStorePack, index: number) => void;
   onRecharge: () => void;
   isMember: boolean;
-  weeklyPlan8: SubscriptionPlan | null;
-  weeklyPlan5: SubscriptionPlan | null;
+  featuredWeeklyPlan: SubscriptionPlan | null;
+  basicWeeklyPlan: SubscriptionPlan | null;
 };
 
 function formatRupee(amount: number): string {
@@ -273,12 +273,12 @@ function resolveSelectedPrice(
   timerPack: CoinStorePack | null,
   exclusiveDeals: CoinStorePack[],
   topPlans: CoinStorePack[],
-  weeklyPlan8: SubscriptionPlan | null,
-  weeklyPlan5: SubscriptionPlan | null,
+  featuredWeeklyPlan: SubscriptionPlan | null,
+  basicWeeklyPlan: SubscriptionPlan | null,
 ): number | null {
   if (selectedPackageId == null) return null;
-  if (weeklyPlan8?.id === selectedPackageId) return weeklyPlan8.price;
-  if (weeklyPlan5?.id === selectedPackageId) return weeklyPlan5.price;
+  if (featuredWeeklyPlan?.id === selectedPackageId) return featuredWeeklyPlan.price;
+  if (basicWeeklyPlan?.id === selectedPackageId) return basicWeeklyPlan.price;
   const allPacks = [
     ...(timerPack ? [timerPack] : []),
     ...exclusiveDeals,
@@ -296,8 +296,8 @@ export const CoinStoreMobileBiffle = ({
   onPackSelect,
   onRecharge,
   isMember,
-  weeklyPlan8,
-  weeklyPlan5,
+  featuredWeeklyPlan,
+  basicWeeklyPlan,
 }: CoinStoreMobileBiffleProps) => {
   const indexedPacks = useMemo(() => {
     const rows: {
@@ -319,8 +319,8 @@ export const CoinStoreMobileBiffle = ({
     timerPack,
     exclusiveDeals,
     topPlans,
-    weeklyPlan8,
-    weeklyPlan5,
+    featuredWeeklyPlan,
+    basicWeeklyPlan,
   );
   const selectedInList = selectedPackageId != null;
 
@@ -339,36 +339,36 @@ export const CoinStoreMobileBiffle = ({
           />
         )}
 
-        {!isMember && (weeklyPlan8 || weeklyPlan5) && (
+        {!isMember && (featuredWeeklyPlan || basicWeeklyPlan) && (
           <section className="space-y-3">
-            {weeklyPlan8 && (
+            {featuredWeeklyPlan && (
               <BiffleFeaturedWeeklyPlanCard
-                plan={weeklyPlan8}
-                selected={selectedPackageId === weeklyPlan8.id}
+                plan={featuredWeeklyPlan}
+                selected={selectedPackageId === featuredWeeklyPlan.id}
                 onSelect={() =>
                   onPackSelect(
                     {
-                      id: weeklyPlan8.id,
+                      id: featuredWeeklyPlan.id,
                       coins: 0,
-                      price: weeklyPlan8.price,
-                      name: weeklyPlan8.plan_name,
+                      price: featuredWeeklyPlan.price,
+                      name: featuredWeeklyPlan.plan_name,
                     },
                     0,
                   )
                 }
               />
             )}
-            {weeklyPlan5 && (
+            {basicWeeklyPlan && (
               <BiffleWeeklyPlanCard
-                plan={weeklyPlan5}
-                selected={selectedPackageId === weeklyPlan5.id}
+                plan={basicWeeklyPlan}
+                selected={selectedPackageId === basicWeeklyPlan.id}
                 onSelect={() =>
                   onPackSelect(
                     {
-                      id: weeklyPlan5.id,
+                      id: basicWeeklyPlan.id,
                       coins: 0,
-                      price: weeklyPlan5.price,
-                      name: weeklyPlan5.plan_name,
+                      price: basicWeeklyPlan.price,
+                      name: basicWeeklyPlan.plan_name,
                     },
                     1,
                   )
@@ -380,8 +380,8 @@ export const CoinStoreMobileBiffle = ({
 
         {(() => {
           const filteredDeals =
-            !isMember && weeklyPlan5
-              ? exclusiveDeals.filter((p) => p.price !== weeklyPlan5.price)
+            !isMember && basicWeeklyPlan
+              ? exclusiveDeals.filter((p) => p.price !== basicWeeklyPlan.price)
               : exclusiveDeals;
           return (
             filteredDeals.length > 0 && (

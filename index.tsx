@@ -255,6 +255,46 @@ async function fetchSubscriptionPlans(
   };
 }
 
+type CoinStoreMembershipState = {
+  isMember: boolean;
+  featuredWeeklyPlan: SubscriptionPlan | null;
+  basicWeeklyPlan: SubscriptionPlan | null;
+  subscriptionPlanIds: number[];
+};
+
+/** Fetches is_member from get-user-details, then subscription plans when non-member. */
+async function syncCoinStoreMembershipState(
+  token: string,
+  organisationId: string,
+  signal?: AbortSignal,
+): Promise<CoinStoreMembershipState> {
+  const { isMember } = await fetchMembershipStatus(
+    token,
+    organisationId,
+    signal,
+  );
+  if (isMember) {
+    return {
+      isMember: true,
+      featuredWeeklyPlan: null,
+      basicWeeklyPlan: null,
+      subscriptionPlanIds: [],
+    };
+  }
+  try {
+    const plans = await fetchSubscriptionPlans(token, organisationId, signal);
+    return { isMember: false, ...plans };
+  } catch {
+    // Plans fetch failed → fall back to member coin pack display
+    return {
+      isMember: true,
+      featuredWeeklyPlan: null,
+      basicWeeklyPlan: null,
+      subscriptionPlanIds: [],
+    };
+  }
+}
+
 // Shared helper to create coin purchase orders
 const createCoinOrder = async (
   coinPackId: number | string,
@@ -1865,31 +1905,12 @@ const CoinsPage = ({
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
-    fetchMembershipStatus(token, organisationId, controller.signal)
-      .then(({ isMember: memberStatus }) => {
-        setIsMember(memberStatus);
-        if (!memberStatus) {
-          return fetchSubscriptionPlans(
-            token,
-            organisationId,
-            controller.signal,
-          )
-            .then(
-              ({
-                featuredWeeklyPlan,
-                basicWeeklyPlan,
-                subscriptionPlanIds,
-              }) => {
-                setFeaturedWeeklyPlan(featuredWeeklyPlan);
-                setBasicWeeklyPlan(basicWeeklyPlan);
-                setSubscriptionPlanIds(subscriptionPlanIds);
-              },
-            )
-            .catch(() => {
-              // Plans fetch failed → fall back to coin pack display
-              setIsMember(true);
-            });
-        }
+    syncCoinStoreMembershipState(token, organisationId, controller.signal)
+      .then((state) => {
+        setIsMember(state.isMember);
+        setFeaturedWeeklyPlan(state.featuredWeeklyPlan);
+        setBasicWeeklyPlan(state.basicWeeklyPlan);
+        setSubscriptionPlanIds(state.subscriptionPlanIds);
       })
       .catch(() => {
         // Membership check failed → treat as member
@@ -1905,6 +1926,40 @@ const CoinsPage = ({
       clearTimeout(timeout);
     };
   }, [token, organisationId]);
+
+  const refreshMembershipFromApi = useCallback(async () => {
+    if (!token) return;
+    try {
+      const state = await syncCoinStoreMembershipState(token, organisationId);
+      setIsMember(state.isMember);
+      setFeaturedWeeklyPlan(state.featuredWeeklyPlan);
+      setBasicWeeklyPlan(state.basicWeeklyPlan);
+      setSubscriptionPlanIds(state.subscriptionPlanIds);
+
+      if (state.isMember) {
+        const nextPack =
+          timerPack ??
+          displayedPacks.find((p) => p.product_id === TIMER_COIN_PRODUCT_ID) ??
+          displayedPacks[0] ??
+          null;
+        if (nextPack) setSelectedPackage(nextPack);
+      } else if (state.featuredWeeklyPlan) {
+        setSelectedPackage({
+          id: state.featuredWeeklyPlan.id,
+          coins: state.featuredWeeklyPlan.coin_value ?? 0,
+          price: state.featuredWeeklyPlan.price,
+          name: state.featuredWeeklyPlan.plan_name,
+        });
+      }
+
+      refreshCoinPacksCallback?.();
+    } catch (err) {
+      console.error(
+        "[CoinStore] Failed to refresh membership after subscription:",
+        err,
+      );
+    }
+  }, [token, organisationId, timerPack, displayedPacks]);
 
   useEffect(() => {
     if (membershipLoading || displayedPacks.length === 0) return;
@@ -2185,6 +2240,7 @@ const CoinsPage = ({
         });
         if (isMandateActive(result.mandate_state)) {
           showPaymentStatusCallback?.("SUCCESS");
+          await refreshMembershipFromApi();
           return;
         }
         if (isMandateFailure(result.mandate_state)) {

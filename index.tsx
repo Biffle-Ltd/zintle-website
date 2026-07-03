@@ -2103,6 +2103,18 @@ const CoinsPage = ({
   };
 
   if (membershipLoading) {
+    if (quickRecharge) {
+      return (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center ${isBiffle ? "bg-white" : "bg-[#001A3D]"}`}
+        >
+          <div
+            className={`h-8 w-8 animate-spin rounded-full border-2 ${isBiffle ? "border-gray-300 border-t-violet-600" : "border-white/20 border-t-white"}`}
+          />
+        </div>
+      );
+    }
+
     return (
       <div
         className={`flex min-h-screen items-center justify-center md:hidden ${isBiffle ? "bg-[#F5F5F5]" : "bg-[#000D26]"}`}
@@ -2115,6 +2127,21 @@ const CoinsPage = ({
   }
 
   if (coinPacksLoading) {
+    if (quickRecharge) {
+      return (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center ${isBiffle ? "bg-white" : "bg-[#001A3D]"}`}
+        >
+          <div
+            className={`flex items-center gap-2 text-sm ${isBiffle ? "text-gray-500" : "text-brand-muted"}`}
+          >
+            <i className="fa-solid fa-spinner fa-spin" aria-hidden />
+            Loading coin packs…
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         className={`flex min-h-screen items-center justify-center p-6 ${isBiffle ? "bg-[#F5F5F5]" : "bg-brand-bg"}`}
@@ -2281,7 +2308,13 @@ const CoinsPage = ({
       />
     );
 
-    return <div className="fixed inset-x-0 bottom-0 z-50">{popup}</div>;
+    return (
+      <div
+        className={`fixed inset-0 z-50 flex flex-col ${isBiffle ? "bg-white" : "bg-[#001A3D]"}`}
+      >
+        {popup}
+      </div>
+    );
   }
 
   const coinStoreMobileProps = {
@@ -2783,7 +2816,7 @@ const Layout = () => {
         isCampaignPage
           ? "h-dvh max-h-dvh overflow-hidden"
           : isQuickRechargeCoinsPage
-            ? "min-h-dvh bg-transparent"
+            ? "h-dvh max-h-dvh overflow-hidden bg-transparent"
             : isCoinsPage
               ? ""
               : "min-h-screen"

@@ -75,7 +75,7 @@ function ZintleLimitedOfferCard({
         selected ? "border-white" : "border-transparent"
       }`}
     >
-      <div className="relative overflow-hidden rounded-[18px] bg-gradient-to-r from-[#FF5A3C] via-[#FF4D5E] to-[#FF7A52] px-4 pb-4 pt-4">
+      <div className="relative overflow-hidden rounded-[18px] bg-gradient-to-r from-[#FF5A3C] via-[#FF4D5E] to-[#FF7A52] px-4 pb-3 pt-3">
         <div
           className="pointer-events-none absolute right-3 top-3 flex items-start gap-0.5 opacity-40"
           aria-hidden
@@ -99,8 +99,8 @@ function ZintleLimitedOfferCard({
           </div>
         </div>
 
-        <div className="relative z-[1] mt-4 flex items-center justify-between rounded-2xl bg-[#00000033] px-4 py-3.5">
-          <div className="flex items-center gap-2.5 text-[28px] font-bold leading-none text-white">
+        <div className="relative z-[1] mt-3 flex items-center justify-between rounded-2xl bg-[#00000033] px-4 py-3">
+          <div className="flex items-center gap-2.5 text-[26px] font-bold leading-none text-white">
             <ZintleCoinIcon className={COIN_ICON_CLASS} />
             <span>{formatCoinAmount(pack.coins)}</span>
           </div>
@@ -142,7 +142,7 @@ function ZintleFeaturedWeeklyPlanCard({
         selected ? "border-white" : "border-transparent"
       }`}
     >
-      <div className="relative overflow-hidden rounded-[18px] bg-gradient-to-r from-[#FF5A3C] via-[#FF4D5E] to-[#FF7A52] px-4 pb-4 pt-4">
+      <div className="relative overflow-hidden rounded-[18px] bg-gradient-to-r from-[#FF5A3C] via-[#FF4D5E] to-[#FF7A52] px-4 pb-3 pt-3">
         <div
           className="pointer-events-none absolute right-3 top-3 flex items-start gap-0.5 opacity-40"
           aria-hidden
@@ -166,8 +166,8 @@ function ZintleFeaturedWeeklyPlanCard({
           </div>
         </div>
 
-        <div className="relative z-[1] mt-4 flex items-center justify-between rounded-2xl bg-[#00000033] px-4 py-3.5">
-          <div className="flex items-center gap-2.5 text-[28px] font-bold leading-none text-white">
+        <div className="relative z-[1] mt-3 flex items-center justify-between rounded-2xl bg-[#00000033] px-4 py-3">
+          <div className="flex items-center gap-2.5 text-[26px] font-bold leading-none text-white">
             <ZintleCoinIcon className={COIN_ICON_CLASS} />
             <span>{plan.coin_value ?? 0}</span>
           </div>
@@ -193,7 +193,7 @@ function ZintleWeeklyPlanCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`relative flex w-full items-center justify-between rounded-2xl border-2 bg-[#1e293b] px-4 pb-4 pt-9 text-left transition-all active:scale-[0.99] ${
+      className={`relative flex w-full shrink-0 items-center justify-between rounded-2xl border-2 bg-[#1e293b] px-4 pb-3 pt-8 text-left transition-all active:scale-[0.99] ${
         selected ? "border-white" : "border-white/10"
       }`}
     >
@@ -224,15 +224,15 @@ function MicropackCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`box-border flex w-full min-h-[7.5rem] flex-col items-center rounded-2xl border-2 bg-[#1e293b] px-3 pb-4 pt-6 text-center transition-all active:scale-[0.98] ${
+      className={`box-border flex w-full min-h-0 flex-col items-center rounded-2xl border-2 bg-[#1e293b] px-3 pb-3 pt-4 text-center transition-all active:scale-[0.98] ${
         selected ? "border-white" : "border-white/10"
       }`}
     >
-      <p className="mb-4 flex items-center justify-center gap-2 text-lg font-semibold leading-none text-white">
+      <p className="mb-2 flex items-center justify-center gap-2 text-lg font-semibold leading-none text-white">
         <ZintleCoinIcon className={COIN_ICON_CLASS} />
         <span>{formatCoinAmount(pack.coins)}</span>
       </p>
-      <span className="mt-auto w-full rounded-full bg-[#ef4444] px-3 py-2.5 text-sm font-semibold leading-normal text-white">
+      <span className="mt-auto w-full rounded-full bg-[#ef4444] px-3 py-2 text-sm font-semibold leading-normal text-white">
         {formatRupee(pack.price)}
       </span>
     </button>
@@ -306,16 +306,17 @@ export const QuickRechargePopup = ({
 
   return (
     <div
-      className="w-full bg-[#001A3D] px-5 pb-8 pt-5 shadow-[0_-8px_40px_rgba(0,0,0,0.45)]"
+      className="flex h-full min-h-0 flex-col px-5 pb-4 pt-2"
       role="dialog"
       aria-label="Quick recharge"
     >
-      <h2 className="mb-5 text-left text-base font-medium text-white">
+      <h2 className="mb-2 shrink-0 text-left text-base font-medium text-white">
         {hasOptions ? "Tap on the plan to recharge" : "No coin packs available"}
       </h2>
 
-      <div className="-mx-0.5 max-h-[min(70vh,640px)] space-y-3 overflow-y-auto overscroll-contain px-0.5 pb-8 pt-0.5">
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden">
         {!isMember && featuredWeeklyPlan && (
+          <div className="shrink-0">
           <ZintleFeaturedWeeklyPlanCard
             plan={featuredWeeklyPlan}
             selected={selectedPackageId === featuredWeeklyPlan.id}
@@ -330,17 +331,21 @@ export const QuickRechargePopup = ({
               )
             }
           />
+          </div>
         )}
 
         {isMember && timerPack && (
+          <div className="shrink-0">
           <ZintleLimitedOfferCard
             pack={timerPack}
             selected={selectedPackageId === timerPack.id}
             onSelect={() => onPackSelect(timerPack, 0)}
           />
+          </div>
         )}
 
         {!isMember && basicWeeklyPlan && (
+          <div className="shrink-0">
           <ZintleWeeklyPlanCard
             plan={basicWeeklyPlan}
             selected={selectedPackageId === basicWeeklyPlan.id}
@@ -355,6 +360,7 @@ export const QuickRechargePopup = ({
               )
             }
           />
+          </div>
         )}
 
         {filteredPacks.length === 0 ? (
@@ -370,7 +376,7 @@ export const QuickRechargePopup = ({
             </div>
           )
         ) : (
-          <div className="grid grid-cols-2 gap-3 p-0.5">
+          <div className="grid min-h-0 flex-1 grid-cols-2 gap-2.5 p-0.5">
             {filteredPacks.map((pack, index) => {
               const isLoneLastItem =
                 filteredPacks.length % 2 === 1 &&
@@ -401,7 +407,7 @@ export const QuickRechargePopup = ({
         type="button"
         onClick={onContinue}
         disabled={selectedPackageId == null}
-        className="w-full rounded-full bg-gradient-to-r from-[#FF4B7A] via-[#FF5E4D] to-[#FF8A3D] py-4 text-base font-bold text-white shadow-lg shadow-[#FF5E4D]/30 transition-opacity hover:opacity-95 disabled:opacity-40"
+        className="mt-3 w-full shrink-0 rounded-full bg-gradient-to-r from-[#FF4B7A] via-[#FF5E4D] to-[#FF8A3D] py-3.5 text-base font-bold text-white shadow-lg shadow-[#FF5E4D]/30 transition-opacity hover:opacity-95 disabled:opacity-40"
       >
         {selectedPrice != null
           ? `Continue Call for ${formatRupee(selectedPrice)}`

@@ -17,6 +17,11 @@ import {
   parseCampaignPixelContext,
   sendCampaignFreeTrialViewed,
 } from "../utils/campaignPixelEvents";
+import {
+  captureCampaignFbclidOnLandingSafe,
+  linkCampaignFacebookAttributionSafe,
+  resolveCampaignFbclid,
+} from "../utils/fbAttribution";
 
 const PAGE_BG = "#162a44";
 const ACCENT_ORANGE = "#f58220";
@@ -221,6 +226,24 @@ export function Campaign({
 
   const canCheckout = checkoutPath != null && !fetchError && !loading;
   const isLoggedIn = !!getJwtFromStorage(organisationId);
+
+  useEffect(() => {
+    if (!fbclidFromUrl) return;
+    captureCampaignFbclidOnLandingSafe(organisationId, fbclidFromUrl);
+  }, [fbclidFromUrl, organisationId]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const jwt = getJwtFromStorage(organisationId);
+    if (!jwt) return;
+    const fbclid = resolveCampaignFbclid(organisationId, fbclidFromUrl);
+    if (!fbclid) return;
+    linkCampaignFacebookAttributionSafe({
+      fbclid,
+      organisationId,
+      authToken: jwt,
+    });
+  }, [isLoggedIn, fbclidFromUrl, organisationId]);
 
   const videoUrl =
     activePlan?.extra_info &&

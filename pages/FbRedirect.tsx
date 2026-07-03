@@ -1,74 +1,43 @@
 import React, { useState, useEffect } from "react";
-import { HOST } from "../utils/host";
+import { useLocation } from "react-router-dom";
+import { storeFacebookClickAttribution } from "../utils/fbAttribution";
+import { getOrganisationIdFromSearch } from "../utils/organisationIdFromUrl";
 
 const PLAY_STORE_URL =
   "https://play.google.com/store/apps/details?id=ai.zintle";
 
 const FBRedirect: React.FC = () => {
+  const location = useLocation();
   const [isLoading, setIsLoading] = useState(true);
   const [redirectUrl, setRedirectUrl] = useState<string>(PLAY_STORE_URL);
 
   useEffect(() => {
-    // Read fbclid from query params on first render
-    const urlParams = new URLSearchParams(window.location.search);
-    const fbclid = urlParams.get("fbclid");
+    const urlParams = new URLSearchParams(location.search);
+    const fbclid = urlParams.get("fbclid")?.trim() ?? "";
+    const organisationId = getOrganisationIdFromSearch(
+      location.search,
+      location.pathname,
+    );
 
-    console.log("[FBRedirect] fbclid:", fbclid);
-    console.log("[FBRedirect] Full URL:", window.location.href);
-
-    // If no fbclid, use Play Store fallback
     if (!fbclid) {
-      console.log("[FBRedirect] No fbclid found, using Play Store fallback");
       setRedirectUrl(PLAY_STORE_URL);
       setIsLoading(false);
       return;
     }
 
-    // Call backend API with fbclid
-    const apiUrl = `${HOST}/api/v1/attribution/redirect/fb_redirect/?fbclid=${encodeURIComponent(fbclid)}`;
-    console.log("[FBRedirect] Calling API:", apiUrl);
-
-    fetch(apiUrl, {
-      headers: {
-        "X-Organisation-ID": "ZINTEL1234",
-      },
-    })
-      .then((response) => {
-        console.log("[FBRedirect] API response status:", response.status);
-        if (!response.ok) {
-          throw new Error(`API returned status ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((data) => {
-        console.log("[FBRedirect] API response data:", data);
-
-        const url = data?.data?.redirect_url;
-        if (url) {
-          console.log("[FBRedirect] Redirect URL from API:", url);
-          setRedirectUrl(url);
-        } else {
-          console.log(
-            "[FBRedirect] No redirect_url in response, using Play Store fallback",
-          );
-          setRedirectUrl(PLAY_STORE_URL);
-        }
-      })
-      .catch((error) => {
-        console.error("[FBRedirect] API error:", error);
-        console.log("[FBRedirect] Using Play Store fallback due to error");
+    void (async () => {
+      try {
+        const url = await storeFacebookClickAttribution(fbclid, organisationId);
+        setRedirectUrl(url || PLAY_STORE_URL);
+      } catch {
         setRedirectUrl(PLAY_STORE_URL);
-      })
-      .finally(() => {
+      } finally {
         setIsLoading(false);
-      });
-  }, []);
+      }
+    })();
+  }, [location.pathname, location.search]);
 
   const handleContinue = () => {
-    console.log(
-      "[FBRedirect] User clicked Continue, redirecting to:",
-      redirectUrl,
-    );
     window.location.href = redirectUrl;
   };
 
@@ -96,7 +65,6 @@ const FBRedirect: React.FC = () => {
         `}
       </style>
 
-      {/* Logo */}
       <img
         src="/zintle_app_logo.png"
         alt="Zintle"

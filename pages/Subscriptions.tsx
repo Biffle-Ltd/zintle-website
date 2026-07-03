@@ -954,7 +954,6 @@ export const Subscriptions = ({
     if (!isCampaign) return;
     triggerCampaignFbRedirect({
       organisationId,
-      fbclid: fbclidFromUrl,
       navigate,
     });
   };

@@ -25,13 +25,18 @@ function parsePositiveNumberParam(
   return n;
 }
 
-function parseSessionType(params: URLSearchParams): QuickRechargeSessionType {
+function parseSessionType(
+  params: URLSearchParams,
+  defaultSessionType: QuickRechargeSessionType,
+): QuickRechargeSessionType {
   const raw = params.get("call_type")?.toLowerCase().trim();
-  return raw === "chat" ? "chat" : "call";
+  if (raw === "chat" || raw === "call") return raw;
+  return defaultSessionType;
 }
 
 export function parseQuickRechargeCallContext(
   search: string,
+  options?: { defaultSessionType?: QuickRechargeSessionType },
 ): QuickRechargeCallContext | null {
   const query = search.startsWith("?") ? search.slice(1) : search;
   const params = new URLSearchParams(query);
@@ -43,7 +48,10 @@ export function parseQuickRechargeCallContext(
   return {
     walletBalance,
     callPrice,
-    sessionType: parseSessionType(params),
+    sessionType: parseSessionType(
+      params,
+      options?.defaultSessionType ?? "call",
+    ),
   };
 }
 

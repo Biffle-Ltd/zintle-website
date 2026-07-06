@@ -7,6 +7,11 @@ import {
   formatCountdown,
   getCoinStoreTimerEndMs,
 } from "../utils/coinStoreTimer";
+import {
+  computeContinueCallMinutes,
+  resolveSelectedPackDetails,
+  type QuickRechargeCallContext,
+} from "../utils/quickRecharge";
 
 export type QuickRechargePack = {
   id: number;
@@ -195,21 +200,6 @@ const MicropackCard: React.FC<MicropackCardProps> = ({
   );
 };
 
-function resolveSelectedPrice(
-  selectedPackageId: number | null,
-  packs: QuickRechargePack[],
-  featuredWeeklyPlan: SubscriptionPlan | null,
-  basicWeeklyPlan: SubscriptionPlan | null,
-  timerPack: QuickRechargePack | null,
-): number | null {
-  if (selectedPackageId == null) return null;
-  if (featuredWeeklyPlan?.id === selectedPackageId) return featuredWeeklyPlan.price;
-  if (basicWeeklyPlan?.id === selectedPackageId) return basicWeeklyPlan.price;
-  if (timerPack?.id === selectedPackageId) return timerPack.price;
-  const match = packs.find((p) => p.id === selectedPackageId);
-  return match?.price ?? null;
-}
-
 type QuickRechargePopupBiffleProps = {
   packs: QuickRechargePack[];
   selectedPackageId: number | null;
@@ -219,6 +209,7 @@ type QuickRechargePopupBiffleProps = {
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
   timerPack: CoinStorePack | null;
+  callContext?: QuickRechargeCallContext | null;
 };
 
 export const QuickRechargePopupBiffle = ({
@@ -230,6 +221,7 @@ export const QuickRechargePopupBiffle = ({
   featuredWeeklyPlan,
   basicWeeklyPlan,
   timerPack,
+  callContext = null,
 }: QuickRechargePopupBiffleProps) => {
   const filteredPacks = useMemo(() => {
     let result = packs;
@@ -258,13 +250,25 @@ export const QuickRechargePopupBiffle = ({
     (!isMember && featuredWeeklyPlan ? 1 : 0) +
     (!isMember && basicWeeklyPlan ? 1 : 0);
 
-  const selectedPrice = resolveSelectedPrice(
+  const selectedPack = resolveSelectedPackDetails(
     selectedPackageId,
     packs,
     featuredWeeklyPlan,
     basicWeeklyPlan,
     timerPack,
   );
+  const selectedPrice = selectedPack?.price ?? null;
+
+  const callContinueHeader = useMemo(() => {
+    if (!callContext || !selectedPack) return null;
+    const mins = computeContinueCallMinutes(
+      callContext.walletBalance,
+      callContext.callPrice,
+      selectedPack.coins,
+    );
+    const minLabel = mins === 1 ? "min" : "mins";
+    return `Recharge for ${formatCoins(selectedPack.coins)} coins to continue ${callContext.sessionType} for ${mins} ${minLabel} at just ${formatRupee(selectedPack.price)}`;
+  }, [callContext, selectedPack]);
 
   return (
     <div
@@ -273,7 +277,9 @@ export const QuickRechargePopupBiffle = ({
       aria-label="Top up coins"
     >
       <div className="px-5 pt-5">
-      <h2 className="mb-5 text-lg font-semibold text-[#111827]">Top up coins</h2>
+      <h2 className="mb-5 text-lg font-semibold text-[#111827]">
+        {callContinueHeader ?? "Top up coins"}
+      </h2>
 
       <div className="max-h-[min(70vh,640px)] space-y-3 overflow-y-auto px-0.5 pb-4">
         {!isMember && featuredWeeklyPlan && (

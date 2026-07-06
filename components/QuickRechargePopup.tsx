@@ -5,6 +5,11 @@ import {
   formatCountdown,
   getCoinStoreTimerEndMs,
 } from "../utils/coinStoreTimer";
+import {
+  computeContinueCallMinutes,
+  resolveSelectedPackDetails,
+  type QuickRechargeCallContext,
+} from "../utils/quickRecharge";
 
 export type QuickRechargePack = {
   id: number;
@@ -239,21 +244,6 @@ function MicropackCard({
   );
 }
 
-function resolveSelectedPrice(
-  selectedPackageId: number | null,
-  packs: QuickRechargePack[],
-  featuredWeeklyPlan: SubscriptionPlan | null,
-  basicWeeklyPlan: SubscriptionPlan | null,
-  timerPack: QuickRechargePack | null,
-): number | null {
-  if (selectedPackageId == null) return null;
-  if (featuredWeeklyPlan?.id === selectedPackageId) return featuredWeeklyPlan.price;
-  if (basicWeeklyPlan?.id === selectedPackageId) return basicWeeklyPlan.price;
-  if (timerPack?.id === selectedPackageId) return timerPack.price;
-  const match = packs.find((p) => p.id === selectedPackageId);
-  return match?.price ?? null;
-}
-
 type QuickRechargePopupProps = {
   packs: QuickRechargePack[];
   selectedPackageId: number | null;
@@ -263,6 +253,7 @@ type QuickRechargePopupProps = {
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
   timerPack: CoinStorePack | null;
+  callContext?: QuickRechargeCallContext | null;
 };
 
 export const QuickRechargePopup = ({
@@ -274,6 +265,7 @@ export const QuickRechargePopup = ({
   featuredWeeklyPlan,
   basicWeeklyPlan,
   timerPack,
+  callContext = null,
 }: QuickRechargePopupProps) => {
   const filteredPacks = useMemo(() => {
     let result = packs;
@@ -291,13 +283,25 @@ export const QuickRechargePopup = ({
     (!isMember && featuredWeeklyPlan ? 1 : 0) +
     (!isMember && basicWeeklyPlan ? 1 : 0);
 
-  const selectedPrice = resolveSelectedPrice(
+  const selectedPack = resolveSelectedPackDetails(
     selectedPackageId,
     packs,
     featuredWeeklyPlan,
     basicWeeklyPlan,
     timerPack,
   );
+  const selectedPrice = selectedPack?.price ?? null;
+
+  const callContinueHeader = useMemo(() => {
+    if (!callContext || !selectedPack) return null;
+    const mins = computeContinueCallMinutes(
+      callContext.walletBalance,
+      callContext.callPrice,
+      selectedPack.coins,
+    );
+    const minLabel = mins === 1 ? "min" : "mins";
+    return `Recharge for ${formatCoinAmount(selectedPack.coins)} coins to continue ${callContext.sessionType} for ${mins} ${minLabel} at just ${formatRupee(selectedPack.price)}`;
+  }, [callContext, selectedPack]);
 
   const hasOptions =
     filteredPacks.length > 0 ||
@@ -311,7 +315,10 @@ export const QuickRechargePopup = ({
       aria-label="Quick recharge"
     >
       <h2 className="mb-2 shrink-0 text-left text-base font-medium text-white">
-        {hasOptions ? "Tap on the plan to recharge" : "No coin packs available"}
+        {callContinueHeader ??
+          (hasOptions
+            ? "Tap on the plan to recharge"
+            : "No coin packs available")}
       </h2>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden">

@@ -99,6 +99,7 @@ type CoinStoreMobileProps = {
   isMember: boolean;
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
+  paymentInProgress?: boolean;
 };
 
 function LimitedOfferCard({
@@ -399,6 +400,7 @@ export const CoinStoreMobile = ({
   isMember,
   featuredWeeklyPlan,
   basicWeeklyPlan,
+  paymentInProgress = false,
 }: CoinStoreMobileProps) => {
   const indexedPacks = useMemo(() => {
     const rows: {
@@ -532,10 +534,10 @@ export const CoinStoreMobile = ({
         <button
           type="button"
           onClick={onRecharge}
-          disabled={!selectedInList}
+          disabled={!selectedInList || paymentInProgress}
           className="mb-5 w-full rounded-full bg-gradient-to-r from-[#FF4B7A] via-[#FF5E4D] to-[#FF8A3D] py-4 text-base font-bold text-white shadow-lg shadow-[#FF5E4D]/30 transition-opacity hover:opacity-95 disabled:opacity-40"
         >
-          Recharge Now
+          {paymentInProgress ? "Processing..." : "Recharge Now"}
         </button>
       </div>
     </div>

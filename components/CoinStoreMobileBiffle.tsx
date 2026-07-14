@@ -18,6 +18,7 @@ type CoinStoreMobileBiffleProps = {
   isMember: boolean;
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
+  paymentInProgress?: boolean;
 };
 
 function formatRupee(amount: number): string {
@@ -298,6 +299,7 @@ export const CoinStoreMobileBiffle = ({
   isMember,
   featuredWeeklyPlan,
   basicWeeklyPlan,
+  paymentInProgress = false,
 }: CoinStoreMobileBiffleProps) => {
   const indexedPacks = useMemo(() => {
     const rows: {
@@ -439,13 +441,15 @@ export const CoinStoreMobileBiffle = ({
         <button
           type="button"
           onClick={onRecharge}
-          disabled={!selectedInList}
+          disabled={!selectedInList || paymentInProgress}
           className="mb-5 w-full rounded-full py-4 text-base font-bold text-white shadow-lg shadow-violet-500/20 transition-opacity hover:opacity-95 disabled:opacity-40"
           style={campaignCtaGradientStyle(true)}
         >
-          {selectedPrice != null
-            ? `Pay ${formatRupee(selectedPrice)}`
-            : "Pay"}
+          {paymentInProgress
+            ? "Processing..."
+            : selectedPrice != null
+              ? `Pay ${formatRupee(selectedPrice)}`
+              : "Pay"}
         </button>
       </div>
     </div>

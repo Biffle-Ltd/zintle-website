@@ -210,6 +210,7 @@ type QuickRechargePopupBiffleProps = {
   basicWeeklyPlan: SubscriptionPlan | null;
   timerPack: CoinStorePack | null;
   callContext?: QuickRechargeCallContext | null;
+  paymentInProgress?: boolean;
 };
 
 export const QuickRechargePopupBiffle = ({
@@ -222,6 +223,7 @@ export const QuickRechargePopupBiffle = ({
   basicWeeklyPlan,
   timerPack,
   callContext = null,
+  paymentInProgress = false,
 }: QuickRechargePopupBiffleProps) => {
   const filteredPacks = useMemo(() => {
     let result = packs;
@@ -360,13 +362,15 @@ export const QuickRechargePopupBiffle = ({
       <button
         type="button"
         onClick={onContinue}
-        disabled={selectedPackageId == null}
+        disabled={selectedPackageId == null || paymentInProgress}
         className="w-full rounded-full py-4 text-base font-bold text-white shadow-lg shadow-violet-500/20 transition-opacity hover:opacity-95 disabled:opacity-40"
         style={campaignCtaGradientStyle(true)}
       >
-        {selectedPrice != null
-          ? `Continue Call for ${formatRupee(selectedPrice)}`
-          : "Continue Call"}
+        {paymentInProgress
+          ? "Processing..."
+          : selectedPrice != null
+            ? `Continue Call for ${formatRupee(selectedPrice)}`
+            : "Continue Call"}
       </button>
       </div>
     </div>

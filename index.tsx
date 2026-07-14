@@ -142,6 +142,13 @@ export type CreateOrderPixelOptions = {
   trackCoinPixels?: boolean;
   pixelContext?: ParsedCoinPixelContext | null;
   coinPack?: CoinPackForAnalytics;
+  onCheckoutClosed?: () => void;
+};
+
+type CreateOrderPaymentResult = {
+  order?: unknown;
+  payment?: unknown;
+  checkoutLaunched: boolean;
 };
 
 // --- Membership status fetch helper ---
@@ -357,12 +364,12 @@ const initiatePayment = async (
   return data;
 };
 
-export function extractEasebuzzAccessKey(value) {
+export function extractEasebuzzAccessKey(value: string | null | undefined): string {
   if (!value || typeof value !== "string") return "";
 
   // If full URL, extract last path segment
   if (value.includes("/pay/")) {
-    return value.replace(/\/+$/, "").split("/").pop();
+    return value.replace(/\/+$/, "").split("/").pop() ?? "";
   }
 
   // Already a token
@@ -491,6 +498,7 @@ const launchPhonePeIframeCheckout = (
   orderUuid: string | null | undefined,
   organisationId: string = DEFAULT_ORGANISATION_ID,
   token?: string | null,
+  onCheckoutClosed?: () => void,
 ) => {
   const onClose = () => {
     void pollCoinPackPaymentAfterCheckout(
@@ -499,6 +507,7 @@ const launchPhonePeIframeCheckout = (
       token,
       "PhonePe",
     );
+    onCheckoutClosed?.();
   };
 
   const opened = openPhonePeIframeCheckout(tokenUrl, onClose);
@@ -509,6 +518,7 @@ const launchPhonePeIframeCheckout = (
       token,
       "PhonePe",
     );
+    onCheckoutClosed?.();
   }
 };
 
@@ -518,7 +528,18 @@ const launchEasebuzzCheckout = (
   orderUuid: string | null | undefined,
   organisationId: string = DEFAULT_ORGANISATION_ID,
   token?: string | null,
+  onCheckoutClosed?: () => void,
 ) => {
+  const onClose = () => {
+    void pollCoinPackPaymentAfterCheckout(
+      orderUuid,
+      organisationId,
+      token,
+      "Easebuzz",
+    );
+    onCheckoutClosed?.();
+  };
+
   try {
     const accessKey = extractEasebuzzAccessKey(accessToken);
     const merchantKey = EASEBUZZ_KEY;
@@ -528,22 +549,12 @@ const launchEasebuzzCheckout = (
       console.warn("Missing Easebuzz access key in payment response", {
         accessToken,
       });
-      void pollCoinPackPaymentAfterCheckout(
-        orderUuid,
-        organisationId,
-        token,
-        "Easebuzz",
-      );
+      onClose();
       return;
     }
     if (!merchantKey) {
       console.warn("Missing Easebuzz merchant key (set VITE_EASEBUZZ_KEY)");
-      void pollCoinPackPaymentAfterCheckout(
-        orderUuid,
-        organisationId,
-        token,
-        "Easebuzz",
-      );
+      onClose();
       return;
     }
 
@@ -553,25 +564,13 @@ const launchEasebuzzCheckout = (
     );
     const options = {
       access_key: accessKey,
-      onResponse: () => {
-        void pollCoinPackPaymentAfterCheckout(
-          orderUuid,
-          organisationId,
-          token,
-          "Easebuzz",
-        );
-      },
+      onResponse: onClose,
       theme: "#123456",
     };
     easebuzzCheckout.initiatePayment(options);
   } catch (err) {
     console.error("Error occurred in Easebuzz checkout", err);
-    void pollCoinPackPaymentAfterCheckout(
-      orderUuid,
-      organisationId,
-      token,
-      "Easebuzz",
-    );
+    onClose();
   }
 };
 
@@ -581,25 +580,33 @@ const createOrderAndInitiatePayment = async (
   token?: string | null,
   options?: CreateOrderPixelOptions,
   organisationId: string = DEFAULT_ORGANISATION_ID,
-) => {
-  const trackCoinPurchase =
-    Boolean(options?.trackCoinPixels) &&
-    options?.pixelContext != null &&
-    options?.coinPack != null;
+): Promise<CreateOrderPaymentResult> => {
+  const trackedPurchase =
+    options?.trackCoinPixels &&
+    options.pixelContext != null &&
+    options.coinPack != null
+      ? {
+          pixelContext: options.pixelContext,
+          coinPack: options.coinPack,
+        }
+      : null;
+  const onCheckoutClosed = options?.onCheckoutClosed;
 
-  if (trackCoinPurchase) {
-    const { pixelContext, coinPack } = options!;
-    sendCoinPaymentInitiated(pixelContext, coinPack);
+  if (trackedPurchase) {
+    sendCoinPaymentInitiated(
+      trackedPurchase.pixelContext,
+      trackedPurchase.coinPack,
+    );
   }
 
   const orderData = await createCoinOrder(coinPackId, token, organisationId);
   const order = orderData.data;
   if (!order?.order_uuid) {
-    return;
+    return { checkoutLaunched: false };
   }
 
-  if (trackCoinPurchase) {
-    const { pixelContext, coinPack } = options!;
+  if (trackedPurchase) {
+    const { pixelContext, coinPack } = trackedPurchase;
     lastTrackedCoinPurchaseRef = {
       orderId: String(order.id),
       orderUuid: String(order.order_uuid),
@@ -623,20 +630,25 @@ const createOrderAndInitiatePayment = async (
       order.order_uuid,
       organisationId,
       token,
+      onCheckoutClosed,
     );
-  } else if (PAYMENT_GATEWAY === "PhonePe") {
+    return { order, payment, checkoutLaunched: true };
+  }
+  if (PAYMENT_GATEWAY === "PhonePe") {
     const tokenUrl = payment?.access_token;
     if (!tokenUrl) {
-      return { order, payment };
+      return { order, payment, checkoutLaunched: false };
     }
     launchPhonePeIframeCheckout(
       appendPhonePeChromeWVParam(tokenUrl),
       order.order_uuid,
       organisationId,
       token,
+      onCheckoutClosed,
     );
+    return { order, payment, checkoutLaunched: true };
   }
-  return { order, payment };
+  return { order, payment, checkoutLaunched: false };
 };
 
 const ZintleLogo = ({ h }: { h?: string }) => (
@@ -1841,6 +1853,20 @@ const CoinsPage = ({
   const isLoggedIn = !!token;
 
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
+  const [isPaymentInProgress, setIsPaymentInProgress] = useState(false);
+  const paymentInProgressRef = useRef(false);
+
+  const releasePaymentLock = useCallback(() => {
+    paymentInProgressRef.current = false;
+    setIsPaymentInProgress(false);
+  }, []);
+
+  const acquirePaymentLock = useCallback(() => {
+    if (paymentInProgressRef.current) return false;
+    paymentInProgressRef.current = true;
+    setIsPaymentInProgress(true);
+    return true;
+  }, []);
 
   // Membership state
   const [membershipLoading, setMembershipLoading] = useState(true);
@@ -2071,6 +2097,7 @@ const CoinsPage = ({
   };
 
   const handleDesktopRecharge = async (pkg: any, index: number) => {
+    if (paymentInProgressRef.current) return;
     handlePackSelect(pkg, index);
     await handlePayClick(pkg);
   };
@@ -2078,6 +2105,7 @@ const CoinsPage = ({
   const handlePayClick = async (pkg?: any) => {
     const packageToUse = pkg;
     if (!packageToUse) return;
+    if (paymentInProgressRef.current) return;
 
     // If user is logged out, open login popup instead of creating order
     if (!isLoggedIn) {
@@ -2090,8 +2118,11 @@ const CoinsPage = ({
       console.warn("No coin_pack_id available for package", packageToUse);
       return;
     }
+
+    if (!acquirePaymentLock()) return;
+
     try {
-      await createOrderAndInitiatePayment(
+      const result = await createOrderAndInitiatePayment(
         packageToUse.id,
         token,
         {
@@ -2104,11 +2135,16 @@ const CoinsPage = ({
             coins: packageToUse.coins,
             bonus_coins: packageToUse.bonus_coins ?? 0,
           },
+          onCheckoutClosed: releasePaymentLock,
         },
         organisationId,
       );
+      if (!result.checkoutLaunched) {
+        releasePaymentLock();
+      }
     } catch (e) {
       console.error("Failed to create coin order from CoinsPage", e);
+      releasePaymentLock();
     }
   };
 
@@ -2173,7 +2209,7 @@ const CoinsPage = ({
       "isMember:",
       isMember,
     );
-    if (!selectedPackage) return;
+    if (!selectedPackage || paymentInProgressRef.current) return;
 
     // Subscription plans from the plans API use mandate flow
     const isSubscriptionPlan =
@@ -2186,7 +2222,10 @@ const CoinsPage = ({
     );
 
     if (isSubscriptionPlan) {
-      void handleSubscriptionMandateInit(selectedPackage.id);
+      if (!acquirePaymentLock()) return;
+      void handleSubscriptionMandateInit(selectedPackage.id).finally(
+        releasePaymentLock,
+      );
     } else {
       void handlePayClick(selectedPackage);
     }
@@ -2305,6 +2344,7 @@ const CoinsPage = ({
         basicWeeklyPlan={basicWeeklyPlan}
         timerPack={timerPack}
         callContext={quickRechargeCallContext}
+        paymentInProgress={isPaymentInProgress}
       />
     ) : (
       <QuickRechargePopup
@@ -2317,6 +2357,7 @@ const CoinsPage = ({
         basicWeeklyPlan={basicWeeklyPlan}
         timerPack={timerPack}
         callContext={quickRechargeCallContext}
+        paymentInProgress={isPaymentInProgress}
       />
     );
 
@@ -2339,6 +2380,7 @@ const CoinsPage = ({
     isMember,
     featuredWeeklyPlan,
     basicWeeklyPlan,
+    paymentInProgress: isPaymentInProgress,
   };
 
   return (
@@ -2383,10 +2425,15 @@ const CoinsPage = ({
                 </p>
                 <button
                   onClick={() => handleDesktopRecharge(pkg, i)}
-                  className="w-full rounded-xl py-3 font-bold text-white transition-opacity hover:opacity-90"
+                  disabled={isPaymentInProgress}
+                  className="w-full rounded-xl py-3 font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
                   style={campaignCtaGradientStyle(true)}
                 >
-                  {isLoggedIn ? "Pay" : "Login"}
+                  {isPaymentInProgress
+                    ? "Processing..."
+                    : isLoggedIn
+                      ? "Pay"
+                      : "Login"}
                 </button>
               </div>
             ))}
@@ -2422,9 +2469,14 @@ const CoinsPage = ({
                 </p>
                 <button
                   onClick={() => handleDesktopRecharge(pkg, i)}
-                  className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20"
+                  disabled={isPaymentInProgress}
+                  className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20 disabled:opacity-40"
                 >
-                  {isLoggedIn ? "Recharge" : "Login"}
+                  {isPaymentInProgress
+                    ? "Processing..."
+                    : isLoggedIn
+                      ? "Recharge"
+                      : "Login"}
                 </button>
               </div>
             ))}

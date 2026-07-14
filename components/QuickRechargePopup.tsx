@@ -254,6 +254,7 @@ type QuickRechargePopupProps = {
   basicWeeklyPlan: SubscriptionPlan | null;
   timerPack: CoinStorePack | null;
   callContext?: QuickRechargeCallContext | null;
+  paymentInProgress?: boolean;
 };
 
 export const QuickRechargePopup = ({
@@ -266,6 +267,7 @@ export const QuickRechargePopup = ({
   basicWeeklyPlan,
   timerPack,
   callContext = null,
+  paymentInProgress = false,
 }: QuickRechargePopupProps) => {
   const filteredPacks = useMemo(() => {
     let result = packs;
@@ -413,12 +415,14 @@ export const QuickRechargePopup = ({
       <button
         type="button"
         onClick={onContinue}
-        disabled={selectedPackageId == null}
+        disabled={selectedPackageId == null || paymentInProgress}
         className="mt-3 w-full shrink-0 rounded-full bg-gradient-to-r from-[#FF4B7A] via-[#FF5E4D] to-[#FF8A3D] py-3.5 text-base font-bold text-white shadow-lg shadow-[#FF5E4D]/30 transition-opacity hover:opacity-95 disabled:opacity-40"
       >
-        {selectedPrice != null
-          ? `Continue Call for ${formatRupee(selectedPrice)}`
-          : "Continue Call"}
+        {paymentInProgress
+          ? "Processing..."
+          : selectedPrice != null
+            ? `Continue Call for ${formatRupee(selectedPrice)}`
+            : "Continue Call"}
       </button>
     </div>
   );

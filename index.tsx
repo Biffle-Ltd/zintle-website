@@ -73,6 +73,9 @@ import {
   getJwtFromStorage,
   hasAnyJwtInStorage,
 } from "./utils/authStorage";
+import {
+  parseQuickRechargeCallContext,
+} from "./utils/quickRecharge";
 import { HOST } from "./utils/host";
 import {
   appendPhonePeChromeWVParam,
@@ -1789,6 +1792,13 @@ const CoinsPage = ({
   );
 
   const quickRecharge = isQuickRechargeFromSearch(location.search);
+  const quickRechargeCallContext = useMemo(
+    () =>
+      parseQuickRechargeCallContext(location.search, {
+        defaultSessionType: isBiffle ? "call" : "chat",
+      }),
+    [location.search, isBiffle],
+  );
   const displayedPacks = useMemo(
     () => (quickRecharge ? coinPacks.filter((p) => p.is_micropack) : coinPacks),
     [coinPacks, quickRecharge],
@@ -2294,6 +2304,7 @@ const CoinsPage = ({
         featuredWeeklyPlan={featuredWeeklyPlan}
         basicWeeklyPlan={basicWeeklyPlan}
         timerPack={timerPack}
+        callContext={quickRechargeCallContext}
       />
     ) : (
       <QuickRechargePopup
@@ -2305,6 +2316,7 @@ const CoinsPage = ({
         featuredWeeklyPlan={featuredWeeklyPlan}
         basicWeeklyPlan={basicWeeklyPlan}
         timerPack={timerPack}
+        callContext={quickRechargeCallContext}
       />
     );
 

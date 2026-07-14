@@ -38,6 +38,7 @@ export type ParsedCoinPixelContext = {
   deviceInfo: DeviceInfo;
   appInfo: AppInfo;
   organisation_id: string;
+  surface: CoinPurchaseSurface | null;
 };
 
 export type CoinPackForAnalytics = {
@@ -55,6 +56,30 @@ export type CoinPixelEventName =
   | "coin_payment_initiated"
   | "coin_payment_success"
   | "coin_payment_failed";
+
+/** Where the coin purchase UI was shown (analytics "real estate"). */
+export type CoinPurchaseSurface = "coin_store" | "coin_popup";
+
+const COIN_PURCHASE_SURFACES: ReadonlySet<CoinPurchaseSurface> = new Set([
+  "coin_store",
+  "coin_popup",
+]);
+
+function searchParamsFromSearch(search: string): URLSearchParams {
+  const query = search.startsWith("?") ? search.slice(1) : search;
+  return new URLSearchParams(query);
+}
+
+/** `surface` query param: `coin_store` | `coin_popup`, or null when missing/invalid. */
+export function coinPurchaseSurfaceFromSearch(
+  search: string,
+): CoinPurchaseSurface | null {
+  const raw = searchParamsFromSearch(search).get("surface")?.trim().toLowerCase();
+  if (raw && COIN_PURCHASE_SURFACES.has(raw as CoinPurchaseSurface)) {
+    return raw as CoinPurchaseSurface;
+  }
+  return null;
+}
 
 const CURRENCY = "INR";
 
@@ -100,8 +125,7 @@ function normalizePlatform(raw: string): "web" | "android" | "ios" {
 }
 
 export function isQuickRechargeFromSearch(search: string): boolean {
-  const query = search.startsWith("?") ? search.slice(1) : search;
-  return new URLSearchParams(query).get("quick_recharge")?.toLocaleLowerCase() === "true";
+  return searchParamsFromSearch(search).get("quick_recharge")?.toLocaleLowerCase() === "true";
 }
 
 function buildBaseEventParams(
@@ -206,6 +230,7 @@ export function parseCoinPixelContext(
   const platform = normalizePlatform(deviceInfo.platform);
 
   const organisation_id = getOrganisationIdFromSearch(search, pathname);
+  const surface = coinPurchaseSurfaceFromSearch(search);
 
   return {
     token: id,
@@ -217,6 +242,7 @@ export function parseCoinPixelContext(
     deviceInfo,
     appInfo,
     organisation_id,
+    surface,
   };
 }
 
@@ -295,6 +321,7 @@ export function sendCoinPaymentSuccess(
     currency: CURRENCY,
     coin_pack_id: args.coin_pack_id,
     coin_quantity: args.coin_quantity,
+    surface: ctx.surface,
     payment_method: PAYMENT_GATEWAY,
     payment_gateway: PAYMENT_GATEWAY,
     event_timestamp: eventTimestampUnixSeconds(),

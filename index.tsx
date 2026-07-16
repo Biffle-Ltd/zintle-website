@@ -25,6 +25,7 @@ import { Refund } from "./pages/Refund";
 import { ChildSafety } from "./pages/ChildSafety";
 import { Subscriptions } from "./pages/Subscriptions";
 import { Campaign } from "./pages/Campaign";
+import { WelcomeBackOffer } from "./pages/WelcomeBackOffer";
 import { PaymentStatus } from "./pages/PaymentStatus";
 import { PaymentStatusPopup } from "./components/PaymentStatusPopup";
 import { PhoneOtpLoginScreen } from "./components/PhoneOtpLoginScreen";
@@ -103,6 +104,7 @@ import {
   PAYMENT_GATEWAY,
   type PaymentGateway,
 } from "./utils/paymentGateway";
+import type { CreateOrderPixelOptions as BaseCreateOrderPixelOptions } from "./utils/coinCheckoutOptions";
 
 export { PAYMENT_GATEWAY };
 
@@ -138,18 +140,21 @@ function isCoinPaymentPendingStatus(status: string | undefined): boolean {
   return normalized === "PENDING" || normalized === "INITIATED";
 }
 
-export type CreateOrderPixelOptions = {
-  trackCoinPixels?: boolean;
-  pixelContext?: ParsedCoinPixelContext | null;
-  coinPack?: CoinPackForAnalytics;
-  onCheckoutClosed?: () => void;
-};
-
 type CreateOrderPaymentResult = {
   order?: unknown;
   payment?: unknown;
   checkoutLaunched: boolean;
 };
+
+type CreateOrderPixelOptions = BaseCreateOrderPixelOptions & {
+  pixelContext?: ParsedCoinPixelContext | null;
+  coinPack?: CoinPackForAnalytics;
+};
+
+let coinCheckoutPollOptionsRef: Pick<
+  CreateOrderPixelOptions,
+  "suppressPaymentStatusPopup" | "onAfterCheckoutPoll"
+> | null = null;
 
 // --- Membership status fetch helper ---
 
@@ -445,7 +450,7 @@ const validateCoinPackPayment = async (
       refreshCoinPacksCallback?.();
     }
 
-    if (paymentStatus) {
+    if (paymentStatus && !coinCheckoutPollOptionsRef?.suppressPaymentStatusPopup) {
       showPaymentStatusCallback?.(paymentStatus);
     }
     return paymentStatus;
@@ -463,6 +468,13 @@ const pollCoinPackPaymentAfterCheckout = async (
 ) => {
   if (!orderUuid) return;
 
+  let lastStatus: string | undefined;
+  let timedOut = true;
+  const customPollFlow = Boolean(
+    coinCheckoutPollOptionsRef?.onAfterCheckoutPoll ||
+      coinCheckoutPollOptionsRef?.suppressPaymentStatusPopup,
+  );
+
   for (let attempt = 0; attempt < COIN_PAYMENT_POLL_MAX_ATTEMPTS; attempt++) {
     if (attempt > 0) {
       await new Promise((resolve) =>
@@ -476,19 +488,49 @@ const pollCoinPackPaymentAfterCheckout = async (
       token,
       gateway,
     );
+    lastStatus = paymentStatus;
 
-    const stillTracking =
-      lastTrackedCoinPurchaseRef?.orderUuid === String(orderUuid);
-    if (!stillTracking) return;
+    if (!customPollFlow) {
+      const stillTracking =
+        lastTrackedCoinPurchaseRef?.orderUuid === String(orderUuid);
+      if (!stillTracking) {
+        timedOut = false;
+        break;
+      }
+    }
 
     if (!isCoinPaymentPendingStatus(paymentStatus)) {
-      lastTrackedCoinPurchaseRef = null;
-      return;
+      if (!customPollFlow) {
+        lastTrackedCoinPurchaseRef = null;
+      }
+      timedOut = false;
+      break;
     }
   }
 
-  if (lastTrackedCoinPurchaseRef?.orderUuid === String(orderUuid)) {
+  if (
+    !customPollFlow &&
+    lastTrackedCoinPurchaseRef?.orderUuid === String(orderUuid)
+  ) {
     lastTrackedCoinPurchaseRef = null;
+  }
+
+  const pollOptions = coinCheckoutPollOptionsRef;
+  coinCheckoutPollOptionsRef = null;
+
+  if (pollOptions?.onAfterCheckoutPoll) {
+    await pollOptions.onAfterCheckoutPoll({ status: lastStatus, timedOut });
+    return;
+  }
+
+  if (
+    pollOptions?.suppressPaymentStatusPopup &&
+    lastStatus &&
+    !isCoinPaymentPendingStatus(lastStatus)
+  ) {
+    showPaymentStatusCallback?.(lastStatus);
+  } else if (timedOut && pollOptions?.suppressPaymentStatusPopup) {
+    showPaymentStatusCallback?.(lastStatus ?? "PENDING");
   }
 };
 
@@ -575,7 +617,7 @@ const launchEasebuzzCheckout = (
 };
 
 // Combined helper to create order and immediately initiate payment
-const createOrderAndInitiatePayment = async (
+export const createOrderAndInitiatePayment = async (
   coinPackId: number | string,
   token?: string | null,
   options?: CreateOrderPixelOptions,
@@ -591,6 +633,13 @@ const createOrderAndInitiatePayment = async (
         }
       : null;
   const onCheckoutClosed = options?.onCheckoutClosed;
+  coinCheckoutPollOptionsRef = options?.suppressPaymentStatusPopup ||
+    options?.onAfterCheckoutPoll
+    ? {
+        suppressPaymentStatusPopup: options.suppressPaymentStatusPopup,
+        onAfterCheckoutPoll: options.onAfterCheckoutPoll,
+      }
+    : null;
 
   if (trackedPurchase) {
     sendCoinPaymentInitiated(
@@ -2804,6 +2853,8 @@ const Layout = () => {
   const isSubscriptionsPage = location.pathname === "/subscriptions";
   const isCampaignPage =
     (location.pathname.replace(/\/+$/, "") || "/") === "/campaign";
+  const isWelcomeBackOfferPage =
+    location.pathname.replace(/\/+$/, "") === "/welcome-back-offer";
   const isFbRedirectPage = location.pathname === "/fb-redirect";
   const isPaymentStatusPage = location.pathname === "/payment-status";
   const [showLogin, setShowLogin] = useState(false);
@@ -2835,10 +2886,14 @@ const Layout = () => {
     [organisationId, location.search],
   );
 
-  // Fetch coin packs on mount/when logged in changes
+  // Fetch coin packs on mount/when logged in changes (skip on welcome-back WebView)
   useEffect(() => {
+    if (isWelcomeBackOfferPage) {
+      setCoinPacksLoading(false);
+      return;
+    }
     void loadCoinPacks();
-  }, [isLoggedIn, loadCoinPacks]);
+  }, [isLoggedIn, loadCoinPacks, isWelcomeBackOfferPage]);
 
   // Refresh coin packs after a successful purchase (e.g. one-time packs)
   useEffect(() => {
@@ -2879,7 +2934,9 @@ const Layout = () => {
       className={`text-brand-text font-sans ${
         isCampaignPage
           ? "h-dvh max-h-dvh overflow-hidden"
-          : isQuickRechargeCoinsPage
+          : isWelcomeBackOfferPage
+            ? "h-dvh max-h-dvh overflow-hidden sm:h-auto sm:max-h-none sm:min-h-dvh sm:overflow-y-auto"
+            : isQuickRechargeCoinsPage
             ? "h-dvh max-h-dvh overflow-hidden bg-transparent"
             : isCoinsPage
               ? ""
@@ -2889,6 +2946,7 @@ const Layout = () => {
       {!isCoinsPage &&
         !isSubscriptionsPage &&
         !isCampaignPage &&
+        !isWelcomeBackOfferPage &&
         !isFbRedirectPage &&
         !isPaymentStatusPage && (
           <Header
@@ -2976,6 +3034,16 @@ const Layout = () => {
             />
           }
         />
+        <Route
+          path="/welcome-back-offer"
+          element={
+            <WelcomeBackOffer
+              organisationId={organisationId}
+              createOrderAndInitiatePayment={createOrderAndInitiatePayment}
+              onPaymentStatus={setPaymentStatus}
+            />
+          }
+        />
         <Route path="/fb-redirect" element={<FBRedirect />} />
         <Route path="/payment-status" element={<PaymentStatus />} />
       </Routes>
@@ -2983,6 +3051,7 @@ const Layout = () => {
       {!isCoinsPage &&
         !isSubscriptionsPage &&
         !isCampaignPage &&
+        !isWelcomeBackOfferPage &&
         !isFbRedirectPage &&
         !isPaymentStatusPage && <Footer />}
 

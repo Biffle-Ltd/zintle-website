@@ -55,22 +55,32 @@ export type CoinPixelEventName =
   | "coin_pack_selected"
   | "coin_payment_initiated"
   | "coin_payment_success"
-  | "coin_payment_failed";
+  | "coin_payment_failed"
+  | "welcome_back_offer_viewed";
 
 /** Where the coin purchase UI was shown (analytics "real estate"). */
-export type CoinPurchaseSurface = "coin_store" | "coin_popup";
+export type CoinPurchaseSurface =
+  | "coin_store"
+  | "coin_popup"
+  | "welcome_back_offer";
 
 const COIN_PURCHASE_SURFACES: ReadonlySet<CoinPurchaseSurface> = new Set([
   "coin_store",
   "coin_popup",
+  "welcome_back_offer",
 ]);
+
+function isWelcomeBackOfferPath(pathname?: string): boolean {
+  if (!pathname) return false;
+  return pathname.replace(/\/+$/, "") === "/welcome-back-offer";
+}
 
 function searchParamsFromSearch(search: string): URLSearchParams {
   const query = search.startsWith("?") ? search.slice(1) : search;
   return new URLSearchParams(query);
 }
 
-/** `surface` query param: `coin_store` | `coin_popup`, or null when missing/invalid. */
+/** `surface` query param, or null when missing/invalid. */
 export function coinPurchaseSurfaceFromSearch(
   search: string,
 ): CoinPurchaseSurface | null {
@@ -78,6 +88,16 @@ export function coinPurchaseSurfaceFromSearch(
   if (raw && COIN_PURCHASE_SURFACES.has(raw as CoinPurchaseSurface)) {
     return raw as CoinPurchaseSurface;
   }
+  return null;
+}
+
+function resolveCoinPurchaseSurface(
+  search: string,
+  pathname?: string,
+): CoinPurchaseSurface | null {
+  const fromUrl = coinPurchaseSurfaceFromSearch(search);
+  if (fromUrl) return fromUrl;
+  if (isWelcomeBackOfferPath(pathname)) return "welcome_back_offer";
   return null;
 }
 
@@ -133,9 +153,10 @@ function buildBaseEventParams(
 ): Record<string, unknown> {
   return {
     user_id: ctx.user_id,
-    timestamp: eventTimestampUnixSeconds(),
+    event_timestamp: eventTimestampUnixSeconds(),
     device_id: ctx.device_id,
     platform: ctx.platform,
+    surface: ctx.surface,
   };
 }
 
@@ -230,7 +251,7 @@ export function parseCoinPixelContext(
   const platform = normalizePlatform(deviceInfo.platform);
 
   const organisation_id = getOrganisationIdFromSearch(search, pathname);
-  const surface = coinPurchaseSurfaceFromSearch(search);
+  const surface = resolveCoinPurchaseSurface(search, pathname);
 
   return {
     token: id,
@@ -341,6 +362,7 @@ export function sendCoinPaymentFailed(
     user_id: ctx.user_id,
     currency: CURRENCY,
     failure_reason: args.failure_reason ?? "",
+    surface: ctx.surface,
     payment_method: PAYMENT_GATEWAY,
     payment_gateway: PAYMENT_GATEWAY,
     event_timestamp: eventTimestampUnixSeconds(),
@@ -349,4 +371,47 @@ export function sendCoinPaymentFailed(
   };
   sendPixelEvent(ctx.organisation_id, "coin_payment_failed", eventParams);
   sendCoinAnalyticsEvent(ctx, "coin_payment_failed", eventParams);
+}
+
+export type WelcomeBackOfferViewedInfo = {
+  is_eligible?: boolean;
+  load_error?: boolean;
+  coin_pack: WelcomeBackCoinPackForAnalytics | null;
+};
+
+export type WelcomeBackCoinPackForAnalytics = {
+  id: number;
+  name: string;
+  amount: number;
+  coin_value: number;
+};
+
+function welcomeBackPackToAnalytics(
+  pack: WelcomeBackCoinPackForAnalytics | null,
+): Record<string, unknown> | null {
+  if (!pack) return null;
+  return {
+    id: pack.id,
+    name: pack.name,
+    amount: pack.amount,
+    coin_value: pack.coin_value,
+  };
+}
+
+export function sendWelcomeBackOfferViewed(
+  ctx: ParsedCoinPixelContext | null,
+  info: WelcomeBackOfferViewedInfo,
+): void {
+  if (!ctx) return;
+  const eventParams: Record<string, unknown> = {
+    ...buildBaseEventParams(ctx),
+    event_info: {
+      ...(info.load_error
+        ? { load_error: true }
+        : { is_eligible: info.is_eligible ?? false }),
+      coin_pack: welcomeBackPackToAnalytics(info.coin_pack),
+    },
+  };
+  sendPixelEvent(ctx.organisation_id, "welcome_back_offer_viewed", eventParams);
+  sendCoinAnalyticsEvent(ctx, "welcome_back_offer_viewed", eventParams);
 }

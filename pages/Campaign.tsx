@@ -22,6 +22,7 @@ import {
   linkCampaignFacebookAttributionSafe,
   resolveCampaignFbclid,
 } from "../utils/fbAttribution";
+import { navigateAfterCampaignLoginGate } from "../utils/campaignLanguageGate";
 
 const PAGE_BG = "#162a44";
 const ACCENT_ORANGE = "#f58220";
@@ -265,14 +266,24 @@ export function Campaign({
           ? formatPlanPriceInr(activePlan.price)
           : "";
 
-  const handleStartFreeTrial = () => {
+  const handleStartFreeTrial = async () => {
     if (!checkoutPath) return;
     if (!isLoggedIn) {
       sessionStorage.setItem(ZINTLE_POST_LOGIN_REDIRECT_KEY, checkoutPath);
       setShowLogin(true);
       return;
     }
-    navigate(checkoutPath);
+    const jwt = getJwtFromStorage(organisationId);
+    if (!jwt) return;
+    const authToken = headerSafeToken(jwt);
+    if (!authToken) return;
+    await navigateAfterCampaignLoginGate({
+      checkoutPath,
+      token: authToken,
+      organisationId,
+      navigate,
+      languageSearchQuery: location.search,
+    });
   };
 
   const isBiffle = isBiffleOrganisationId(organisationId);

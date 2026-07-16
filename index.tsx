@@ -25,6 +25,7 @@ import { Refund } from "./pages/Refund";
 import { ChildSafety } from "./pages/ChildSafety";
 import { Subscriptions } from "./pages/Subscriptions";
 import { Campaign } from "./pages/Campaign";
+import { CampaignLanguage } from "./pages/CampaignLanguage";
 import { WelcomeBackOffer } from "./pages/WelcomeBackOffer";
 import { PaymentStatus } from "./pages/PaymentStatus";
 import { PaymentStatusPopup } from "./components/PaymentStatusPopup";
@@ -67,6 +68,7 @@ import {
   ZINTLE_POST_LOGIN_REDIRECT_KEY,
   withJwtInQuery,
 } from "./utils/postLoginRedirect";
+import { navigateAfterCampaignLoginGate } from "./utils/campaignLanguageGate";
 import { isCampaignPostLoginRedirect } from "./utils/campaignPixelEvents";
 import { sendMetaPixelPageView } from "./utils/metaPixel";
 import {
@@ -78,6 +80,7 @@ import {
   parseQuickRechargeCallContext,
 } from "./utils/quickRecharge";
 import { HOST } from "./utils/host";
+import { fetchUserDetails } from "./utils/userProfileApi";
 import {
   appendPhonePeChromeWVParam,
   openPhonePeIframeCheckout,
@@ -167,22 +170,8 @@ async function fetchMembershipStatus(
   organisationId: string,
   signal?: AbortSignal,
 ): Promise<MembershipStatusResult> {
-  const jwtToken = headerSafeToken(token);
-  const response = await fetch(
-    `${HOST}/api/v1/user_center/details/get-user-details/`,
-    {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
-        "X-Organisation-ID": organisationId,
-      },
-      signal,
-    },
-  );
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const json = await response.json();
-  return { isMember: Boolean(json?.data?.is_member) };
+  const data = await fetchUserDetails(token, organisationId, signal);
+  return { isMember: Boolean(data.is_member) };
 }
 
 // --- Subscription plans fetch helper ---
@@ -1558,17 +1547,43 @@ const CoinStore = ({
         isCampaignFlow={isCampaignLoginFlow}
         onClose={abandonCampaignRedirectAndClose}
         onSuccess={() => {
-          const pending = sessionStorage.getItem(
-            ZINTLE_POST_LOGIN_REDIRECT_KEY,
-          );
-          sessionStorage.removeItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
-          if (pending?.startsWith("/")) {
+          void (async () => {
+            const pending = sessionStorage.getItem(
+              ZINTLE_POST_LOGIN_REDIRECT_KEY,
+            );
+            sessionStorage.removeItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
+            if (!pending?.startsWith("/")) {
+              onClose();
+              return;
+            }
+
             const jwt = getJwtFromStorage(organisationId);
             const dest =
               jwt && isBiffle ? withJwtInQuery(pending, jwt) : pending;
+
+            if (isCampaignLoginFlow && jwt) {
+              const authToken = headerSafeToken(jwt);
+              if (!authToken) {
+                navigate(dest);
+                onClose();
+                return;
+              }
+              await navigateAfterCampaignLoginGate({
+                checkoutPath: dest,
+                token: authToken,
+                organisationId,
+                navigate,
+                languageSearchQuery: pending.includes("?")
+                  ? pending.slice(pending.indexOf("?"))
+                  : "",
+              });
+              onClose();
+              return;
+            }
+
             navigate(dest);
-          }
-          onClose();
+            onClose();
+          })();
         }}
       />
     );
@@ -2852,7 +2867,8 @@ const Layout = () => {
     isCoinsPage && isQuickRechargeFromSearch(location.search);
   const isSubscriptionsPage = location.pathname === "/subscriptions";
   const isCampaignPage =
-    (location.pathname.replace(/\/+$/, "") || "/") === "/campaign";
+    (location.pathname.replace(/\/+$/, "") || "/") === "/campaign" ||
+    location.pathname.replace(/\/+$/, "") === "/campaign/language";
   const isWelcomeBackOfferPage =
     location.pathname.replace(/\/+$/, "") === "/welcome-back-offer";
   const isFbRedirectPage = location.pathname === "/fb-redirect";
@@ -3029,6 +3045,15 @@ const Layout = () => {
           path="/campaign"
           element={
             <Campaign
+              organisationId={organisationId}
+              setShowLogin={setShowLogin}
+            />
+          }
+        />
+        <Route
+          path="/campaign/language"
+          element={
+            <CampaignLanguage
               organisationId={organisationId}
               setShowLogin={setShowLogin}
             />

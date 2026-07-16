@@ -13,9 +13,12 @@ import {
   handleCampaignUnauthorized,
 } from "../utils/campaignAuth";
 import { triggerCampaignFbRedirect } from "../utils/campaignFbRedirect";
-import { getOrganisationIdFromSearch } from "../utils/organisationIdFromUrl";
+import { getOrganisationIdFromSearch, isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
 import { clearJwtForOrganisation, getJwtFromStorage } from "../utils/authStorage";
-import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
+import {
+  ZINTLE_POST_LOGIN_REDIRECT_KEY,
+} from "../utils/postLoginRedirect";
+import { resolveCampaignSubscriptionsLanguageGate } from "../utils/campaignLanguageGate";
 import { getLoginPhoneForOrganisation } from "../utils/loginContactStorage";
 import {
   fetchMandateStatus,
@@ -680,6 +683,49 @@ export const Subscriptions = ({
   }>({ loading: false, error: null, data: null });
 
   const startTrialEventSentRef = useRef(false);
+  const campaignLanguageGateCheckedRef = useRef(false);
+  const [campaignLanguageGateReady, setCampaignLanguageGateReady] = useState(
+    () => !isCampaign || !isLoggedIn || !isBiffleOrganisationId(organisationId),
+  );
+
+  useEffect(() => {
+    if (
+      !isCampaign ||
+      !isLoggedIn ||
+      !isBiffleOrganisationId(organisationId)
+    ) {
+      setCampaignLanguageGateReady(true);
+      return;
+    }
+    if (campaignLanguageGateCheckedRef.current) return;
+    campaignLanguageGateCheckedRef.current = true;
+
+    let cancelled = false;
+    const checkoutPath = `${location.pathname}${location.search}`;
+
+    void (async () => {
+      const authToken = headerSafeToken(token);
+      if (!authToken) {
+        if (!cancelled) setCampaignLanguageGateReady(true);
+        return;
+      }
+
+      const result = await resolveCampaignSubscriptionsLanguageGate({
+        token: authToken,
+        organisationId,
+        checkoutPath,
+        languageSearchQuery: location.search,
+        navigate,
+      });
+
+      if (cancelled || result === "redirecting") return;
+      setCampaignLanguageGateReady(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isCampaign, isLoggedIn, location.pathname, location.search, navigate, organisationId, token]);
 
   const buildCampaignEventContext = useCallback(() => {
     const base = parseCampaignPixelContext(location.search, location.pathname, {
@@ -1105,6 +1151,19 @@ export const Subscriptions = ({
   const campaignWaitAmountLabel = planDetailsState.data
     ? formatRupeeWhole(getTrialTokenRupee(planDetailsState.data))
     : "₹ 0";
+
+  if (
+    isCampaign &&
+    isLoggedIn &&
+    isBiffleOrganisationId(organisationId) &&
+    !campaignLanguageGateReady
+  ) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-black">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+      </div>
+    );
+  }
 
   return (
     <div className={paySecureShellClass}>

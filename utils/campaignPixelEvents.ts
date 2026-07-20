@@ -42,8 +42,9 @@ export type CampaignPlanEventInfo = {
 
 const ANALYTICS_UNKNOWN = "unknown";
 
-function eventTimestampUnixSeconds(): number {
-  return Math.floor(Date.now() / 1000);
+/** Unix epoch milliseconds. */
+function eventTimestampUnixMs(): number {
+  return Date.now();
 }
 
 function parseJsonQueryParam(
@@ -203,7 +204,7 @@ function buildBaseEventParams(
 ): Record<string, unknown> {
   return {
     user_id: ctx.user_id,
-    timestamp: eventTimestampUnixSeconds(),
+    timestamp: eventTimestampUnixMs(),
     device_id: ctx.device_id,
     platform: ctx.platform,
     organisation_id: ctx.organisation_id,

@@ -42,14 +42,14 @@ function sanitizeAppInfo(info: AppInfo): AppInfo {
   };
 }
 
-function analyticsEventTimestampSeconds(
+function analyticsEventTimestampMs(
   eventParams: Record<string, unknown>,
 ): number {
   const fromParams = eventParams.event_timestamp ?? eventParams.timestamp;
   if (typeof fromParams === "number" && Number.isFinite(fromParams)) {
     return Math.trunc(fromParams);
   }
-  return Math.floor(Date.now() / 1000);
+  return Date.now();
 }
 
 function resolveUserId(
@@ -74,7 +74,7 @@ export function sendUserCenterAnalyticsEvent(
 
   if (!eventName?.trim()) return;
 
-  const event_timestamp = analyticsEventTimestampSeconds(eventParams);
+  const event_timestamp = analyticsEventTimestampMs(eventParams);
   if (!Number.isFinite(event_timestamp)) return;
 
   const organisation_id = ctx.organisation_id?.trim();

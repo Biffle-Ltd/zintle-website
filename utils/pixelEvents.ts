@@ -103,9 +103,9 @@ function resolveCoinPurchaseSurface(
 
 const CURRENCY = "INR";
 
-/** Unix epoch seconds (matches analytics `IntegerField` / backend serializers). */
-function eventTimestampUnixSeconds(): number {
-  return Math.floor(Date.now() / 1000);
+/** Unix epoch milliseconds. */
+function eventTimestampUnixMs(): number {
+  return Date.now();
 }
 
 function parseJsonQueryParam(
@@ -153,7 +153,7 @@ function buildBaseEventParams(
 ): Record<string, unknown> {
   return {
     user_id: ctx.user_id,
-    event_timestamp: eventTimestampUnixSeconds(),
+    event_timestamp: eventTimestampUnixMs(),
     device_id: ctx.device_id,
     platform: ctx.platform,
     surface: ctx.surface,
@@ -345,7 +345,7 @@ export function sendCoinPaymentSuccess(
     surface: ctx.surface,
     payment_method: PAYMENT_GATEWAY,
     payment_gateway: PAYMENT_GATEWAY,
-    event_timestamp: eventTimestampUnixSeconds(),
+    event_timestamp: eventTimestampUnixMs(),
     platform: ctx.platform,
     device_id: ctx.device_id,
   };
@@ -365,7 +365,7 @@ export function sendCoinPaymentFailed(
     surface: ctx.surface,
     payment_method: PAYMENT_GATEWAY,
     payment_gateway: PAYMENT_GATEWAY,
-    event_timestamp: eventTimestampUnixSeconds(),
+    event_timestamp: eventTimestampUnixMs(),
     platform: ctx.platform,
     device_id: ctx.device_id,
   };

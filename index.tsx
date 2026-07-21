@@ -1880,9 +1880,10 @@ const CoinsPage = ({
     [coinPacks, quickRecharge],
   );
 
+  // From full list so QR can feature coin_100 (non-micropack) as limited offer.
   const timerPack = useMemo(
-    () => resolveTimerPack(displayedPacks),
-    [displayedPacks],
+    () => resolveTimerPack(coinPacks),
+    [coinPacks],
   );
   const exclusiveDeals = useMemo(
     () =>
@@ -2147,13 +2148,13 @@ const CoinsPage = ({
   useEffect(() => {
     if (!selectedPackage?.id) return;
     if (subscriptionPlanIds.includes(selectedPackage.id)) return;
-    const packStillAvailable = displayedPacks.some(
-      (p) => p.id === selectedPackage.id,
-    );
+    const packStillAvailable =
+      displayedPacks.some((p) => p.id === selectedPackage.id) ||
+      timerPack?.id === selectedPackage.id;
     if (!packStillAvailable) {
       setSelectedPackage(null);
     }
-  }, [displayedPacks, selectedPackage, subscriptionPlanIds]);
+  }, [displayedPacks, selectedPackage, subscriptionPlanIds, timerPack]);
 
   const handlePackSelect = (pkg: any, index: number) => {
     setSelectedPackage(pkg);

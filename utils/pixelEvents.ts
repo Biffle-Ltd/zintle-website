@@ -56,7 +56,11 @@ export type CoinPixelEventName =
   | "coin_payment_initiated"
   | "coin_payment_success"
   | "coin_payment_failed"
+  | "iframe_loaded"
   | "welcome_back_offer_viewed";
+
+/** Gateway value for `iframe_loaded` (lowercase, matches product analytics). */
+export type IframeLoadedPaymentGateway = "phonepe" | "easebuzz";
 
 /** Where the coin purchase UI was shown (analytics "real estate"). */
 export type CoinPurchaseSurface =
@@ -371,6 +375,22 @@ export function sendCoinPaymentFailed(
   };
   sendPixelEvent(ctx.organisation_id, "coin_payment_failed", eventParams);
   sendCoinAnalyticsEvent(ctx, "coin_payment_failed", eventParams);
+}
+
+/** Fired once when PhonePe / Easebuzz checkout iframe finishes loading. */
+export function sendIframeLoaded(
+  ctx: ParsedCoinPixelContext | null,
+  paymentGateway: IframeLoadedPaymentGateway,
+): void {
+  if (!ctx) return;
+  const eventParams: Record<string, unknown> = {
+    ...buildBaseEventParams(ctx),
+    event_info: {
+      payment_gateway: paymentGateway,
+    },
+  };
+  sendPixelEvent(ctx.organisation_id, "iframe_loaded", eventParams);
+  sendCoinAnalyticsEvent(ctx, "iframe_loaded", eventParams);
 }
 
 export type WelcomeBackOfferViewedInfo = {

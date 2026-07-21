@@ -54,6 +54,7 @@ import {
   sendCoinPaymentInitiated,
   sendCoinPaymentSuccess,
   sendCoinStoreViewed,
+  sendIframeLoaded,
   sendQuickRechargePopupViewed,
   type CoinPackForAnalytics,
   type ParsedCoinPixelContext,
@@ -85,6 +86,7 @@ import {
   appendPhonePeChromeWVParam,
   openPhonePeIframeCheckout,
 } from "./utils/phonePeIframeCheckout";
+import { watchPaymentCheckoutIframeLoad } from "./utils/paymentCheckoutIframeLoad";
 import {
   openMandateRedirectUrl,
   resolveMandateRedirectUrl,
@@ -550,7 +552,16 @@ const launchPhonePeIframeCheckout = (
       "PhonePe",
     );
     onCheckoutClosed?.();
+    return;
   }
+
+  // PhonePe SDK has no load callback — fire once the PayPage iframe loads.
+  watchPaymentCheckoutIframeLoad("phonepe", () => {
+    sendIframeLoaded(
+      lastTrackedCoinPurchaseRef?.pixelContext ?? null,
+      "phonepe",
+    );
+  });
 };
 
 // Easebuzz iframe checkout (primary coin purchase flow)
@@ -599,6 +610,14 @@ const launchEasebuzzCheckout = (
       theme: "#123456",
     };
     easebuzzCheckout.initiatePayment(options);
+
+    // Easebuzz SDK has no load callback — fire once the checkout iframe loads.
+    watchPaymentCheckoutIframeLoad("easebuzz", () => {
+      sendIframeLoaded(
+        lastTrackedCoinPurchaseRef?.pixelContext ?? null,
+        "easebuzz",
+      );
+    });
   } catch (err) {
     console.error("Error occurred in Easebuzz checkout", err);
     onClose();

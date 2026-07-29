@@ -49,6 +49,7 @@ import {
 import {
   isQuickRechargeFromSearch,
   parseCoinPixelContext,
+  coinPurchaseSurfaceFromSearch,
   sendCoinPackSelected,
   sendCoinPaymentFailed,
   sendCoinPaymentInitiated,
@@ -78,7 +79,10 @@ import {
   hasAnyJwtInStorage,
 } from "./utils/authStorage";
 import {
+  buildRecommendablePacks,
   parseQuickRechargeCallContext,
+  recommendLowestPackForOneMinute,
+  resolveInCallDefaultPack,
 } from "./utils/quickRecharge";
 import { HOST } from "./utils/host";
 import { fetchUserDetails } from "./utils/userProfileApi";
@@ -1887,6 +1891,10 @@ const CoinsPage = ({
   );
 
   const quickRecharge = isQuickRechargeFromSearch(location.search);
+  const quickRechargeSurface = useMemo(
+    () => coinPurchaseSurfaceFromSearch(location.search),
+    [location.search],
+  );
   const quickRechargeCallContext = useMemo(
     () =>
       parseQuickRechargeCallContext(location.search, {
@@ -1916,6 +1924,12 @@ const CoinsPage = ({
   );
   const storeViewedSentRef = useRef(false);
   const defaultPackSelectedRef = useRef(false);
+  const quickRechargeManualSelectRef = useRef(false);
+
+  useEffect(() => {
+    quickRechargeManualSelectRef.current = false;
+    setQuickRechargeHeaderPack(null);
+  }, [location.search]);
 
   useEffect(() => {
     if (
@@ -1937,6 +1951,11 @@ const CoinsPage = ({
   const isLoggedIn = !!token;
 
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
+  /** Pack used for QR header copy — locked after initial recommend/default; ignores later taps. */
+  const [quickRechargeHeaderPack, setQuickRechargeHeaderPack] = useState<{
+    coins: number;
+    price: number;
+  } | null>(null);
   const [isPaymentInProgress, setIsPaymentInProgress] = useState(false);
   const paymentInProgressRef = useRef(false);
 
@@ -2085,20 +2104,73 @@ const CoinsPage = ({
     if (membershipLoading || displayedPacks.length === 0) return;
 
     if (quickRecharge) {
+      if (
+        quickRechargeSurface === "coin_popup" &&
+        quickRechargeCallContext &&
+        !quickRechargeManualSelectRef.current
+      ) {
+        const recommended = recommendLowestPackForOneMinute(
+          quickRechargeCallContext,
+          buildRecommendablePacks({
+            packs: displayedPacks,
+            featuredWeeklyPlan,
+            basicWeeklyPlan,
+            timerPack,
+            isMember,
+          }),
+        );
+        if (recommended) {
+          setSelectedPackage({
+            id: recommended.id,
+            coins: recommended.coins,
+            price: recommended.price,
+            name: recommended.name,
+          });
+          setQuickRechargeHeaderPack({
+            coins: recommended.coins,
+            price: recommended.price,
+          });
+          return;
+        }
+      }
+
+      // in_call: prefer ₹149 one-time pack — never default to weekly
+      if (
+        quickRechargeSurface === "in_call_coin_popup" &&
+        !quickRechargeManualSelectRef.current
+      ) {
+        const inCallPack = resolveInCallDefaultPack(displayedPacks);
+        if (inCallPack) {
+          setSelectedPackage((prev: any) => prev ?? inCallPack);
+          setQuickRechargeHeaderPack((prev) =>
+            prev ?? { coins: inCallPack.coins, price: inCallPack.price },
+          );
+          return;
+        }
+      }
+
       if (!isMember && featuredWeeklyPlan) {
-        setSelectedPackage(
-          (prev: any) =>
-            prev ?? {
-              id: featuredWeeklyPlan.id,
-              coins: 0,
-              price: featuredWeeklyPlan.price,
-              name: featuredWeeklyPlan.plan_name,
-            },
+        const initial = {
+          id: featuredWeeklyPlan.id,
+          coins: featuredWeeklyPlan.coin_value ?? 0,
+          price: featuredWeeklyPlan.price,
+          name: featuredWeeklyPlan.plan_name,
+        };
+        setSelectedPackage((prev: any) => prev ?? initial);
+        setQuickRechargeHeaderPack((prev) =>
+          prev ?? { coins: initial.coins, price: initial.price },
         );
       } else if (isMember && timerPack) {
         setSelectedPackage((prev: any) => prev ?? timerPack);
+        setQuickRechargeHeaderPack((prev) =>
+          prev ?? { coins: timerPack.coins, price: timerPack.price },
+        );
       } else if (displayedPacks[0]) {
-        setSelectedPackage((prev: any) => prev ?? displayedPacks[0]);
+        const initial = displayedPacks[0];
+        setSelectedPackage((prev: any) => prev ?? initial);
+        setQuickRechargeHeaderPack((prev) =>
+          prev ?? { coins: initial.coins, price: initial.price },
+        );
       }
       return;
     }
@@ -2155,6 +2227,8 @@ const CoinsPage = ({
   }, [
     membershipLoading,
     quickRecharge,
+    quickRechargeSurface,
+    quickRechargeCallContext,
     displayedPacks,
     pixelContext,
     timerPack,
@@ -2162,6 +2236,7 @@ const CoinsPage = ({
     topPlans,
     isMember,
     featuredWeeklyPlan,
+    basicWeeklyPlan,
   ]);
 
   useEffect(() => {
@@ -2176,6 +2251,9 @@ const CoinsPage = ({
   }, [displayedPacks, selectedPackage, subscriptionPlanIds, timerPack]);
 
   const handlePackSelect = (pkg: any, index: number) => {
+    if (quickRecharge) {
+      quickRechargeManualSelectRef.current = true;
+    }
     setSelectedPackage(pkg);
     sendCoinPackSelected(pixelContext, pkg, index);
   };
@@ -2428,6 +2506,8 @@ const CoinsPage = ({
         basicWeeklyPlan={basicWeeklyPlan}
         timerPack={timerPack}
         callContext={quickRechargeCallContext}
+        surface={quickRechargeSurface}
+        headerPack={quickRechargeHeaderPack}
         paymentInProgress={isPaymentInProgress}
       />
     ) : (
@@ -2441,6 +2521,8 @@ const CoinsPage = ({
         basicWeeklyPlan={basicWeeklyPlan}
         timerPack={timerPack}
         callContext={quickRechargeCallContext}
+        surface={quickRechargeSurface}
+        headerPack={quickRechargeHeaderPack}
         paymentInProgress={isPaymentInProgress}
       />
     );

@@ -66,11 +66,13 @@ export type IframeLoadedPaymentGateway = "phonepe" | "easebuzz";
 export type CoinPurchaseSurface =
   | "coin_store"
   | "coin_popup"
+  | "in_call_coin_popup"
   | "welcome_back_offer";
 
 const COIN_PURCHASE_SURFACES: ReadonlySet<CoinPurchaseSurface> = new Set([
   "coin_store",
   "coin_popup",
+  "in_call_coin_popup",
   "welcome_back_offer",
 ]);
 

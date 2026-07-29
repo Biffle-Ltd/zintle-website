@@ -6,10 +6,11 @@ import {
   getCoinStoreTimerEndMs,
 } from "../utils/coinStoreTimer";
 import {
-  computeContinueCallMinutes,
+  buildQuickRechargePopupHeader,
   resolveSelectedPackDetails,
   type QuickRechargeCallContext,
 } from "../utils/quickRecharge";
+import type { CoinPurchaseSurface } from "../utils/pixelEvents";
 
 export type QuickRechargePack = {
   id: number;
@@ -254,6 +255,9 @@ type QuickRechargePopupProps = {
   basicWeeklyPlan: SubscriptionPlan | null;
   timerPack: CoinStorePack | null;
   callContext?: QuickRechargeCallContext | null;
+  surface?: CoinPurchaseSurface | null;
+  /** Initial pack for header copy; does not change when user taps another pack. */
+  headerPack?: { coins: number; price: number } | null;
   paymentInProgress?: boolean;
 };
 
@@ -267,6 +271,8 @@ export const QuickRechargePopup = ({
   basicWeeklyPlan,
   timerPack,
   callContext = null,
+  surface = null,
+  headerPack = null,
   paymentInProgress = false,
 }: QuickRechargePopupProps) => {
   const filteredPacks = useMemo(() => {
@@ -294,21 +300,24 @@ export const QuickRechargePopup = ({
   );
   const selectedPrice = selectedPack?.price ?? null;
 
-  const callContinueHeader = useMemo(() => {
-    if (!callContext || !selectedPack) return null;
-    const mins = computeContinueCallMinutes(
-      callContext.walletBalance,
-      callContext.callPrice,
-      selectedPack.coins,
-    );
-    const minLabel = mins === 1 ? "min" : "mins";
-    return `Recharge for ${formatCoinAmount(selectedPack.coins)} coins to continue ${callContext.sessionType} for ${mins} ${minLabel} at just ${formatRupee(selectedPack.price)}`;
-  }, [callContext, selectedPack]);
-
   const hasOptions =
     filteredPacks.length > 0 ||
     (!isMember && (featuredWeeklyPlan || basicWeeklyPlan)) ||
     (isMember && timerPack);
+
+  const headerText = useMemo(
+    () =>
+      buildQuickRechargePopupHeader({
+        surface,
+        headerPack,
+        callContext,
+        formatPrice: formatRupee,
+        fallback: hasOptions
+          ? "Tap on the plan to recharge"
+          : "No coin packs available",
+      }),
+    [surface, headerPack, callContext, hasOptions],
+  );
 
   return (
     <div
@@ -317,10 +326,7 @@ export const QuickRechargePopup = ({
       aria-label="Quick recharge"
     >
       <h2 className="mb-2 shrink-0 text-left text-base font-medium text-white">
-        {callContinueHeader ??
-          (hasOptions
-            ? "Tap on the plan to recharge"
-            : "No coin packs available")}
+        {headerText}
       </h2>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden">

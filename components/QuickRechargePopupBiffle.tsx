@@ -8,10 +8,11 @@ import {
   getCoinStoreTimerEndMs,
 } from "../utils/coinStoreTimer";
 import {
-  computeContinueCallMinutes,
+  buildQuickRechargePopupHeader,
   resolveSelectedPackDetails,
   type QuickRechargeCallContext,
 } from "../utils/quickRecharge";
+import type { CoinPurchaseSurface } from "../utils/pixelEvents";
 
 export type QuickRechargePack = {
   id: number;
@@ -210,6 +211,9 @@ type QuickRechargePopupBiffleProps = {
   basicWeeklyPlan: SubscriptionPlan | null;
   timerPack: CoinStorePack | null;
   callContext?: QuickRechargeCallContext | null;
+  surface?: CoinPurchaseSurface | null;
+  /** Initial pack for header copy; does not change when user taps another pack. */
+  headerPack?: { coins: number; price: number } | null;
   paymentInProgress?: boolean;
 };
 
@@ -223,6 +227,8 @@ export const QuickRechargePopupBiffle = ({
   basicWeeklyPlan,
   timerPack,
   callContext = null,
+  surface = null,
+  headerPack = null,
   paymentInProgress = false,
 }: QuickRechargePopupBiffleProps) => {
   const filteredPacks = useMemo(() => {
@@ -261,16 +267,17 @@ export const QuickRechargePopupBiffle = ({
   );
   const selectedPrice = selectedPack?.price ?? null;
 
-  const callContinueHeader = useMemo(() => {
-    if (!callContext || !selectedPack) return null;
-    const mins = computeContinueCallMinutes(
-      callContext.walletBalance,
-      callContext.callPrice,
-      selectedPack.coins,
-    );
-    const minLabel = mins === 1 ? "min" : "mins";
-    return `Recharge for ${formatCoins(selectedPack.coins)} coins to continue ${callContext.sessionType} for ${mins} ${minLabel} at just ${formatRupee(selectedPack.price)}`;
-  }, [callContext, selectedPack]);
+  const headerText = useMemo(
+    () =>
+      buildQuickRechargePopupHeader({
+        surface,
+        headerPack,
+        callContext,
+        formatPrice: formatRupee,
+        fallback: "Top up coins",
+      }),
+    [surface, headerPack, callContext],
+  );
 
   return (
     <div
@@ -280,7 +287,7 @@ export const QuickRechargePopupBiffle = ({
     >
       <div className="px-5 pt-5">
       <h2 className="mb-5 text-lg font-semibold text-[#111827]">
-        {callContinueHeader ?? "Top up coins"}
+        {headerText}
       </h2>
 
       <div className="max-h-[min(70vh,640px)] space-y-3 overflow-y-auto px-0.5 pb-4">

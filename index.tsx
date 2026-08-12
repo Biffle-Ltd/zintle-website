@@ -50,6 +50,10 @@ import {
   isQuickRechargeFromSearch,
   parseCoinPixelContext,
   coinPurchaseSurfaceFromSearch,
+  isInSessionCoinPopupSurface,
+  isStartSessionCoinPopupSurface,
+  isChatCoinPopupSurface,
+  isCallCoinPopupSurface,
   sendCoinPackSelected,
   sendCoinPaymentFailed,
   sendCoinPaymentInitiated,
@@ -1898,9 +1902,15 @@ const CoinsPage = ({
   const quickRechargeCallContext = useMemo(
     () =>
       parseQuickRechargeCallContext(location.search, {
-        defaultSessionType: isBiffle ? "call" : "chat",
+        defaultSessionType: isChatCoinPopupSurface(quickRechargeSurface)
+          ? "chat"
+          : isCallCoinPopupSurface(quickRechargeSurface)
+            ? "call"
+            : isBiffle
+              ? "call"
+              : "chat",
       }),
-    [location.search, isBiffle],
+    [location.search, isBiffle, quickRechargeSurface],
   );
   const displayedPacks = useMemo(
     () => (quickRecharge ? coinPacks.filter((p) => p.is_micropack) : coinPacks),
@@ -1925,9 +1935,12 @@ const CoinsPage = ({
   const storeViewedSentRef = useRef(false);
   const defaultPackSelectedRef = useRef(false);
   const quickRechargeManualSelectRef = useRef(false);
+  /** Once set for in-session QR, header pack must not follow later pack taps. */
+  const quickRechargeHeaderLockedRef = useRef(false);
 
   useEffect(() => {
     quickRechargeManualSelectRef.current = false;
+    quickRechargeHeaderLockedRef.current = false;
     setQuickRechargeHeaderPack(null);
   }, [location.search]);
 
@@ -2105,7 +2118,7 @@ const CoinsPage = ({
 
     if (quickRecharge) {
       if (
-        quickRechargeSurface === "coin_popup" &&
+        isStartSessionCoinPopupSurface(quickRechargeSurface) &&
         quickRechargeCallContext &&
         !quickRechargeManualSelectRef.current
       ) {
@@ -2134,17 +2147,22 @@ const CoinsPage = ({
         }
       }
 
-      // in_call: prefer ₹149 one-time pack — never default to weekly
+      // Ongoing call/chat: prefer ₹149 one-time pack — never default to weekly.
+      // Header pack is locked once so taps don't change the continue-call copy.
       if (
-        quickRechargeSurface === "in_call_coin_popup" &&
+        isInSessionCoinPopupSurface(quickRechargeSurface) &&
         !quickRechargeManualSelectRef.current
       ) {
         const inCallPack = resolveInCallDefaultPack(displayedPacks);
         if (inCallPack) {
           setSelectedPackage((prev: any) => prev ?? inCallPack);
-          setQuickRechargeHeaderPack((prev) =>
-            prev ?? { coins: inCallPack.coins, price: inCallPack.price },
-          );
+          if (!quickRechargeHeaderLockedRef.current) {
+            quickRechargeHeaderLockedRef.current = true;
+            setQuickRechargeHeaderPack({
+              coins: inCallPack.coins,
+              price: inCallPack.price,
+            });
+          }
           return;
         }
       }
@@ -2157,20 +2175,35 @@ const CoinsPage = ({
           name: featuredWeeklyPlan.plan_name,
         };
         setSelectedPackage((prev: any) => prev ?? initial);
-        setQuickRechargeHeaderPack((prev) =>
-          prev ?? { coins: initial.coins, price: initial.price },
-        );
+        if (!quickRechargeHeaderLockedRef.current) {
+          if (isInSessionCoinPopupSurface(quickRechargeSurface)) {
+            quickRechargeHeaderLockedRef.current = true;
+          }
+          setQuickRechargeHeaderPack((prev) =>
+            prev ?? { coins: initial.coins, price: initial.price },
+          );
+        }
       } else if (isMember && timerPack) {
         setSelectedPackage((prev: any) => prev ?? timerPack);
-        setQuickRechargeHeaderPack((prev) =>
-          prev ?? { coins: timerPack.coins, price: timerPack.price },
-        );
+        if (!quickRechargeHeaderLockedRef.current) {
+          if (isInSessionCoinPopupSurface(quickRechargeSurface)) {
+            quickRechargeHeaderLockedRef.current = true;
+          }
+          setQuickRechargeHeaderPack((prev) =>
+            prev ?? { coins: timerPack.coins, price: timerPack.price },
+          );
+        }
       } else if (displayedPacks[0]) {
         const initial = displayedPacks[0];
         setSelectedPackage((prev: any) => prev ?? initial);
-        setQuickRechargeHeaderPack((prev) =>
-          prev ?? { coins: initial.coins, price: initial.price },
-        );
+        if (!quickRechargeHeaderLockedRef.current) {
+          if (isInSessionCoinPopupSurface(quickRechargeSurface)) {
+            quickRechargeHeaderLockedRef.current = true;
+          }
+          setQuickRechargeHeaderPack((prev) =>
+            prev ?? { coins: initial.coins, price: initial.price },
+          );
+        }
       }
       return;
     }

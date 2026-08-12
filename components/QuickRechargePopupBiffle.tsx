@@ -12,7 +12,10 @@ import {
   resolveSelectedPackDetails,
   type QuickRechargeCallContext,
 } from "../utils/quickRecharge";
-import type { CoinPurchaseSurface } from "../utils/pixelEvents";
+import {
+  isInSessionCoinPopupSurface,
+  type CoinPurchaseSurface,
+} from "../utils/pixelEvents";
 
 export type QuickRechargePack = {
   id: number;
@@ -267,7 +270,7 @@ export const QuickRechargePopupBiffle = ({
   );
   const selectedPrice = selectedPack?.price ?? null;
 
-  const headerText = useMemo(
+  const computedHeaderText = useMemo(
     () =>
       buildQuickRechargePopupHeader({
         surface,
@@ -278,6 +281,32 @@ export const QuickRechargePopupBiffle = ({
       }),
     [surface, headerPack, callContext],
   );
+
+  const [lockedInSessionHeader, setLockedInSessionHeader] = useState<
+    string | null
+  >(null);
+
+  useEffect(() => {
+    setLockedInSessionHeader(null);
+  }, [surface, callContext?.walletBalance, callContext?.callPrice]);
+
+  useEffect(() => {
+    if (!isInSessionCoinPopupSurface(surface)) return;
+    if (lockedInSessionHeader != null) return;
+    if (!headerPack || !callContext) return;
+    setLockedInSessionHeader(computedHeaderText);
+  }, [
+    surface,
+    headerPack,
+    callContext,
+    computedHeaderText,
+    lockedInSessionHeader,
+  ]);
+
+  const headerText =
+    isInSessionCoinPopupSurface(surface) && lockedInSessionHeader != null
+      ? lockedInSessionHeader
+      : computedHeaderText;
 
   return (
     <div

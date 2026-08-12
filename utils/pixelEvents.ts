@@ -65,16 +65,60 @@ export type IframeLoadedPaymentGateway = "phonepe" | "easebuzz";
 /** Where the coin purchase UI was shown (analytics "real estate"). */
 export type CoinPurchaseSurface =
   | "coin_store"
-  | "coin_popup"
+  | "initiate_call_coin_popup"
+  | "initiate_chat_coin_popup"
   | "in_call_coin_popup"
+  | "in_chat_coin_popup"
+  | "top_creators_coin_popup"
   | "welcome_back_offer";
 
 const COIN_PURCHASE_SURFACES: ReadonlySet<CoinPurchaseSurface> = new Set([
   "coin_store",
-  "coin_popup",
+  "initiate_call_coin_popup",
+  "initiate_chat_coin_popup",
   "in_call_coin_popup",
+  "in_chat_coin_popup",
+  "top_creators_coin_popup",
   "welcome_back_offer",
 ]);
+
+/** Pre-session popups — recommend cheapest pack to *start* call/chat. */
+export function isStartSessionCoinPopupSurface(
+  surface: string | null | undefined,
+): boolean {
+  return (
+    surface === "initiate_call_coin_popup" ||
+    surface === "initiate_chat_coin_popup" ||
+    surface === "top_creators_coin_popup"
+  );
+}
+
+/** Ongoing call/chat — default ₹149 pack to *continue*. */
+export function isInSessionCoinPopupSurface(
+  surface: string | null | undefined,
+): boolean {
+  return surface === "in_call_coin_popup" || surface === "in_chat_coin_popup";
+}
+
+/** Surfaces that are chat-first (default callType / UI label). */
+export function isChatCoinPopupSurface(
+  surface: string | null | undefined,
+): boolean {
+  return (
+    surface === "initiate_chat_coin_popup" || surface === "in_chat_coin_popup"
+  );
+}
+
+/** Surfaces that are call-first (audio/video); UI still shows "call". */
+export function isCallCoinPopupSurface(
+  surface: string | null | undefined,
+): boolean {
+  return (
+    surface === "initiate_call_coin_popup" ||
+    surface === "in_call_coin_popup" ||
+    surface === "top_creators_coin_popup"
+  );
+}
 
 function isWelcomeBackOfferPath(pathname?: string): boolean {
   if (!pathname) return false;

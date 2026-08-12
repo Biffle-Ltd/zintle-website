@@ -226,15 +226,25 @@ export function buildQuickRechargePopupHeader(options: {
   const { surface, headerPack, callContext, formatPrice, fallback } = options;
   if (!headerPack) return fallback;
 
+  const isChatSurface =
+    surface === "initiate_chat_coin_popup" || surface === "in_chat_coin_popup";
   const sessionLabel = callContext
     ? quickRechargeSessionDisplayLabel(callContext.callType)
-    : "call";
+    : isChatSurface
+      ? "chat"
+      : "call";
 
-  if (surface === "coin_popup") {
+  // initiate_* / top_creators — pre-session start
+  if (
+    surface === "initiate_call_coin_popup" ||
+    surface === "initiate_chat_coin_popup" ||
+    surface === "top_creators_coin_popup"
+  ) {
     return `${formatPrice(headerPack.price)} to start your ${sessionLabel}`;
   }
 
-  if (surface === "in_call_coin_popup") {
+  // in_call / in_chat — ongoing session continue
+  if (surface === "in_call_coin_popup" || surface === "in_chat_coin_popup") {
     if (!callContext) return fallback;
     const mins = computeContinueCallMinutes(
       callContext.walletBalance,

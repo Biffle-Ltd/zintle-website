@@ -3086,7 +3086,7 @@ const Layout = () => {
         isCampaignPage
           ? "h-dvh max-h-dvh overflow-hidden"
           : isWelcomeBackOfferPage
-            ? "h-dvh max-h-dvh overflow-hidden sm:h-auto sm:max-h-none sm:min-h-dvh sm:overflow-y-auto"
+            ? "flex h-dvh max-h-dvh flex-col overflow-hidden sm:h-auto sm:max-h-none sm:min-h-dvh sm:overflow-y-auto"
             : isQuickRechargeCoinsPage
             ? "h-dvh max-h-dvh overflow-hidden bg-transparent"
             : isCoinsPage

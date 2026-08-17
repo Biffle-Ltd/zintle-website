@@ -46,8 +46,8 @@ function toWelcomeBackPackAnalytics(
 
 function WelcomeBackPageShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="w-full bg-white sm:flex sm:min-h-dvh sm:justify-center sm:bg-[#F3F4F6]">
-      <div className="flex w-full max-w-md flex-col bg-white sm:max-w-lg sm:min-h-dvh sm:overflow-y-auto sm:shadow-lg sm:ring-1 sm:ring-black/5">
+    <div className="min-h-0 w-full flex-1 overflow-y-auto overscroll-y-contain bg-white sm:flex sm:min-h-dvh sm:justify-center sm:bg-[#F3F4F6]">
+      <div className="flex min-h-full w-full max-w-md flex-col bg-white sm:max-w-lg sm:min-h-dvh sm:shadow-lg sm:ring-1 sm:ring-black/5">
         {children}
       </div>
     </div>
@@ -123,73 +123,74 @@ function OfferView({
 
   return (
     <WelcomeBackPageShell>
-      <div className="flex flex-col">
-      <div className="relative w-full shrink-0 pt-[4.5rem] sm:pt-0">
-        <img
-          src="/welcome-back-offer/hero.png"
-          alt="Welcome back"
-          className="block h-auto w-full"
-        />
-        <div className="absolute inset-x-0 bottom-0 px-6 pb-0.5 text-center">
-          <p className="text-[15px] font-medium text-[#4A4A5A]">
-            Not ready to commit?
-          </p>
-          <p className="mt-0.5 text-[22px] font-bold leading-tight text-[#1A1A2E]">
-            Keep going for just{" "}
-            {formatWelcomeBackPrice(coinPack.amount, currencySymbol)}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-col px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10">
-        <div className="mx-auto flex items-center gap-3 rounded-2xl border border-[#E8B4E8] bg-[#F8F0FC] px-5 py-2.5">
-          <span className="text-[28px] font-bold text-[#1A1A2E]">
-            {formatWelcomeBackPrice(coinPack.amount, currencySymbol)}
-          </span>
-          <span className="text-[16px] text-[#9CA3AF] line-through">
-            {formatWelcomeBackPrice(comparePrice, currencySymbol)}
-          </span>
-          <span className="rounded-full bg-[#DCFCE7] px-2.5 py-0.5 text-[11px] font-semibold text-[#16A34A]">
-            One time
-          </span>
-        </div>
-
-        <p className="mt-4 text-center text-[12px] text-[#9CA3AF]">
-          <span className="text-[#9333EA]">•</span> One-time payment • No
-          subscription or auto-debit
-        </p>
-
-        <div className="mt-10">
-          <button
-            type="button"
-            onClick={onPurchase}
-            disabled={purchasing}
-            className="w-full rounded-2xl py-3.5 text-[17px] font-bold text-white shadow-lg transition-opacity disabled:opacity-60"
-            style={{ background: CTA_GRADIENT }}
-          >
-            {purchasing ? (
-              <span className="inline-flex items-center gap-2">
-                <i className="fa-solid fa-spinner fa-spin" aria-hidden />
-                Processing…
-              </span>
-            ) : (
-              `Get the Pack of ${offerPrice}`
-            )}
-          </button>
-
-          <div className="mt-2 flex items-start gap-2.5 rounded-xl bg-[#FFF8E1] px-3.5 py-3">
-            <img
-              src="/welcome-back-offer/card-icon.svg"
-              alt=""
-              className="mt-0.5 h-4 w-5 shrink-0"
-              aria-hidden
-            />
-            <p className="text-[11px] leading-snug text-[#4A4A5A]">
-              One-time payment via UPI or card. No mandate, no recurring charge.
+      <div className="flex min-h-full flex-col">
+        <div className="w-full shrink-0 pt-2 sm:pt-0 [@media(min-height:720px)]:pt-6">
+          <img
+            src="/welcome-back-offer/hero.png"
+            alt="Welcome back"
+            className="mx-auto block h-auto w-full max-h-[min(42dvh,360px)] object-contain object-top [@media(min-height:720px)]:max-h-[min(48dvh,420px)]"
+          />
+          <div className="px-6 pt-1 text-center [@media(min-height:720px)]:pt-2">
+            <p className="text-[14px] font-medium text-[#4A4A5A] [@media(min-height:720px)]:text-[15px]">
+              Not ready to commit?
+            </p>
+            <p className="mt-0.5 text-[20px] font-bold leading-tight text-[#1A1A2E] [@media(min-height:720px)]:text-[22px]">
+              Keep going for just{" "}
+              {formatWelcomeBackPrice(coinPack.amount, currencySymbol)}
             </p>
           </div>
         </div>
-      </div>
+
+        <div className="flex flex-1 flex-col px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 [@media(min-height:720px)]:pt-6">
+          <div className="mx-auto flex items-center gap-3 rounded-2xl border border-[#E8B4E8] bg-[#F8F0FC] px-5 py-2.5">
+            <span className="text-[26px] font-bold text-[#1A1A2E] [@media(min-height:720px)]:text-[28px]">
+              {formatWelcomeBackPrice(coinPack.amount, currencySymbol)}
+            </span>
+            <span className="text-[15px] text-[#9CA3AF] line-through [@media(min-height:720px)]:text-[16px]">
+              {formatWelcomeBackPrice(comparePrice, currencySymbol)}
+            </span>
+            <span className="rounded-full bg-[#DCFCE7] px-2.5 py-0.5 text-[11px] font-semibold text-[#16A34A]">
+              One time
+            </span>
+          </div>
+
+          <p className="mt-3 text-center text-[12px] text-[#9CA3AF]">
+            <span className="text-[#9333EA]">•</span> One-time payment • No
+            subscription or auto-debit
+          </p>
+
+          <div className="mt-auto pt-4 [@media(min-height:720px)]:pt-8">
+            <button
+              type="button"
+              onClick={onPurchase}
+              disabled={purchasing}
+              className="w-full rounded-2xl py-3.5 text-[17px] font-bold text-white shadow-lg transition-opacity disabled:opacity-60"
+              style={{ background: CTA_GRADIENT }}
+            >
+              {purchasing ? (
+                <span className="inline-flex items-center gap-2">
+                  <i className="fa-solid fa-spinner fa-spin" aria-hidden />
+                  Processing…
+                </span>
+              ) : (
+                `Get the Pack of ${offerPrice}`
+              )}
+            </button>
+
+            <div className="mt-2 flex items-start gap-2.5 rounded-xl bg-[#FFF8E1] px-3.5 py-3">
+              <img
+                src="/welcome-back-offer/card-icon.svg"
+                alt=""
+                className="mt-0.5 h-4 w-5 shrink-0"
+                aria-hidden
+              />
+              <p className="text-[11px] leading-snug text-[#4A4A5A]">
+                One-time payment via UPI or card. No mandate, no recurring
+                charge.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </WelcomeBackPageShell>
   );

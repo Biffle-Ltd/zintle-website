@@ -689,14 +689,31 @@ export const createOrderAndInitiatePayment = async (
     organisationId,
   );
   const payment = paymentData.data;
-  launchEasebuzzCheckout(
-    payment?.access_token,
-    order.order_uuid,
-    organisationId,
-    token,
-    onCheckoutClosed,
-  );
-  return { order, payment, checkoutLaunched: true };
+  if (PAYMENT_GATEWAY === "Easebuzz") {
+    launchEasebuzzCheckout(
+      payment?.access_token,
+      order.order_uuid,
+      organisationId,
+      token,
+      onCheckoutClosed,
+    );
+    return { order, payment, checkoutLaunched: true };
+  }
+  if (PAYMENT_GATEWAY === "PhonePe") {
+    const tokenUrl = payment?.access_token;
+    if (!tokenUrl) {
+      return { order, payment, checkoutLaunched: false };
+    }
+    launchPhonePeIframeCheckout(
+      appendPhonePeChromeWVParam(tokenUrl),
+      order.order_uuid,
+      organisationId,
+      token,
+      onCheckoutClosed,
+    );
+    return { order, payment, checkoutLaunched: true };
+  }
+  return { order, payment, checkoutLaunched: false };
 };
 
 const ZintleLogo = ({ h }: { h?: string }) => (

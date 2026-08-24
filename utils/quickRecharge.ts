@@ -1,5 +1,10 @@
 import type { CoinStorePack, SubscriptionPlan } from "../components/CoinStoreMobile";
-import { TIMER_COIN_FALLBACK_PRODUCT_ID } from "../components/CoinStoreMobile";
+import {
+  TIMER_COIN_FALLBACK_PRODUCT_ID,
+  TIMER_COIN_PRODUCT_ID,
+} from "../components/CoinStoreMobile";
+
+const START_SESSION_DEFAULT_PRICE = 100;
 
 export type QuickRechargeCallType = "call" | "chat" | "audio" | "video";
 
@@ -123,6 +128,77 @@ export function recommendLowestPackForOneMinute(
     if (a.isWeekly !== b.isWeekly) return a.isWeekly ? -1 : 1;
     return a.id - b.id;
   })[0];
+}
+
+function isStartSessionDefaultPrice(price: number): boolean {
+  return price === START_SESSION_DEFAULT_PRICE;
+}
+
+function toRecommendablePack(
+  pack: PackLike,
+  isWeekly: boolean,
+): RecommendablePack {
+  return {
+    id: pack.id,
+    coins: pack.coins,
+    price: pack.price,
+    name: pack.name,
+    isWeekly,
+  };
+}
+
+/**
+ * Start-session QR default: ₹100 weekly if shown, else ₹100 one-time pack.
+ * Only considers packs that are actually rendered (weekly for non-members,
+ * timer pack for members, micropacks for everyone).
+ */
+export function resolveStartSessionDefaultPack(options: {
+  packs: PackLike[];
+  featuredWeeklyPlan: SubscriptionPlan | null;
+  basicWeeklyPlan: SubscriptionPlan | null;
+  timerPack: CoinStorePack | null;
+  isMember: boolean;
+}): RecommendablePack | null {
+  const {
+    packs,
+    featuredWeeklyPlan,
+    basicWeeklyPlan,
+    timerPack,
+    isMember,
+  } = options;
+
+  if (!isMember) {
+    const weekly100 = [featuredWeeklyPlan, basicWeeklyPlan].find(
+      (plan): plan is SubscriptionPlan =>
+        plan != null && isStartSessionDefaultPrice(plan.price),
+    );
+    if (weekly100) {
+      return {
+        id: weekly100.id,
+        coins: weekly100.coin_value ?? 0,
+        price: weekly100.price,
+        name: weekly100.plan_name,
+        isWeekly: true,
+      };
+    }
+  }
+
+  const oneTimeCandidates: PackLike[] = [];
+  if (isMember && timerPack) oneTimeCandidates.push(timerPack);
+  for (const pack of packs) {
+    if (timerPack && pack.id === timerPack.id) continue;
+    oneTimeCandidates.push(pack);
+  }
+
+  const oneTime100 =
+    oneTimeCandidates.find(
+      (p) =>
+        p.product_id === TIMER_COIN_PRODUCT_ID &&
+        isStartSessionDefaultPrice(p.price),
+    ) ?? oneTimeCandidates.find((p) => isStartSessionDefaultPrice(p.price));
+  if (oneTime100) return toRecommendablePack(oneTime100, false);
+
+  return null;
 }
 
 /** Default one-time pack for in-call QR (₹149 / coin_149); no weekly preference. */

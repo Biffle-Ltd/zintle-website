@@ -87,6 +87,7 @@ import {
   parseQuickRechargeCallContext,
   recommendLowestPackForOneMinute,
   resolveInCallDefaultPack,
+  resolveStartSessionDefaultPack,
 } from "./utils/quickRecharge";
 import { HOST } from "./utils/host";
 import { fetchUserDetails } from "./utils/userProfileApi";
@@ -2119,19 +2120,29 @@ const CoinsPage = ({
     if (quickRecharge) {
       if (
         isStartSessionCoinPopupSurface(quickRechargeSurface) &&
-        quickRechargeCallContext &&
         !quickRechargeManualSelectRef.current
       ) {
-        const recommended = recommendLowestPackForOneMinute(
-          quickRechargeCallContext,
-          buildRecommendablePacks({
-            packs: displayedPacks,
-            featuredWeeklyPlan,
-            basicWeeklyPlan,
-            timerPack,
-            isMember,
-          }),
-        );
+        const pack100 = resolveStartSessionDefaultPack({
+          packs: displayedPacks,
+          featuredWeeklyPlan,
+          basicWeeklyPlan,
+          timerPack,
+          isMember,
+        });
+        const recommended =
+          pack100 ??
+          (quickRechargeCallContext
+            ? recommendLowestPackForOneMinute(
+                quickRechargeCallContext,
+                buildRecommendablePacks({
+                  packs: displayedPacks,
+                  featuredWeeklyPlan,
+                  basicWeeklyPlan,
+                  timerPack,
+                  isMember,
+                }),
+              )
+            : null);
         if (recommended) {
           setSelectedPackage({
             id: recommended.id,

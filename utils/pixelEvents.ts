@@ -82,7 +82,7 @@ const COIN_PURCHASE_SURFACES: ReadonlySet<CoinPurchaseSurface> = new Set([
   "welcome_back_offer",
 ]);
 
-/** Pre-session popups — recommend cheapest pack to *start* call/chat. */
+/** Pre-session popups — default ₹100 weekly or one-time pack to *start* call/chat. */
 export function isStartSessionCoinPopupSurface(
   surface: string | null | undefined,
 ): boolean {

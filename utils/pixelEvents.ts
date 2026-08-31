@@ -49,15 +49,16 @@ export type CoinPackForAnalytics = {
   bonus_coins?: number;
 };
 
-export type CoinPixelEventName =
-  | "coin_store_viewed"
-  | "quick_recharge_popup_viewed"
-  | "coin_pack_selected"
-  | "coin_payment_initiated"
-  | "coin_payment_success"
-  | "coin_payment_failed"
-  | "iframe_loaded"
-  | "welcome_back_offer_viewed";
+export enum CoinPixelEventName {
+  CoinStoreViewed = "coin_store_viewed",
+  QuickRechargePopupViewed = "quick_recharge_popup_viewed",
+  CoinPackSelected = "coin_pack_selected",
+  CoinPaymentInitiated = "coin_payment_initiated",
+  CoinPaymentSuccess = "CoinPaymentSuccess",
+  CoinPaymentFailed = "coin_payment_failed",
+  IframeLoaded = "iframe_loaded",
+  WelcomeBackOfferViewed = "welcome_back_offer_viewed",
+}
 
 /** Gateway value for `iframe_loaded` (lowercase, matches product analytics). */
 export type IframeLoadedPaymentGateway = "phonepe" | "easebuzz";
@@ -325,14 +326,22 @@ export function sendPixelEvent(
   sendMetaPixelCustomEvent(organisationId, eventName, payload);
 }
 
+function sendCoinEvent(
+  ctx: ParsedCoinPixelContext,
+  eventName: CoinPixelEventName,
+  eventParams: Record<string, unknown>,
+): void {
+  sendPixelEvent(ctx.organisation_id, eventName, eventParams);
+  sendCoinAnalyticsEvent(ctx, eventName, eventParams);
+}
+
 export function sendCoinStoreViewed(
   ctx: ParsedCoinPixelContext | null,
   packs: CoinPackForAnalytics[],
 ): void {
   if (!ctx) return;
   const eventParams = buildStoreViewedEventParams(ctx, packs);
-  sendPixelEvent(ctx.organisation_id, "coin_store_viewed", eventParams);
-  sendCoinAnalyticsEvent(ctx, "coin_store_viewed", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.CoinStoreViewed, eventParams);
 }
 
 export function sendQuickRechargePopupViewed(
@@ -341,8 +350,7 @@ export function sendQuickRechargePopupViewed(
 ): void {
   if (!ctx) return;
   const eventParams = buildStoreViewedEventParams(ctx, packs);
-  sendPixelEvent(ctx.organisation_id, "quick_recharge_popup_viewed", eventParams);
-  sendCoinAnalyticsEvent(ctx, "quick_recharge_popup_viewed", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.QuickRechargePopupViewed, eventParams);
 }
 
 export function sendCoinPackSelected(
@@ -356,8 +364,7 @@ export function sendCoinPackSelected(
     ...buildBaseEventParams(ctx),
     event_info: buildCoinPackSelectedEventInfo(pack, position, options),
   };
-  sendPixelEvent(ctx.organisation_id, "coin_pack_selected", eventParams);
-  sendCoinAnalyticsEvent(ctx, "coin_pack_selected", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.CoinPackSelected, eventParams);
 }
 
 export function sendCoinPaymentInitiated(
@@ -369,8 +376,7 @@ export function sendCoinPaymentInitiated(
     ...buildBaseEventParams(ctx),
     event_info: buildCoinPaymentInitiatedEventInfo(pack),
   };
-  sendPixelEvent(ctx.organisation_id, "coin_payment_initiated", eventParams);
-  sendCoinAnalyticsEvent(ctx, "coin_payment_initiated", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.CoinPaymentInitiated, eventParams);
 }
 
 export function sendCoinPaymentSuccess(
@@ -399,8 +405,7 @@ export function sendCoinPaymentSuccess(
     platform: ctx.platform,
     device_id: ctx.device_id,
   };
-  sendPixelEvent(ctx.organisation_id, "coin_payment_success", eventParams);
-  sendCoinAnalyticsEvent(ctx, "coin_payment_success", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.CoinPaymentSuccess, eventParams);
 }
 
 export function sendCoinPaymentFailed(
@@ -419,8 +424,7 @@ export function sendCoinPaymentFailed(
     platform: ctx.platform,
     device_id: ctx.device_id,
   };
-  sendPixelEvent(ctx.organisation_id, "coin_payment_failed", eventParams);
-  sendCoinAnalyticsEvent(ctx, "coin_payment_failed", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.CoinPaymentFailed, eventParams);
 }
 
 /** Fired once when PhonePe / Easebuzz checkout iframe finishes loading. */
@@ -435,8 +439,7 @@ export function sendIframeLoaded(
       payment_gateway: paymentGateway,
     },
   };
-  sendPixelEvent(ctx.organisation_id, "iframe_loaded", eventParams);
-  sendCoinAnalyticsEvent(ctx, "iframe_loaded", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.IframeLoaded, eventParams);
 }
 
 export type WelcomeBackOfferViewedInfo = {
@@ -478,6 +481,5 @@ export function sendWelcomeBackOfferViewed(
       coin_pack: welcomeBackPackToAnalytics(info.coin_pack),
     },
   };
-  sendPixelEvent(ctx.organisation_id, "welcome_back_offer_viewed", eventParams);
-  sendCoinAnalyticsEvent(ctx, "welcome_back_offer_viewed", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.WelcomeBackOfferViewed, eventParams);
 }

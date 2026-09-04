@@ -314,6 +314,7 @@ type CoinPackValidateApiResponse = {
   data?: CoinPackValidatePayload;
 };
 
+
 type CoinStoreMembershipState = {
   isMember: boolean;
   featuredWeeklyPlan: SubscriptionPlan | null;

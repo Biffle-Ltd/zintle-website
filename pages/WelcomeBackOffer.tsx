@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getJwtFromStorage } from "../utils/authStorage";
+import { resolvePageAuthToken } from "../utils/authStorage";
 import {
   DEFAULT_ORGANISATION_ID,
   getOrganisationIdFromSearch,
@@ -20,6 +20,7 @@ import {
   parseCoinPackFromUrl,
   type WelcomeBackCoinPack,
 } from "../utils/welcomeBackOffer";
+import { WelcomeBackOfferSkeleton } from "../components/WelcomeBackOfferSkeleton";
 
 const CTA_GRADIENT = "linear-gradient(90deg, #EF68FF 0%, #7E1AFC 100%)";
 
@@ -128,6 +129,8 @@ function OfferView({
           <img
             src="/welcome-back-offer/hero.png"
             alt="Welcome back"
+            fetchPriority="high"
+            decoding="async"
             className="mx-auto block h-auto w-full max-h-[min(42dvh,360px)] object-contain object-top [@media(min-height:720px)]:max-h-[min(48dvh,420px)]"
           />
           <div className="px-6 pt-1 text-center [@media(min-height:720px)]:pt-2">
@@ -221,10 +224,10 @@ export function WelcomeBackOffer({
   );
   const orgId = organisationId || resolvedOrgId;
 
-  const token = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("id") || getJwtFromStorage(orgId);
-  }, [location.search, orgId]);
+  const token = useMemo(
+    () => resolvePageAuthToken(location.search, orgId),
+    [location.search, orgId],
+  );
 
   const loadOffer = useCallback(
     async (signal?: AbortSignal) => {
@@ -381,16 +384,7 @@ export function WelcomeBackOffer({
   ]);
 
   if (pageState === "loading") {
-    return (
-      <WelcomeBackPageShell>
-        <div className="flex items-center justify-center py-20 sm:flex-1 sm:py-0">
-          <div className="flex items-center gap-2 text-[#6B7280]">
-            <i className="fa-solid fa-spinner fa-spin" aria-hidden />
-            <span className="text-sm">Loading offer…</span>
-          </div>
-        </div>
-      </WelcomeBackPageShell>
-    );
+    return <WelcomeBackOfferSkeleton />;
   }
 
   if (pageState === "ineligible") {

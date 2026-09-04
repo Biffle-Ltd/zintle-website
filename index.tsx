@@ -1,4 +1,5 @@
 import React, {
+  Suspense,
   useState,
   useEffect,
   useMemo,
@@ -11,27 +12,12 @@ import {
   Routes,
   Route,
   Link,
+  Navigate,
   useNavigate,
   useLocation,
 } from "react-router-dom";
-import FBRedirect from "./pages/FbRedirect";
-import { About } from "./pages/About";
-import { Contact } from "./pages/Contact";
-import { Safety } from "./pages/Safety";
-import { Guidelines } from "./pages/Guidelines";
-import { Privacy } from "./pages/Privacy";
-import { Terms } from "./pages/Terms";
-import { Refund } from "./pages/Refund";
-import { ChildSafety } from "./pages/ChildSafety";
-import { Subscriptions } from "./pages/Subscriptions";
-import { Campaign } from "./pages/Campaign";
-import { CampaignLanguage } from "./pages/CampaignLanguage";
-import { WelcomeBackOffer } from "./pages/WelcomeBackOffer";
-import { PaymentStatus } from "./pages/PaymentStatus";
 import { PaymentStatusPopup } from "./components/PaymentStatusPopup";
 import { PhoneOtpLoginScreen } from "./components/PhoneOtpLoginScreen";
-import { QuickRechargePopup } from "./components/QuickRechargePopup";
-import { QuickRechargePopupBiffle } from "./components/QuickRechargePopupBiffle";
 import {
   CoinStoreMobile,
   getCoinPackStoreIndex,
@@ -40,7 +26,9 @@ import {
   type CoinStorePack,
   type SubscriptionPlan,
 } from "./components/CoinStoreMobile";
-import { CoinStoreMobileBiffle } from "./components/CoinStoreMobileBiffle";
+import { CoinStoreSkeleton } from "./components/CoinStoreSkeleton";
+import { WelcomeBackOfferSkeleton } from "./components/WelcomeBackOfferSkeleton";
+import { SubscriptionsSkeleton } from "./components/SubscriptionsSkeleton";
 import { campaignCtaGradientStyle } from "./components/CampaignCta";
 import { COIN_ICON_CLASS, ZintleCoinIcon } from "./components/ZintleCoinIcon";
 import {
@@ -70,18 +58,23 @@ import {
   DEFAULT_ORGANISATION_ID,
   getOrganisationIdFromSearch,
   isBiffleOrganisationId,
+  normalizePathBasename,
 } from "./utils/organisationIdFromUrl";
 import {
   ZINTLE_POST_LOGIN_REDIRECT_KEY,
   withJwtInQuery,
 } from "./utils/postLoginRedirect";
 import { navigateAfterCampaignLoginGate } from "./utils/campaignLanguageGate";
-import { isCampaignPostLoginRedirect } from "./utils/campaignPixelEvents";
+import {
+  isCampaignPostLoginRedirect,
+  parseIsCampaignParam,
+} from "./utils/campaignPixelEvents";
 import { sendMetaPixelPageView } from "./utils/metaPixel";
 import {
   clearAllJwtStorage,
   getJwtFromStorage,
   hasAnyJwtInStorage,
+  resolvePageAuthToken,
 } from "./utils/authStorage";
 import {
   buildRecommendablePacks,
@@ -97,6 +90,11 @@ import {
   openPhonePeIframeCheckout,
 } from "./utils/phonePeIframeCheckout";
 import { watchPaymentCheckoutIframeLoad } from "./utils/paymentCheckoutIframeLoad";
+import { fetchCoinPackDetails } from "./utils/coinPacksApi";
+import {
+  loadEasebuzzCheckoutScript,
+  loadPhonePeCheckoutScript,
+} from "./utils/paymentCheckoutScripts";
 import {
   openMandateRedirectUrl,
   resolveMandateRedirectUrl,
@@ -115,6 +113,66 @@ import {
   type PaymentGateway,
 } from "./utils/paymentGateway";
 import type { CreateOrderPixelOptions as BaseCreateOrderPixelOptions } from "./utils/coinCheckoutOptions";
+
+const FBRedirect = React.lazy(() => import("./pages/FbRedirect"));
+const About = React.lazy(() =>
+  import("./pages/About").then((m) => ({ default: m.About })),
+);
+const Contact = React.lazy(() =>
+  import("./pages/Contact").then((m) => ({ default: m.Contact })),
+);
+const Safety = React.lazy(() =>
+  import("./pages/Safety").then((m) => ({ default: m.Safety })),
+);
+const Guidelines = React.lazy(() =>
+  import("./pages/Guidelines").then((m) => ({ default: m.Guidelines })),
+);
+const Privacy = React.lazy(() =>
+  import("./pages/Privacy").then((m) => ({ default: m.Privacy })),
+);
+const Terms = React.lazy(() =>
+  import("./pages/Terms").then((m) => ({ default: m.Terms })),
+);
+const Refund = React.lazy(() =>
+  import("./pages/Refund").then((m) => ({ default: m.Refund })),
+);
+const ChildSafety = React.lazy(() =>
+  import("./pages/ChildSafety").then((m) => ({ default: m.ChildSafety })),
+);
+const Subscriptions = React.lazy(() =>
+  import("./pages/Subscriptions").then((m) => ({ default: m.Subscriptions })),
+);
+const Campaign = React.lazy(() =>
+  import("./pages/Campaign").then((m) => ({ default: m.Campaign })),
+);
+const CampaignLanguage = React.lazy(() =>
+  import("./pages/CampaignLanguage").then((m) => ({
+    default: m.CampaignLanguage,
+  })),
+);
+const WelcomeBackOffer = React.lazy(() =>
+  import("./pages/WelcomeBackOffer").then((m) => ({
+    default: m.WelcomeBackOffer,
+  })),
+);
+const PaymentStatus = React.lazy(() =>
+  import("./pages/PaymentStatus").then((m) => ({ default: m.PaymentStatus })),
+);
+const QuickRechargePopup = React.lazy(() =>
+  import("./components/QuickRechargePopup").then((m) => ({
+    default: m.QuickRechargePopup,
+  })),
+);
+const QuickRechargePopupBiffle = React.lazy(() =>
+  import("./components/QuickRechargePopupBiffle").then((m) => ({
+    default: m.QuickRechargePopupBiffle,
+  })),
+);
+const CoinStoreMobileBiffle = React.lazy(() =>
+  import("./components/CoinStoreMobileBiffle").then((m) => ({
+    default: m.CoinStoreMobileBiffle,
+  })),
+);
 
 export { PAYMENT_GATEWAY };
 
@@ -287,21 +345,6 @@ type InitiatePaymentPayload = {
 type InitiatePaymentApiResponse = {
   detail?: string;
   data?: InitiatePaymentPayload;
-};
-
-type CoinPackApiRow = {
-  id?: number;
-  coin_value?: number;
-  amount?: number;
-  bonus_coins?: number;
-  product_id?: string;
-  name?: string;
-  icon_url?: string | null;
-  is_micropack?: boolean;
-  isMicropack?: boolean;
-  isBonusPack?: boolean;
-  isTrialPack?: boolean;
-  is_active?: boolean;
 };
 
 type CoinPackValidatePayload = {
@@ -578,7 +621,7 @@ const pollCoinPackPaymentAfterCheckout = async (
 };
 
 /** PhonePe PayPage iframe for coin purchases (see PhonePe docs). */
-const launchPhonePeIframeCheckout = (
+const launchPhonePeIframeCheckout = async (
   tokenUrl: string,
   orderUuid: string | null | undefined,
   organisationId: string = DEFAULT_ORGANISATION_ID,
@@ -595,15 +638,17 @@ const launchPhonePeIframeCheckout = (
     onCheckoutClosed?.();
   };
 
+  try {
+    await loadPhonePeCheckoutScript();
+  } catch (err) {
+    console.error("PhonePe checkout script failed to load", err);
+    onClose();
+    return;
+  }
+
   const opened = openPhonePeIframeCheckout(tokenUrl, onClose);
   if (!opened) {
-    void pollCoinPackPaymentAfterCheckout(
-      orderUuid,
-      organisationId,
-      token,
-      "PhonePe",
-    );
-    onCheckoutClosed?.();
+    onClose();
     return;
   }
 
@@ -617,7 +662,7 @@ const launchPhonePeIframeCheckout = (
 };
 
 // Easebuzz iframe checkout (primary coin purchase flow)
-const launchEasebuzzCheckout = (
+const launchEasebuzzCheckout = async (
   accessToken: string | null | undefined,
   orderUuid: string | null | undefined,
   organisationId: string = DEFAULT_ORGANISATION_ID,
@@ -635,6 +680,7 @@ const launchEasebuzzCheckout = (
   };
 
   try {
+    await loadEasebuzzCheckoutScript();
     const accessKey = extractEasebuzzAccessKey(accessToken);
     const merchantKey = EASEBUZZ_KEY;
     const env = EASEBUZZ_ENV;
@@ -735,7 +781,7 @@ export const createOrderAndInitiatePayment = async (
   );
   const payment = paymentData.data;
   if (PAYMENT_GATEWAY === "Easebuzz") {
-    launchEasebuzzCheckout(
+    await launchEasebuzzCheckout(
       payment?.access_token,
       order.order_uuid,
       organisationId,
@@ -749,7 +795,7 @@ export const createOrderAndInitiatePayment = async (
     if (!tokenUrl) {
       return { order, payment, checkoutLaunched: false };
     }
-    launchPhonePeIframeCheckout(
+    await launchPhonePeIframeCheckout(
       appendPhonePeChromeWVParam(tokenUrl),
       order.order_uuid,
       organisationId,
@@ -1932,7 +1978,6 @@ const CoinsPage = ({
   const isBiffle = isBiffleOrganisationId(organisationId);
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
-  const tokenFromQuery = searchParams.get("id");
 
   const pixelContext = useMemo(
     () => parseCoinPixelContext(location.search, location.pathname),
@@ -2005,7 +2050,7 @@ const CoinsPage = ({
   }, [pixelContext, displayedPacks, quickRecharge]);
 
   // Use token from query params if available, otherwise fall back to localStorage
-  const token = tokenFromQuery || getJwtFromStorage(organisationId);
+  const token = resolvePageAuthToken(location.search, organisationId);
   const isLoggedIn = !!token;
 
   const [selectedPackage, setSelectedPackage] = useState<CoinStorePack | null>(
@@ -2399,57 +2444,16 @@ const CoinsPage = ({
     }
   };
 
-  if (membershipLoading) {
-    if (quickRecharge) {
-      return (
-        <div
-          className={`fixed inset-0 z-50 flex items-center justify-center ${isBiffle ? "bg-white" : "bg-[#001A3D]"}`}
-        >
-          <div
-            className={`h-8 w-8 animate-spin rounded-full border-2 ${isBiffle ? "border-gray-300 border-t-violet-600" : "border-white/20 border-t-white"}`}
-          />
-        </div>
-      );
-    }
+  const isMemberQuery = searchParams.get("is_member");
+  const waitForNonMemberPlans =
+    isMemberQuery !== null &&
+    isMemberQuery.toLowerCase() !== "true" &&
+    isMemberQuery !== "1" &&
+    membershipLoading;
 
+  if (coinPacksLoading || waitForNonMemberPlans) {
     return (
-      <div
-        className={`flex min-h-screen items-center justify-center md:hidden ${isBiffle ? "bg-[#F5F5F5]" : "bg-[#000D26]"}`}
-      >
-        <div
-          className={`h-8 w-8 animate-spin rounded-full border-2 ${isBiffle ? "border-gray-300 border-t-violet-600" : "border-white/20 border-t-white"}`}
-        />
-      </div>
-    );
-  }
-
-  if (coinPacksLoading) {
-    if (quickRecharge) {
-      return (
-        <div
-          className={`fixed inset-0 z-50 flex items-center justify-center ${isBiffle ? "bg-white" : "bg-[#001A3D]"}`}
-        >
-          <div
-            className={`flex items-center gap-2 text-sm ${isBiffle ? "text-gray-500" : "text-brand-muted"}`}
-          >
-            <i className="fa-solid fa-spinner fa-spin" aria-hidden />
-            Loading coin packs…
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div
-        className={`flex min-h-screen items-center justify-center p-6 ${isBiffle ? "bg-[#F5F5F5]" : "bg-brand-bg"}`}
-      >
-        <div
-          className={`flex items-center gap-2 text-sm ${isBiffle ? "text-gray-500" : "text-brand-muted"}`}
-        >
-          <i className="fa-solid fa-spinner fa-spin" aria-hidden />
-          Loading coin packs…
-        </div>
-      </div>
+      <CoinStoreSkeleton isBiffle={isBiffle} quickRecharge={quickRecharge} />
     );
   }
 
@@ -2618,7 +2622,13 @@ const CoinsPage = ({
       <div
         className={`fixed inset-0 z-50 flex flex-col ${isBiffle ? "bg-white" : "bg-[#001A3D]"}`}
       >
-        {popup}
+        <Suspense
+          fallback={
+            <CoinStoreSkeleton isBiffle={isBiffle} quickRecharge />
+          }
+        >
+          {popup}
+        </Suspense>
       </div>
     );
   }
@@ -2641,7 +2651,9 @@ const CoinsPage = ({
       className={`md:min-h-screen md:pb-8 ${isBiffle ? "bg-[#F5F5F5]" : "bg-brand-bg"}`}
     >
       {isBiffle ? (
-        <CoinStoreMobileBiffle {...coinStoreMobileProps} />
+        <Suspense fallback={<CoinStoreSkeleton isBiffle />}>
+          <CoinStoreMobileBiffle {...coinStoreMobileProps} />
+        </Suspense>
       ) : (
         <CoinStoreMobile {...coinStoreMobileProps} />
       )}
@@ -3002,80 +3014,49 @@ const Footer = () => {
   );
 };
 
-const mapCoinPack = (p: CoinPackApiRow): CoinStorePack => ({
-  id: p.id as number,
-  coins: p.coin_value as number,
-  price: p.amount as number,
-  bonus: p.bonus_coins,
-  bonus_coins: p.bonus_coins ?? 0,
-  product_id: p.product_id,
-  name: p.name,
-  icon_url: p.icon_url ?? null,
-  is_micropack: Boolean(p.is_micropack ?? p.isMicropack),
-  color: "bg-brand-surface",
-  tag: p.isBonusPack
-    ? "Bonus Pack"
-    : p.isTrialPack
-      ? "Trial Pack"
-      : (p.is_micropack ?? p.isMicropack)
-        ? "Micropack"
-        : undefined,
-  highlight: p.isBonusPack || false,
-});
-
-async function fetchCoinPackDetails(
-  organisationId: string,
-  search: string,
-): Promise<CoinStorePack[]> {
-  const searchParams = new URLSearchParams(search);
-  const tokenFromQuery = searchParams.get("id");
-  const rawToken = tokenFromQuery || getJwtFromStorage(organisationId);
-  const jwtToken = headerSafeToken(rawToken);
-  const r = await fetch(
-    `${HOST}/api/v1.2/creator_center/details/get-coin-pack-details/`,
-    {
-      headers: {
-        ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
-        "X-Organisation-ID": organisationId,
-      },
-    },
-  );
-  const data = (await r.json()) as {
-    success?: boolean;
-    data?: CoinPackApiRow[];
-  };
-  if (data.success && Array.isArray(data.data)) {
-    return data.data.filter((p) => p.is_active).map((p) => mapCoinPack(p));
-  }
-  return [];
-}
-
 const Layout = () => {
   const location = useLocation();
+  const appPath = normalizePathBasename(location.pathname);
   const organisationId = useMemo(
     () => getOrganisationIdFromSearch(location.search, location.pathname),
     [location.search, location.pathname],
   );
-  const isCoinsPage = location.pathname === "/coins";
+  const isCoinsPage = appPath === "/coins";
   const isQuickRechargeCoinsPage =
     isCoinsPage && isQuickRechargeFromSearch(location.search);
-  const isSubscriptionsPage = location.pathname === "/subscriptions";
+  const isSubscriptionsPage = appPath === "/subscriptions";
+  const hasQueryAuth = Boolean(
+    headerSafeToken(new URLSearchParams(location.search).get("id")),
+  );
+  const isCampaignQuery = parseIsCampaignParam(
+    new URLSearchParams(location.search).get("is_campaign"),
+  );
   const isCampaignPage =
-    (location.pathname.replace(/\/+$/, "") || "/") === "/campaign" ||
-    location.pathname.replace(/\/+$/, "") === "/campaign/language";
-  const isWelcomeBackOfferPage =
-    location.pathname.replace(/\/+$/, "") === "/welcome-back-offer";
-  const isFbRedirectPage = location.pathname === "/fb-redirect";
-  const isPaymentStatusPage = location.pathname === "/payment-status";
+    appPath === "/campaign" || appPath === "/campaign/language";
+  const isWelcomeBackOfferPage = appPath === "/welcome-back-offer";
+  const isFbRedirectPage = appPath === "/fb-redirect";
+  const isPaymentStatusPage = appPath === "/payment-status";
   const [showLogin, setShowLogin] = useState(false);
   const [showCoins, setShowCoins] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(hasAnyJwtInStorage());
   const [coinPacks, setCoinPacks] = useState<CoinStorePack[]>([]);
   const [coinPacksLoading, setCoinPacksLoading] = useState(true);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const coinPacksRef = useRef(coinPacks);
+  coinPacksRef.current = coinPacks;
+  const isHomePage = appPath === "/";
+  const needsCoinPacks = isCoinsPage || isHomePage || showCoins;
 
   useEffect(() => {
     sendMetaPixelPageView(organisationId);
+    if (typeof window.fbq === "function") return;
+    const retry = () => sendMetaPixelPageView(organisationId);
+    const t1 = window.setTimeout(retry, 2000);
+    const t2 = window.setTimeout(retry, 4000);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
   }, [organisationId, location.pathname]);
 
   const loadCoinPacks = useCallback(
@@ -3096,14 +3077,14 @@ const Layout = () => {
     [organisationId, location.search],
   );
 
-  // Fetch coin packs on mount/when logged in changes (skip on welcome-back WebView)
+  // Fetch coin packs for home / coins / overlay only (skip campaign, legal, WebView extras)
   useEffect(() => {
-    if (isWelcomeBackOfferPage) {
+    if (!needsCoinPacks) {
       setCoinPacksLoading(false);
       return;
     }
-    void loadCoinPacks();
-  }, [isLoggedIn, loadCoinPacks, isWelcomeBackOfferPage]);
+    void loadCoinPacks({ silent: coinPacksRef.current.length > 0 });
+  }, [isLoggedIn, loadCoinPacks, needsCoinPacks]);
 
   // Refresh coin packs after a successful purchase (e.g. one-time packs)
   useEffect(() => {
@@ -3167,6 +3148,22 @@ const Layout = () => {
           />
         )}
 
+      <Suspense
+        fallback={
+          isCoinsPage ? (
+            <CoinStoreSkeleton
+              isBiffle={isBiffleOrganisationId(organisationId)}
+              quickRecharge={isQuickRechargeCoinsPage}
+            />
+          ) : isWelcomeBackOfferPage ? (
+            <WelcomeBackOfferSkeleton />
+          ) : isSubscriptionsPage ? (
+            hasQueryAuth ? (
+              <SubscriptionsSkeleton showPaymentMethods={isCampaignQuery} />
+            ) : null
+          ) : null
+        }
+      >
       <Routes>
         <Route
           path="/"
@@ -3266,6 +3263,7 @@ const Layout = () => {
         <Route path="/fb-redirect" element={<FBRedirect />} />
         <Route path="/payment-status" element={<PaymentStatus />} />
       </Routes>
+      </Suspense>
 
       {!isCoinsPage &&
         !isSubscriptionsPage &&
@@ -3296,9 +3294,22 @@ const Layout = () => {
   );
 };
 
+const TrailingSlashGate = () => {
+  const location = useLocation();
+  if (location.pathname.length > 1 && /\/+$/.test(location.pathname)) {
+    return (
+      <Navigate
+        replace
+        to={`${location.pathname.replace(/\/+$/, "")}${location.search}${location.hash}`}
+      />
+    );
+  }
+  return <Layout />;
+};
+
 const App = () => (
   <BrowserRouter>
-    <Layout />
+    <TrailingSlashGate />
   </BrowserRouter>
 );
 

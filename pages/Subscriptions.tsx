@@ -4,6 +4,7 @@ import { CampaignPaymentFailedModal } from "../components/CampaignPaymentFailedM
 import { CampaignPaymentSuccessModal } from "../components/CampaignPaymentSuccessModal";
 import { CampaignPaymentWaitingModal } from "../components/CampaignPaymentWaitingModal";
 import { CampaignPaymentMethodLogo } from "../components/PaymentMethodLogos";
+import { SubscriptionsSkeleton } from "../components/SubscriptionsSkeleton";
 type PaymentInstrumentType = "UPI_COLLECT" | "UPI_INTENT" | "UPI_QR";
 type DeviceOS = "IOS" | "ANDROID";
 import { HOST } from "../utils/host";
@@ -14,7 +15,7 @@ import {
 } from "../utils/campaignAuth";
 import { triggerCampaignFbRedirect } from "../utils/campaignFbRedirect";
 import { getOrganisationIdFromSearch, isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
-import { clearJwtForOrganisation, getJwtFromStorage } from "../utils/authStorage";
+import { clearJwtForOrganisation, resolvePageAuthToken } from "../utils/authStorage";
 import {
   ZINTLE_POST_LOGIN_REDIRECT_KEY,
 } from "../utils/postLoginRedirect";
@@ -129,6 +130,37 @@ export type MonetizationPlanDetails = {
   organisation_id?: string;
   coin_value?: number;
 };
+
+async function fetchPlanDetailsResponse(
+  planId: number,
+  organisationId: string,
+  authToken: string | null,
+): Promise<Response> {
+  const pre =
+    typeof window !== "undefined" ? window.__ZNW_PLAN_DETAILS : undefined;
+  if (
+    pre?.promise &&
+    pre.organisationId === organisationId &&
+    pre.planId === String(planId) &&
+    !pre.consumed &&
+    Boolean(pre.hasAuth) === Boolean(authToken)
+  ) {
+    pre.consumed = true;
+    try {
+      return await pre.promise;
+    } catch {
+      /* fall through to a fresh fetch */
+    }
+  }
+  return fetch(`${HOST}/api/v1/monetization/plans/${planId}/details/`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      "X-Organisation-ID": organisationId,
+    },
+  });
+}
 
 function unwrapPlanDetailsJson(json: unknown): MonetizationPlanDetails | null {
   if (!json || typeof json !== "object") return null;
@@ -622,9 +654,8 @@ export const Subscriptions = ({
     location.pathname,
   );
 
-  // Use token from query params if available, otherwise fall back to localStorage
-  const token =
-    tokenFromQuery || getJwtFromStorage(organisationId);
+  // Header-safe query `id`, else org-scoped storage.
+  const token = resolvePageAuthToken(location.search, organisationId);
   const isLoggedIn = !!token;
 
   const planId = planIdFromQuery ? Number(planIdFromQuery) : null;
@@ -751,7 +782,7 @@ export const Subscriptions = ({
       error: "Session expired. Please log in again.",
       data: null,
     });
-    if (tokenFromQuery) {
+    if (headerSafeToken(tokenFromQuery)) {
       navigate(redirect, { replace: true });
     }
     setShowLogin(true);
@@ -788,16 +819,10 @@ export const Subscriptions = ({
     void (async () => {
       try {
         const authToken = headerSafeToken(token);
-        const r = await fetch(
-          `${HOST}/api/v1/monetization/plans/${planId}/details/`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-              "X-Organisation-ID": organisationId,
-            },
-          },
+        const r = await fetchPlanDetailsResponse(
+          planId,
+          organisationId,
+          authToken,
         );
         const json: unknown = await r.json().catch(() => ({}));
         if (cancelled) return;
@@ -1156,11 +1181,7 @@ export const Subscriptions = ({
     isBiffleOrganisationId(organisationId) &&
     !campaignLanguageGateReady
   ) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-black">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-      </div>
-    );
+    return <SubscriptionsSkeleton showPaymentMethods={isCampaign} />;
   }
 
   return (
@@ -1258,14 +1279,10 @@ export const Subscriptions = ({
           )}
 
           {planId && planDetailsState.loading && (
-            <div
-              className="animate-pulse rounded-2xl p-6"
-              style={{ backgroundColor: PAY_CARD_BG }}
-            >
-              <div className="mb-4 h-4 w-3/4 rounded bg-white/10" />
-              <div className="mb-4 h-4 w-1/2 rounded bg-white/10" />
-              <div className="h-4 w-2/3 rounded bg-white/10" />
-            </div>
+            <SubscriptionsSkeleton
+              embedded
+              showPaymentMethods={isCampaign}
+            />
           )}
 
           {planId && planDetailsState.error && !planDetailsState.loading && (

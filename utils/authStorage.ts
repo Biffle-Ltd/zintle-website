@@ -1,4 +1,5 @@
 import { isBiffleOrganisationId } from "./organisationIdFromUrl";
+import { headerSafeToken } from "./headerSafeToken";
 import { clearAllLoginContactStorage } from "./loginContactStorage";
 
 export const ZINTLE_JWT_STORAGE_KEY = "zintle_jwt";
@@ -44,5 +45,19 @@ export function hasAnyJwtInStorage(): boolean {
   return !!(
     localStorage.getItem(ZINTLE_JWT_STORAGE_KEY) ||
     localStorage.getItem(BIFFLE_JWT_STORAGE_KEY)
+  );
+}
+
+/** Query `id` wins when it is header-safe; otherwise fall back to org storage. */
+export function resolvePageAuthToken(
+  search: string,
+  organisationId: string | undefined,
+): string | null {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search,
+  );
+  return (
+    headerSafeToken(params.get("id")) ||
+    headerSafeToken(getJwtFromStorage(organisationId))
   );
 }

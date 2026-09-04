@@ -43,4 +43,44 @@ interface Window {
   EasebuzzCheckout?: EasebuzzCheckoutConstructor;
   PhonePeCheckout?: PhonePeCheckoutApi;
   ReactNativeWebView?: ReactNativeWebViewBridge;
+  __ZNW?: {
+    HOST: string;
+    bootHead: () => void;
+    bootPaint: () => void;
+    coinsSkeletonHtml: (opts?: { biffle?: boolean; qr?: boolean }) => string;
+    welcomeSkeletonHtml: () => string;
+    subscriptionsSkeletonHtml: (opts?: {
+      showPaymentMethods?: boolean;
+      embedded?: boolean;
+    }) => string;
+  };
+  __ZNW_BOOT?: {
+    coins: boolean;
+    biffle: boolean;
+    qr: boolean;
+    welcome: boolean;
+    subscriptions: boolean;
+    webview: boolean;
+    hasAuth: boolean;
+    isCampaign: boolean;
+  };
+  __ZNW_COIN_PACKS?: {
+    organisationId: string;
+    promise: Promise<Response>;
+    consumed?: boolean;
+    hasAuth?: boolean;
+  };
+  __ZNW_WELCOME_BACK?: {
+    organisationId: string;
+    promise: Promise<Response>;
+    consumed?: boolean;
+    hasAuth?: boolean;
+  };
+  __ZNW_PLAN_DETAILS?: {
+    organisationId: string;
+    planId: string;
+    promise: Promise<Response>;
+    consumed?: boolean;
+    hasAuth?: boolean;
+  };
 }

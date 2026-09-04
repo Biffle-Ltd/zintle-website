@@ -3048,9 +3048,17 @@ const Layout = () => {
   const needsCoinPacks = isCoinsPage || isHomePage || showCoins;
 
   useEffect(() => {
-    sendMetaPixelPageView(organisationId);
-    if (typeof window.fbq === "function") return;
-    const retry = () => sendMetaPixelPageView(organisationId);
+    let hasSentPageView = false;
+    const sendPageViewOnce = () => {
+      if (hasSentPageView || typeof window.fbq !== "function") return;
+      sendMetaPixelPageView(organisationId);
+      hasSentPageView = true;
+    };
+
+    sendPageViewOnce();
+    if (hasSentPageView) return;
+
+    const retry = () => sendPageViewOnce();
     const t1 = window.setTimeout(retry, 2000);
     const t2 = window.setTimeout(retry, 4000);
     return () => {

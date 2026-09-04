@@ -38,6 +38,7 @@ export type ParsedCoinPixelContext = {
   deviceInfo: DeviceInfo;
   appInfo: AppInfo;
   organisation_id: string;
+  surface: CoinPurchaseSurface | null;
 };
 
 export type CoinPackForAnalytics = {
@@ -48,19 +49,114 @@ export type CoinPackForAnalytics = {
   bonus_coins?: number;
 };
 
-export type CoinPixelEventName =
-  | "coin_store_viewed"
-  | "quick_recharge_popup_viewed"
-  | "coin_pack_selected"
-  | "coin_payment_initiated"
-  | "coin_payment_success"
-  | "coin_payment_failed";
+export enum CoinPixelEventName {
+  CoinStoreViewed = "coin_store_viewed",
+  QuickRechargePopupViewed = "quick_recharge_popup_viewed",
+  CoinPackSelected = "coin_pack_selected",
+  CoinPaymentInitiated = "coin_payment_initiated",
+  CoinPaymentSuccess = "CoinPaymentSuccess",
+  CoinPaymentFailed = "coin_payment_failed",
+  IframeLoaded = "iframe_loaded",
+  WelcomeBackOfferViewed = "welcome_back_offer_viewed",
+}
+
+/** Gateway value for `iframe_loaded` (lowercase, matches product analytics). */
+export type IframeLoadedPaymentGateway = "phonepe" | "easebuzz";
+
+/** Where the coin purchase UI was shown (analytics "real estate"). */
+export type CoinPurchaseSurface =
+  | "coin_store"
+  | "initiate_call_coin_popup"
+  | "initiate_chat_coin_popup"
+  | "in_call_coin_popup"
+  | "in_chat_coin_popup"
+  | "top_creators_coin_popup"
+  | "welcome_back_offer";
+
+const COIN_PURCHASE_SURFACES: ReadonlySet<CoinPurchaseSurface> = new Set([
+  "coin_store",
+  "initiate_call_coin_popup",
+  "initiate_chat_coin_popup",
+  "in_call_coin_popup",
+  "in_chat_coin_popup",
+  "top_creators_coin_popup",
+  "welcome_back_offer",
+]);
+
+/** Pre-session popups — default ₹100 weekly or one-time pack to *start* call/chat. */
+export function isStartSessionCoinPopupSurface(
+  surface: string | null | undefined,
+): boolean {
+  return (
+    surface === "initiate_call_coin_popup" ||
+    surface === "initiate_chat_coin_popup" ||
+    surface === "top_creators_coin_popup"
+  );
+}
+
+/** Ongoing call/chat — default ₹149 pack to *continue*. */
+export function isInSessionCoinPopupSurface(
+  surface: string | null | undefined,
+): boolean {
+  return surface === "in_call_coin_popup" || surface === "in_chat_coin_popup";
+}
+
+/** Surfaces that are chat-first (default callType / UI label). */
+export function isChatCoinPopupSurface(
+  surface: string | null | undefined,
+): boolean {
+  return (
+    surface === "initiate_chat_coin_popup" || surface === "in_chat_coin_popup"
+  );
+}
+
+/** Surfaces that are call-first (audio/video); UI still shows "call". */
+export function isCallCoinPopupSurface(
+  surface: string | null | undefined,
+): boolean {
+  return (
+    surface === "initiate_call_coin_popup" ||
+    surface === "in_call_coin_popup" ||
+    surface === "top_creators_coin_popup"
+  );
+}
+
+function isWelcomeBackOfferPath(pathname?: string): boolean {
+  if (!pathname) return false;
+  return pathname.replace(/\/+$/, "") === "/welcome-back-offer";
+}
+
+function searchParamsFromSearch(search: string): URLSearchParams {
+  const query = search.startsWith("?") ? search.slice(1) : search;
+  return new URLSearchParams(query);
+}
+
+/** `surface` query param, or null when missing/invalid. */
+export function coinPurchaseSurfaceFromSearch(
+  search: string,
+): CoinPurchaseSurface | null {
+  const raw = searchParamsFromSearch(search).get("surface")?.trim().toLowerCase();
+  if (raw && COIN_PURCHASE_SURFACES.has(raw as CoinPurchaseSurface)) {
+    return raw as CoinPurchaseSurface;
+  }
+  return null;
+}
+
+function resolveCoinPurchaseSurface(
+  search: string,
+  pathname?: string,
+): CoinPurchaseSurface | null {
+  const fromUrl = coinPurchaseSurfaceFromSearch(search);
+  if (fromUrl) return fromUrl;
+  if (isWelcomeBackOfferPath(pathname)) return "welcome_back_offer";
+  return null;
+}
 
 const CURRENCY = "INR";
 
-/** Unix epoch seconds (matches analytics `IntegerField` / backend serializers). */
-function eventTimestampUnixSeconds(): number {
-  return Math.floor(Date.now() / 1000);
+/** Unix epoch milliseconds. */
+function eventTimestampUnixMs(): number {
+  return Date.now();
 }
 
 function parseJsonQueryParam(
@@ -100,8 +196,7 @@ function normalizePlatform(raw: string): "web" | "android" | "ios" {
 }
 
 export function isQuickRechargeFromSearch(search: string): boolean {
-  const query = search.startsWith("?") ? search.slice(1) : search;
-  return new URLSearchParams(query).get("quick_recharge")?.toLocaleLowerCase() === "true";
+  return searchParamsFromSearch(search).get("quick_recharge")?.toLocaleLowerCase() === "true";
 }
 
 function buildBaseEventParams(
@@ -109,9 +204,10 @@ function buildBaseEventParams(
 ): Record<string, unknown> {
   return {
     user_id: ctx.user_id,
-    timestamp: eventTimestampUnixSeconds(),
+    event_timestamp: eventTimestampUnixMs(),
     device_id: ctx.device_id,
     platform: ctx.platform,
+    surface: ctx.surface,
   };
 }
 
@@ -206,6 +302,7 @@ export function parseCoinPixelContext(
   const platform = normalizePlatform(deviceInfo.platform);
 
   const organisation_id = getOrganisationIdFromSearch(search, pathname);
+  const surface = resolveCoinPurchaseSurface(search, pathname);
 
   return {
     token: id,
@@ -217,6 +314,7 @@ export function parseCoinPixelContext(
     deviceInfo,
     appInfo,
     organisation_id,
+    surface,
   };
 }
 
@@ -228,14 +326,22 @@ export function sendPixelEvent(
   sendMetaPixelCustomEvent(organisationId, eventName, payload);
 }
 
+function sendCoinEvent(
+  ctx: ParsedCoinPixelContext,
+  eventName: CoinPixelEventName,
+  eventParams: Record<string, unknown>,
+): void {
+  sendPixelEvent(ctx.organisation_id, eventName, eventParams);
+  sendCoinAnalyticsEvent(ctx, eventName, eventParams);
+}
+
 export function sendCoinStoreViewed(
   ctx: ParsedCoinPixelContext | null,
   packs: CoinPackForAnalytics[],
 ): void {
   if (!ctx) return;
   const eventParams = buildStoreViewedEventParams(ctx, packs);
-  sendPixelEvent(ctx.organisation_id, "coin_store_viewed", eventParams);
-  sendCoinAnalyticsEvent(ctx, "coin_store_viewed", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.CoinStoreViewed, eventParams);
 }
 
 export function sendQuickRechargePopupViewed(
@@ -244,8 +350,7 @@ export function sendQuickRechargePopupViewed(
 ): void {
   if (!ctx) return;
   const eventParams = buildStoreViewedEventParams(ctx, packs);
-  sendPixelEvent(ctx.organisation_id, "quick_recharge_popup_viewed", eventParams);
-  sendCoinAnalyticsEvent(ctx, "quick_recharge_popup_viewed", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.QuickRechargePopupViewed, eventParams);
 }
 
 export function sendCoinPackSelected(
@@ -259,8 +364,7 @@ export function sendCoinPackSelected(
     ...buildBaseEventParams(ctx),
     event_info: buildCoinPackSelectedEventInfo(pack, position, options),
   };
-  sendPixelEvent(ctx.organisation_id, "coin_pack_selected", eventParams);
-  sendCoinAnalyticsEvent(ctx, "coin_pack_selected", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.CoinPackSelected, eventParams);
 }
 
 export function sendCoinPaymentInitiated(
@@ -272,8 +376,7 @@ export function sendCoinPaymentInitiated(
     ...buildBaseEventParams(ctx),
     event_info: buildCoinPaymentInitiatedEventInfo(pack),
   };
-  sendPixelEvent(ctx.organisation_id, "coin_payment_initiated", eventParams);
-  sendCoinAnalyticsEvent(ctx, "coin_payment_initiated", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.CoinPaymentInitiated, eventParams);
 }
 
 export function sendCoinPaymentSuccess(
@@ -295,14 +398,14 @@ export function sendCoinPaymentSuccess(
     currency: CURRENCY,
     coin_pack_id: args.coin_pack_id,
     coin_quantity: args.coin_quantity,
+    surface: ctx.surface,
     payment_method: PAYMENT_GATEWAY,
     payment_gateway: PAYMENT_GATEWAY,
-    event_timestamp: eventTimestampUnixSeconds(),
+    event_timestamp: eventTimestampUnixMs(),
     platform: ctx.platform,
     device_id: ctx.device_id,
   };
-  sendPixelEvent(ctx.organisation_id, "coin_payment_success", eventParams);
-  sendCoinAnalyticsEvent(ctx, "coin_payment_success", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.CoinPaymentSuccess, eventParams);
 }
 
 export function sendCoinPaymentFailed(
@@ -314,12 +417,69 @@ export function sendCoinPaymentFailed(
     user_id: ctx.user_id,
     currency: CURRENCY,
     failure_reason: args.failure_reason ?? "",
+    surface: ctx.surface,
     payment_method: PAYMENT_GATEWAY,
     payment_gateway: PAYMENT_GATEWAY,
-    event_timestamp: eventTimestampUnixSeconds(),
+    event_timestamp: eventTimestampUnixMs(),
     platform: ctx.platform,
     device_id: ctx.device_id,
   };
-  sendPixelEvent(ctx.organisation_id, "coin_payment_failed", eventParams);
-  sendCoinAnalyticsEvent(ctx, "coin_payment_failed", eventParams);
+  sendCoinEvent(ctx, CoinPixelEventName.CoinPaymentFailed, eventParams);
+}
+
+/** Fired once when PhonePe / Easebuzz checkout iframe finishes loading. */
+export function sendIframeLoaded(
+  ctx: ParsedCoinPixelContext | null,
+  paymentGateway: IframeLoadedPaymentGateway,
+): void {
+  if (!ctx) return;
+  const eventParams: Record<string, unknown> = {
+    ...buildBaseEventParams(ctx),
+    event_info: {
+      payment_gateway: paymentGateway,
+    },
+  };
+  sendCoinEvent(ctx, CoinPixelEventName.IframeLoaded, eventParams);
+}
+
+export type WelcomeBackOfferViewedInfo = {
+  is_eligible?: boolean;
+  load_error?: boolean;
+  coin_pack: WelcomeBackCoinPackForAnalytics | null;
+};
+
+export type WelcomeBackCoinPackForAnalytics = {
+  id: number;
+  name: string;
+  amount: number;
+  coin_value: number;
+};
+
+function welcomeBackPackToAnalytics(
+  pack: WelcomeBackCoinPackForAnalytics | null,
+): Record<string, unknown> | null {
+  if (!pack) return null;
+  return {
+    id: pack.id,
+    name: pack.name,
+    amount: pack.amount,
+    coin_value: pack.coin_value,
+  };
+}
+
+export function sendWelcomeBackOfferViewed(
+  ctx: ParsedCoinPixelContext | null,
+  info: WelcomeBackOfferViewedInfo,
+): void {
+  if (!ctx) return;
+  const eventParams: Record<string, unknown> = {
+    ...buildBaseEventParams(ctx),
+    event_info: {
+      ...(info.load_error
+        ? { load_error: true }
+        : { is_eligible: info.is_eligible ?? false }),
+      coin_pack: welcomeBackPackToAnalytics(info.coin_pack),
+    },
+  };
+  sendCoinEvent(ctx, CoinPixelEventName.WelcomeBackOfferViewed, eventParams);
 }

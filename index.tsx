@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -19,10 +25,13 @@ import { Refund } from "./pages/Refund";
 import { ChildSafety } from "./pages/ChildSafety";
 import { Subscriptions } from "./pages/Subscriptions";
 import { Campaign } from "./pages/Campaign";
+import { CampaignLanguage } from "./pages/CampaignLanguage";
+import { WelcomeBackOffer } from "./pages/WelcomeBackOffer";
 import { PaymentStatus } from "./pages/PaymentStatus";
 import { PaymentStatusPopup } from "./components/PaymentStatusPopup";
 import { PhoneOtpLoginScreen } from "./components/PhoneOtpLoginScreen";
 import { QuickRechargePopup } from "./components/QuickRechargePopup";
+import { QuickRechargePopupBiffle } from "./components/QuickRechargePopupBiffle";
 import {
   CoinStoreMobile,
   getCoinPackStoreIndex,
@@ -31,15 +40,27 @@ import {
   type CoinStorePack,
   type SubscriptionPlan,
 } from "./components/CoinStoreMobile";
+import { CoinStoreMobileBiffle } from "./components/CoinStoreMobileBiffle";
+import { campaignCtaGradientStyle } from "./components/CampaignCta";
 import { COIN_ICON_CLASS, ZintleCoinIcon } from "./components/ZintleCoinIcon";
+import {
+  BIFFLE_COIN_ICON_CLASS,
+  BiffleCoinIcon,
+} from "./components/BiffleCoinIcon";
 import {
   isQuickRechargeFromSearch,
   parseCoinPixelContext,
+  coinPurchaseSurfaceFromSearch,
+  isInSessionCoinPopupSurface,
+  isStartSessionCoinPopupSurface,
+  isChatCoinPopupSurface,
+  isCallCoinPopupSurface,
   sendCoinPackSelected,
   sendCoinPaymentFailed,
   sendCoinPaymentInitiated,
   sendCoinPaymentSuccess,
   sendCoinStoreViewed,
+  sendIframeLoaded,
   sendQuickRechargePopupViewed,
   type CoinPackForAnalytics,
   type ParsedCoinPixelContext,
@@ -54,6 +75,7 @@ import {
   ZINTLE_POST_LOGIN_REDIRECT_KEY,
   withJwtInQuery,
 } from "./utils/postLoginRedirect";
+import { navigateAfterCampaignLoginGate } from "./utils/campaignLanguageGate";
 import { isCampaignPostLoginRedirect } from "./utils/campaignPixelEvents";
 import { sendMetaPixelPageView } from "./utils/metaPixel";
 import {
@@ -61,11 +83,20 @@ import {
   getJwtFromStorage,
   hasAnyJwtInStorage,
 } from "./utils/authStorage";
+import {
+  buildRecommendablePacks,
+  parseQuickRechargeCallContext,
+  recommendLowestPackForOneMinute,
+  resolveInCallDefaultPack,
+  resolveStartSessionDefaultPack,
+} from "./utils/quickRecharge";
 import { HOST } from "./utils/host";
+import { fetchUserDetails } from "./utils/userProfileApi";
 import {
   appendPhonePeChromeWVParam,
   openPhonePeIframeCheckout,
 } from "./utils/phonePeIframeCheckout";
+import { watchPaymentCheckoutIframeLoad } from "./utils/paymentCheckoutIframeLoad";
 import {
   openMandateRedirectUrl,
   resolveMandateRedirectUrl,
@@ -83,6 +114,7 @@ import {
   PAYMENT_GATEWAY,
   type PaymentGateway,
 } from "./utils/paymentGateway";
+import type { CreateOrderPixelOptions as BaseCreateOrderPixelOptions } from "./utils/coinCheckoutOptions";
 
 export { PAYMENT_GATEWAY };
 
@@ -95,6 +127,11 @@ export const setPaymentStatusCallback = (
   callback: (status: string) => void,
 ) => {
   showPaymentStatusCallback = callback;
+};
+
+let refreshCoinPacksCallback: (() => void) | null = null;
+export const setRefreshCoinPacksCallback = (callback: (() => void) | null) => {
+  refreshCoinPacksCallback = callback;
 };
 
 type LastTrackedCoinPurchase = {
@@ -116,11 +153,21 @@ function isCoinPaymentPendingStatus(status: string | undefined): boolean {
   return normalized === "PENDING" || normalized === "INITIATED";
 }
 
-export type CreateOrderPixelOptions = {
-  trackCoinPixels?: boolean;
+type CreateOrderPaymentResult = {
+  order?: unknown;
+  payment?: unknown;
+  checkoutLaunched: boolean;
+};
+
+type CreateOrderPixelOptions = BaseCreateOrderPixelOptions & {
   pixelContext?: ParsedCoinPixelContext | null;
   coinPack?: CoinPackForAnalytics;
 };
+
+let coinCheckoutPollOptionsRef: Pick<
+  CreateOrderPixelOptions,
+  "suppressPaymentStatusPopup" | "onAfterCheckoutPoll"
+> | null = null;
 
 // --- Membership status fetch helper ---
 
@@ -131,24 +178,10 @@ type MembershipStatusResult = {
 async function fetchMembershipStatus(
   token: string,
   organisationId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<MembershipStatusResult> {
-  const jwtToken = headerSafeToken(token);
-  const response = await fetch(
-    `${HOST}/api/v1/user_center/details/get-user-details/`,
-    {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
-        "X-Organisation-ID": organisationId,
-      },
-      signal,
-    }
-  );
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const json = await response.json();
-  return { isMember: Boolean(json?.data?.is_member) };
+  const data = await fetchUserDetails(token, organisationId, signal);
+  return { isMember: Boolean(data.is_member) };
 }
 
 // --- Subscription plans fetch helper ---
@@ -280,6 +313,46 @@ type CoinPackValidatePayload = {
 type CoinPackValidateApiResponse = {
   data?: CoinPackValidatePayload;
 };
+
+type CoinStoreMembershipState = {
+  isMember: boolean;
+  featuredWeeklyPlan: SubscriptionPlan | null;
+  basicWeeklyPlan: SubscriptionPlan | null;
+  subscriptionPlanIds: number[];
+};
+
+/** Fetches is_member from get-user-details, then subscription plans when non-member. */
+async function syncCoinStoreMembershipState(
+  token: string,
+  organisationId: string,
+  signal?: AbortSignal,
+): Promise<CoinStoreMembershipState> {
+  const { isMember } = await fetchMembershipStatus(
+    token,
+    organisationId,
+    signal,
+  );
+  if (isMember) {
+    return {
+      isMember: true,
+      featuredWeeklyPlan: null,
+      basicWeeklyPlan: null,
+      subscriptionPlanIds: [],
+    };
+  }
+  try {
+    const plans = await fetchSubscriptionPlans(token, organisationId, signal);
+    return { isMember: false, ...plans };
+  } catch {
+    // Plans fetch failed → fall back to member coin pack display
+    return {
+      isMember: true,
+      featuredWeeklyPlan: null,
+      basicWeeklyPlan: null,
+      subscriptionPlanIds: [],
+    };
+  }
+}
 
 // Shared helper to create coin purchase orders
 const createCoinOrder = async (
@@ -415,7 +488,11 @@ const validateCoinPackPayment = async (
       // PENDING / INITIATED: keep ref so post-checkout polling can fire success/failed.
     }
 
-    if (paymentStatus) {
+    if (paymentStatus === "SUCCESS") {
+      refreshCoinPacksCallback?.();
+    }
+
+    if (paymentStatus && !coinCheckoutPollOptionsRef?.suppressPaymentStatusPopup) {
       showPaymentStatusCallback?.(paymentStatus);
     }
     return paymentStatus;
@@ -433,6 +510,13 @@ const pollCoinPackPaymentAfterCheckout = async (
 ) => {
   if (!orderUuid) return;
 
+  let lastStatus: string | undefined;
+  let timedOut = true;
+  const customPollFlow = Boolean(
+    coinCheckoutPollOptionsRef?.onAfterCheckoutPoll ||
+      coinCheckoutPollOptionsRef?.suppressPaymentStatusPopup,
+  );
+
   for (let attempt = 0; attempt < COIN_PAYMENT_POLL_MAX_ATTEMPTS; attempt++) {
     if (attempt > 0) {
       await new Promise((resolve) =>
@@ -446,19 +530,49 @@ const pollCoinPackPaymentAfterCheckout = async (
       token,
       gateway,
     );
+    lastStatus = paymentStatus;
 
-    const stillTracking =
-      lastTrackedCoinPurchaseRef?.orderUuid === String(orderUuid);
-    if (!stillTracking) return;
+    if (!customPollFlow) {
+      const stillTracking =
+        lastTrackedCoinPurchaseRef?.orderUuid === String(orderUuid);
+      if (!stillTracking) {
+        timedOut = false;
+        break;
+      }
+    }
 
     if (!isCoinPaymentPendingStatus(paymentStatus)) {
-      lastTrackedCoinPurchaseRef = null;
-      return;
+      if (!customPollFlow) {
+        lastTrackedCoinPurchaseRef = null;
+      }
+      timedOut = false;
+      break;
     }
   }
 
-  if (lastTrackedCoinPurchaseRef?.orderUuid === String(orderUuid)) {
+  if (
+    !customPollFlow &&
+    lastTrackedCoinPurchaseRef?.orderUuid === String(orderUuid)
+  ) {
     lastTrackedCoinPurchaseRef = null;
+  }
+
+  const pollOptions = coinCheckoutPollOptionsRef;
+  coinCheckoutPollOptionsRef = null;
+
+  if (pollOptions?.onAfterCheckoutPoll) {
+    await pollOptions.onAfterCheckoutPoll({ status: lastStatus, timedOut });
+    return;
+  }
+
+  if (
+    pollOptions?.suppressPaymentStatusPopup &&
+    lastStatus &&
+    !isCoinPaymentPendingStatus(lastStatus)
+  ) {
+    showPaymentStatusCallback?.(lastStatus);
+  } else if (timedOut && pollOptions?.suppressPaymentStatusPopup) {
+    showPaymentStatusCallback?.(lastStatus ?? "PENDING");
   }
 };
 
@@ -468,6 +582,7 @@ const launchPhonePeIframeCheckout = (
   orderUuid: string | null | undefined,
   organisationId: string = DEFAULT_ORGANISATION_ID,
   token?: string | null,
+  onCheckoutClosed?: () => void,
 ) => {
   const onClose = () => {
     void pollCoinPackPaymentAfterCheckout(
@@ -476,6 +591,7 @@ const launchPhonePeIframeCheckout = (
       token,
       "PhonePe",
     );
+    onCheckoutClosed?.();
   };
 
   const opened = openPhonePeIframeCheckout(tokenUrl, onClose);
@@ -486,7 +602,17 @@ const launchPhonePeIframeCheckout = (
       token,
       "PhonePe",
     );
+    onCheckoutClosed?.();
+    return;
   }
+
+  // PhonePe SDK has no load callback — fire once the PayPage iframe loads.
+  watchPaymentCheckoutIframeLoad("phonepe", () => {
+    sendIframeLoaded(
+      lastTrackedCoinPurchaseRef?.pixelContext ?? null,
+      "phonepe",
+    );
+  });
 };
 
 // Easebuzz iframe checkout (primary coin purchase flow)
@@ -495,7 +621,18 @@ const launchEasebuzzCheckout = (
   orderUuid: string | null | undefined,
   organisationId: string = DEFAULT_ORGANISATION_ID,
   token?: string | null,
+  onCheckoutClosed?: () => void,
 ) => {
+  const onClose = () => {
+    void pollCoinPackPaymentAfterCheckout(
+      orderUuid,
+      organisationId,
+      token,
+      "Easebuzz",
+    );
+    onCheckoutClosed?.();
+  };
+
   try {
     const accessKey = extractEasebuzzAccessKey(accessToken);
     const merchantKey = EASEBUZZ_KEY;
@@ -505,22 +642,12 @@ const launchEasebuzzCheckout = (
       console.warn("Missing Easebuzz access key in payment response", {
         accessToken,
       });
-      void pollCoinPackPaymentAfterCheckout(
-        orderUuid,
-        organisationId,
-        token,
-        "Easebuzz",
-      );
+      onClose();
       return;
     }
     if (!merchantKey) {
       console.warn("Missing Easebuzz merchant key (set VITE_EASEBUZZ_KEY)");
-      void pollCoinPackPaymentAfterCheckout(
-        orderUuid,
-        organisationId,
-        token,
-        "Easebuzz",
-      );
+      onClose();
       return;
     }
 
@@ -531,53 +658,64 @@ const launchEasebuzzCheckout = (
     const easebuzzCheckout = new EasebuzzCheckout(merchantKey, env);
     const options = {
       access_key: accessKey,
-      onResponse: () => {
-        void pollCoinPackPaymentAfterCheckout(
-          orderUuid,
-          organisationId,
-          token,
-          "Easebuzz",
-        );
-      },
+      onResponse: onClose,
       theme: "#123456",
     };
     easebuzzCheckout.initiatePayment(options);
+
+    // Easebuzz SDK has no load callback — fire once the checkout iframe loads.
+    watchPaymentCheckoutIframeLoad("easebuzz", () => {
+      sendIframeLoaded(
+        lastTrackedCoinPurchaseRef?.pixelContext ?? null,
+        "easebuzz",
+      );
+    });
   } catch (err) {
     console.error("Error occurred in Easebuzz checkout", err);
-    void pollCoinPackPaymentAfterCheckout(
-      orderUuid,
-      organisationId,
-      token,
-      "Easebuzz",
-    );
+    onClose();
   }
 };
 
 // Combined helper to create order and immediately initiate payment
-const createOrderAndInitiatePayment = async (
+export const createOrderAndInitiatePayment = async (
   coinPackId: number | string,
   token?: string | null,
   options?: CreateOrderPixelOptions,
   organisationId: string = DEFAULT_ORGANISATION_ID,
-) => {
-  const pixelContext = options?.pixelContext ?? null;
-  const coinPack = options?.coinPack;
-  const trackCoinPurchase =
-    Boolean(options?.trackCoinPixels) &&
-    pixelContext != null &&
-    coinPack != null;
+): Promise<CreateOrderPaymentResult> => {
+  const trackedPurchase =
+    options?.trackCoinPixels &&
+    options.pixelContext != null &&
+    options.coinPack != null
+      ? {
+          pixelContext: options.pixelContext,
+          coinPack: options.coinPack,
+        }
+      : null;
+  const onCheckoutClosed = options?.onCheckoutClosed;
+  coinCheckoutPollOptionsRef = options?.suppressPaymentStatusPopup ||
+    options?.onAfterCheckoutPoll
+    ? {
+        suppressPaymentStatusPopup: options.suppressPaymentStatusPopup,
+        onAfterCheckoutPoll: options.onAfterCheckoutPoll,
+      }
+    : null;
 
-  if (trackCoinPurchase) {
-    sendCoinPaymentInitiated(pixelContext, coinPack);
+  if (trackedPurchase) {
+    sendCoinPaymentInitiated(
+      trackedPurchase.pixelContext,
+      trackedPurchase.coinPack,
+    );
   }
 
   const orderData = await createCoinOrder(coinPackId, token, organisationId);
   const order = orderData.data;
   if (!order?.order_uuid) {
-    return;
+    return { checkoutLaunched: false };
   }
 
-  if (trackCoinPurchase) {
+  if (trackedPurchase) {
+    const { pixelContext, coinPack } = trackedPurchase;
     lastTrackedCoinPurchaseRef = {
       orderId: String(order.id),
       orderUuid: String(order.order_uuid),
@@ -601,20 +739,25 @@ const createOrderAndInitiatePayment = async (
       order.order_uuid,
       organisationId,
       token,
+      onCheckoutClosed,
     );
-  } else if (PAYMENT_GATEWAY === "PhonePe") {
+    return { order, payment, checkoutLaunched: true };
+  }
+  if (PAYMENT_GATEWAY === "PhonePe") {
     const tokenUrl = payment?.access_token;
     if (!tokenUrl) {
-      return { order, payment };
+      return { order, payment, checkoutLaunched: false };
     }
     launchPhonePeIframeCheckout(
       appendPhonePeChromeWVParam(tokenUrl),
       order.order_uuid,
       organisationId,
       token,
+      onCheckoutClosed,
     );
+    return { order, payment, checkoutLaunched: true };
   }
-  return { order, payment };
+  return { order, payment, checkoutLaunched: false };
 };
 
 const ZintleLogo = ({ h }: { h?: string }) => (
@@ -1475,17 +1618,43 @@ const CoinStore = ({
         isCampaignFlow={isCampaignLoginFlow}
         onClose={abandonCampaignRedirectAndClose}
         onSuccess={() => {
-          const pending = sessionStorage.getItem(
-            ZINTLE_POST_LOGIN_REDIRECT_KEY,
-          );
-          sessionStorage.removeItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
-          if (pending?.startsWith("/")) {
+          void (async () => {
+            const pending = sessionStorage.getItem(
+              ZINTLE_POST_LOGIN_REDIRECT_KEY,
+            );
+            sessionStorage.removeItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
+            if (!pending?.startsWith("/")) {
+              onClose();
+              return;
+            }
+
             const jwt = getJwtFromStorage(organisationId);
             const dest =
               jwt && isBiffle ? withJwtInQuery(pending, jwt) : pending;
+
+            if (isCampaignLoginFlow && jwt) {
+              const authToken = headerSafeToken(jwt);
+              if (!authToken) {
+                navigate(dest);
+                onClose();
+                return;
+              }
+              await navigateAfterCampaignLoginGate({
+                checkoutPath: dest,
+                token: authToken,
+                organisationId,
+                navigate,
+                languageSearchQuery: pending.includes("?")
+                  ? pending.slice(pending.indexOf("?"))
+                  : "",
+              });
+              onClose();
+              return;
+            }
+
             navigate(dest);
-          }
-          onClose();
+            onClose();
+          })();
         }}
       />
     );
@@ -1759,6 +1928,7 @@ const CoinsPage = ({
   coinPacksLoading: boolean;
   organisationId?: string;
 }) => {
+  const isBiffle = isBiffleOrganisationId(organisationId);
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const tokenFromQuery = searchParams.get("id");
@@ -1769,14 +1939,32 @@ const CoinsPage = ({
   );
 
   const quickRecharge = isQuickRechargeFromSearch(location.search);
+  const quickRechargeSurface = useMemo(
+    () => coinPurchaseSurfaceFromSearch(location.search),
+    [location.search],
+  );
+  const quickRechargeCallContext = useMemo(
+    () =>
+      parseQuickRechargeCallContext(location.search, {
+        defaultSessionType: isChatCoinPopupSurface(quickRechargeSurface)
+          ? "chat"
+          : isCallCoinPopupSurface(quickRechargeSurface)
+            ? "call"
+            : isBiffle
+              ? "call"
+              : "chat",
+      }),
+    [location.search, isBiffle, quickRechargeSurface],
+  );
   const displayedPacks = useMemo(
     () => (quickRecharge ? coinPacks.filter((p) => p.is_micropack) : coinPacks),
     [coinPacks, quickRecharge],
   );
 
+  // From full list so QR can feature coin_100 (non-micropack) as limited offer.
   const timerPack = useMemo(
-    () => resolveTimerPack(displayedPacks),
-    [displayedPacks],
+    () => resolveTimerPack(coinPacks),
+    [coinPacks],
   );
   const exclusiveDeals = useMemo(
     () =>
@@ -1785,13 +1973,20 @@ const CoinsPage = ({
   );
   const topPlans = useMemo(
     () =>
-      displayedPacks.filter(
-        (p) => !p.is_micropack && p.id !== timerPack?.id,
-      ),
+      displayedPacks.filter((p) => !p.is_micropack && p.id !== timerPack?.id),
     [displayedPacks, timerPack],
   );
   const storeViewedSentRef = useRef(false);
   const defaultPackSelectedRef = useRef(false);
+  const quickRechargeManualSelectRef = useRef(false);
+  /** Once set for in-session QR, header pack must not follow later pack taps. */
+  const quickRechargeHeaderLockedRef = useRef(false);
+
+  useEffect(() => {
+    quickRechargeManualSelectRef.current = false;
+    quickRechargeHeaderLockedRef.current = false;
+    setQuickRechargeHeaderPack(null);
+  }, [location.search]);
 
   useEffect(() => {
     if (
@@ -1815,6 +2010,25 @@ const CoinsPage = ({
   const [selectedPackage, setSelectedPackage] = useState<CoinStorePack | null>(
     null,
   );
+  /** Pack used for QR header copy — locked after initial recommend/default; ignores later taps. */
+  const [quickRechargeHeaderPack, setQuickRechargeHeaderPack] = useState<{
+    coins: number;
+    price: number;
+  } | null>(null);
+  const [isPaymentInProgress, setIsPaymentInProgress] = useState(false);
+  const paymentInProgressRef = useRef(false);
+
+  const releasePaymentLock = useCallback(() => {
+    paymentInProgressRef.current = false;
+    setIsPaymentInProgress(false);
+  }, []);
+
+  const acquirePaymentLock = useCallback(() => {
+    if (paymentInProgressRef.current) return false;
+    paymentInProgressRef.current = true;
+    setIsPaymentInProgress(true);
+    return true;
+  }, []);
 
   // Membership state
   const [membershipLoading, setMembershipLoading] = useState(true);
@@ -1834,9 +2048,17 @@ const CoinsPage = ({
 
     // If is_member is passed as a URL query param, use it directly (skip API call)
     const isMemberParam = searchParams.get("is_member");
-    console.log("[CoinStore] is_member URL param:", isMemberParam, "| token present:", !!token, "| orgId:", organisationId);
+    console.log(
+      "[CoinStore] is_member URL param:",
+      isMemberParam,
+      "| token present:",
+      !!token,
+      "| orgId:",
+      organisationId,
+    );
     if (isMemberParam !== null) {
-      const memberStatus = isMemberParam.toLowerCase() === "true" || isMemberParam === "1";
+      const memberStatus =
+        isMemberParam.toLowerCase() === "true" || isMemberParam === "1";
       console.log("[CoinStore] Using URL param is_member:", memberStatus);
       setIsMember(memberStatus);
 
@@ -1857,7 +2079,10 @@ const CoinsPage = ({
             },
           )
           .catch((err) => {
-            console.error("[CoinStore] Plans fetch failed for non-member:", err);
+            console.error(
+              "[CoinStore] Plans fetch failed for non-member:",
+              err,
+            );
             // Plans fetch failed — still show non-member view, just without plan cards
           })
           .finally(() => {
@@ -1878,23 +2103,12 @@ const CoinsPage = ({
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
-    fetchMembershipStatus(token, organisationId, controller.signal)
-      .then(({ isMember: memberStatus }) => {
-        setIsMember(memberStatus);
-        if (!memberStatus) {
-          return fetchSubscriptionPlans(token, organisationId, controller.signal)
-            .then(
-              ({ featuredWeeklyPlan, basicWeeklyPlan, subscriptionPlanIds }) => {
-                setFeaturedWeeklyPlan(featuredWeeklyPlan);
-                setBasicWeeklyPlan(basicWeeklyPlan);
-                setSubscriptionPlanIds(subscriptionPlanIds);
-              },
-            )
-            .catch(() => {
-              // Plans fetch failed → fall back to coin pack display
-              setIsMember(true);
-            });
-        }
+    syncCoinStoreMembershipState(token, organisationId, controller.signal)
+      .then((state) => {
+        setIsMember(state.isMember);
+        setFeaturedWeeklyPlan(state.featuredWeeklyPlan);
+        setBasicWeeklyPlan(state.basicWeeklyPlan);
+        setSubscriptionPlanIds(state.subscriptionPlanIds);
       })
       .catch(() => {
         // Membership check failed → treat as member
@@ -1911,8 +2125,144 @@ const CoinsPage = ({
     };
   }, [token, organisationId]);
 
+  const refreshMembershipFromApi = useCallback(async () => {
+    if (!token) return;
+    try {
+      const state = await syncCoinStoreMembershipState(token, organisationId);
+      setIsMember(state.isMember);
+      setFeaturedWeeklyPlan(state.featuredWeeklyPlan);
+      setBasicWeeklyPlan(state.basicWeeklyPlan);
+      setSubscriptionPlanIds(state.subscriptionPlanIds);
+
+      if (state.isMember) {
+        const nextPack =
+          timerPack ??
+          displayedPacks.find((p) => p.product_id === TIMER_COIN_PRODUCT_ID) ??
+          displayedPacks[0] ??
+          null;
+        if (nextPack) setSelectedPackage(nextPack);
+      } else if (state.featuredWeeklyPlan) {
+        setSelectedPackage({
+          id: state.featuredWeeklyPlan.id,
+          coins: state.featuredWeeklyPlan.coin_value ?? 0,
+          price: state.featuredWeeklyPlan.price,
+          name: state.featuredWeeklyPlan.plan_name,
+        });
+      }
+
+      refreshCoinPacksCallback?.();
+    } catch (err) {
+      console.error(
+        "[CoinStore] Failed to refresh membership after subscription:",
+        err,
+      );
+    }
+  }, [token, organisationId, timerPack, displayedPacks]);
+
   useEffect(() => {
-    if (membershipLoading || quickRecharge || displayedPacks.length === 0) return;
+    if (membershipLoading || displayedPacks.length === 0) return;
+
+    if (quickRecharge) {
+      if (
+        isStartSessionCoinPopupSurface(quickRechargeSurface) &&
+        !quickRechargeManualSelectRef.current
+      ) {
+        const pack100 = resolveStartSessionDefaultPack({
+          packs: displayedPacks,
+          featuredWeeklyPlan,
+          basicWeeklyPlan,
+          timerPack,
+          isMember,
+        });
+        const recommended =
+          pack100 ??
+          (quickRechargeCallContext
+            ? recommendLowestPackForOneMinute(
+                quickRechargeCallContext,
+                buildRecommendablePacks({
+                  packs: displayedPacks,
+                  featuredWeeklyPlan,
+                  basicWeeklyPlan,
+                  timerPack,
+                  isMember,
+                }),
+              )
+            : null);
+        if (recommended) {
+          setSelectedPackage({
+            id: recommended.id,
+            coins: recommended.coins,
+            price: recommended.price,
+            name: recommended.name,
+          });
+          setQuickRechargeHeaderPack({
+            coins: recommended.coins,
+            price: recommended.price,
+          });
+          return;
+        }
+      }
+
+      // Ongoing call/chat: prefer ₹149 one-time pack — never default to weekly.
+      // Header pack is locked once so taps don't change the continue-call copy.
+      if (
+        isInSessionCoinPopupSurface(quickRechargeSurface) &&
+        !quickRechargeManualSelectRef.current
+      ) {
+        const inCallPack = resolveInCallDefaultPack(displayedPacks);
+        if (inCallPack) {
+          setSelectedPackage((prev) => prev ?? inCallPack);
+          if (!quickRechargeHeaderLockedRef.current) {
+            quickRechargeHeaderLockedRef.current = true;
+            setQuickRechargeHeaderPack({
+              coins: inCallPack.coins,
+              price: inCallPack.price,
+            });
+          }
+          return;
+        }
+      }
+
+      if (!isMember && featuredWeeklyPlan) {
+        const initial = {
+          id: featuredWeeklyPlan.id,
+          coins: featuredWeeklyPlan.coin_value ?? 0,
+          price: featuredWeeklyPlan.price,
+          name: featuredWeeklyPlan.plan_name,
+        };
+        setSelectedPackage((prev) => prev ?? initial);
+        if (!quickRechargeHeaderLockedRef.current) {
+          if (isInSessionCoinPopupSurface(quickRechargeSurface)) {
+            quickRechargeHeaderLockedRef.current = true;
+          }
+          setQuickRechargeHeaderPack((prev) =>
+            prev ?? { coins: initial.coins, price: initial.price },
+          );
+        }
+      } else if (isMember && timerPack) {
+        setSelectedPackage((prev) => prev ?? timerPack);
+        if (!quickRechargeHeaderLockedRef.current) {
+          if (isInSessionCoinPopupSurface(quickRechargeSurface)) {
+            quickRechargeHeaderLockedRef.current = true;
+          }
+          setQuickRechargeHeaderPack((prev) =>
+            prev ?? { coins: timerPack.coins, price: timerPack.price },
+          );
+        }
+      } else if (displayedPacks[0]) {
+        const initial = displayedPacks[0];
+        setSelectedPackage((prev) => prev ?? initial);
+        if (!quickRechargeHeaderLockedRef.current) {
+          if (isInSessionCoinPopupSurface(quickRechargeSurface)) {
+            quickRechargeHeaderLockedRef.current = true;
+          }
+          setQuickRechargeHeaderPack((prev) =>
+            prev ?? { coins: initial.coins, price: initial.price },
+          );
+        }
+      }
+      return;
+    }
 
     // For non-members, default select the featured weekly plan
     if (!isMember && featuredWeeklyPlan) {
@@ -1965,6 +2315,8 @@ const CoinsPage = ({
   }, [
     membershipLoading,
     quickRecharge,
+    quickRechargeSurface,
+    quickRechargeCallContext,
     displayedPacks,
     pixelContext,
     timerPack,
@@ -1972,19 +2324,30 @@ const CoinsPage = ({
     topPlans,
     isMember,
     featuredWeeklyPlan,
+    basicWeeklyPlan,
   ]);
 
+  useEffect(() => {
+    if (!selectedPackage?.id) return;
+    if (subscriptionPlanIds.includes(selectedPackage.id)) return;
+    const packStillAvailable =
+      displayedPacks.some((p) => p.id === selectedPackage.id) ||
+      timerPack?.id === selectedPackage.id;
+    if (!packStillAvailable) {
+      setSelectedPackage(null);
+    }
+  }, [displayedPacks, selectedPackage, subscriptionPlanIds, timerPack]);
+
   const handlePackSelect = (pkg: CoinStorePack, index: number) => {
+    if (quickRecharge) {
+      quickRechargeManualSelectRef.current = true;
+    }
     setSelectedPackage(pkg);
     sendCoinPackSelected(pixelContext, pkg, index);
   };
 
   const handleDesktopRecharge = async (pkg: CoinStorePack, index: number) => {
-    handlePackSelect(pkg, index);
-    await handlePayClick(pkg);
-  };
-
-  const handleQuickRechargePay = async (pkg: CoinStorePack, index: number) => {
+    if (paymentInProgressRef.current) return;
     handlePackSelect(pkg, index);
     await handlePayClick(pkg);
   };
@@ -1992,6 +2355,7 @@ const CoinsPage = ({
   const handlePayClick = async (pkg?: CoinStorePack) => {
     const packageToUse = pkg;
     if (!packageToUse) return;
+    if (paymentInProgressRef.current) return;
 
     // If user is logged out, open login popup instead of creating order
     if (!isLoggedIn) {
@@ -2004,8 +2368,11 @@ const CoinsPage = ({
       console.warn("No coin_pack_id available for package", packageToUse);
       return;
     }
+
+    if (!acquirePaymentLock()) return;
+
     try {
-      await createOrderAndInitiatePayment(
+      const result = await createOrderAndInitiatePayment(
         packageToUse.id,
         token,
         {
@@ -2018,26 +2385,66 @@ const CoinsPage = ({
             coins: packageToUse.coins,
             bonus_coins: packageToUse.bonus_coins ?? 0,
           },
+          onCheckoutClosed: releasePaymentLock,
         },
         organisationId,
       );
+      if (!result.checkoutLaunched) {
+        releasePaymentLock();
+      }
     } catch (e) {
       console.error("Failed to create coin order from CoinsPage", e);
+      releasePaymentLock();
     }
   };
 
   if (membershipLoading) {
+    if (quickRecharge) {
+      return (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center ${isBiffle ? "bg-white" : "bg-[#001A3D]"}`}
+        >
+          <div
+            className={`h-8 w-8 animate-spin rounded-full border-2 ${isBiffle ? "border-gray-300 border-t-violet-600" : "border-white/20 border-t-white"}`}
+          />
+        </div>
+      );
+    }
+
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#000D26] md:hidden">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+      <div
+        className={`flex min-h-screen items-center justify-center md:hidden ${isBiffle ? "bg-[#F5F5F5]" : "bg-[#000D26]"}`}
+      >
+        <div
+          className={`h-8 w-8 animate-spin rounded-full border-2 ${isBiffle ? "border-gray-300 border-t-violet-600" : "border-white/20 border-t-white"}`}
+        />
       </div>
     );
   }
 
   if (coinPacksLoading) {
+    if (quickRecharge) {
+      return (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center ${isBiffle ? "bg-white" : "bg-[#001A3D]"}`}
+        >
+          <div
+            className={`flex items-center gap-2 text-sm ${isBiffle ? "text-gray-500" : "text-brand-muted"}`}
+          >
+            <i className="fa-solid fa-spinner fa-spin" aria-hidden />
+            Loading coin packs…
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex min-h-screen items-center justify-center bg-brand-bg p-6">
-        <div className="flex items-center gap-2 text-sm text-brand-muted">
+      <div
+        className={`flex min-h-screen items-center justify-center p-6 ${isBiffle ? "bg-[#F5F5F5]" : "bg-brand-bg"}`}
+      >
+        <div
+          className={`flex items-center gap-2 text-sm ${isBiffle ? "text-gray-500" : "text-brand-muted"}`}
+        >
           <i className="fa-solid fa-spinner fa-spin" aria-hidden />
           Loading coin packs…
         </div>
@@ -2045,28 +2452,30 @@ const CoinsPage = ({
     );
   }
 
-  if (quickRecharge) {
-    return (
-      <QuickRechargePopup
-        packs={displayedPacks}
-        selectedPackageId={selectedPackage?.id ?? null}
-        onPackSelect={handlePackSelect}
-        onPackPay={handleQuickRechargePay}
-      />
-    );
-  }
-
   const handleMobileRecharge = () => {
-    console.log("[CoinStore] handleMobileRecharge called, selectedPackage:", selectedPackage, "isMember:", isMember);
-    if (!selectedPackage) return;
+    console.log(
+      "[CoinStore] handleMobileRecharge called, selectedPackage:",
+      selectedPackage,
+      "isMember:",
+      isMember,
+    );
+    if (!selectedPackage || paymentInProgressRef.current) return;
 
     // Subscription plans from the plans API use mandate flow
     const isSubscriptionPlan =
       !isMember && subscriptionPlanIds.includes(selectedPackage.id);
-    console.log("[CoinStore] isSubscriptionPlan:", isSubscriptionPlan, "selectedPackage.id:", selectedPackage.id);
+    console.log(
+      "[CoinStore] isSubscriptionPlan:",
+      isSubscriptionPlan,
+      "selectedPackage.id:",
+      selectedPackage.id,
+    );
 
     if (isSubscriptionPlan) {
-      void handleSubscriptionMandateInit(selectedPackage.id);
+      if (!acquirePaymentLock()) return;
+      void handleSubscriptionMandateInit(selectedPackage.id).finally(
+        releasePaymentLock,
+      );
     } else {
       void handlePayClick(selectedPackage);
     }
@@ -2079,7 +2488,9 @@ const CoinsPage = ({
     }
     try {
       const authToken = headerSafeToken(token);
-      const targetApp = new URLSearchParams(location.search).get("target_app") || "com.phonepe.app";
+      const targetApp =
+        new URLSearchParams(location.search).get("target_app") ||
+        "com.phonepe.app";
       const r = await fetch(
         `${HOST}/api/v1/monetization/subscriptions/mandate/initiate/`,
         {
@@ -2126,7 +2537,10 @@ const CoinsPage = ({
         // Start polling for mandate status
         void pollMandateStatus(mandateData.id);
       } else {
-        console.error("[CoinStore] No redirect URL in mandate response", mandateData);
+        console.error(
+          "[CoinStore] No redirect URL in mandate response",
+          mandateData,
+        );
         showPaymentStatusCallback?.("FAILED");
       }
     } catch (e) {
@@ -2150,6 +2564,7 @@ const CoinsPage = ({
         });
         if (isMandateActive(result.mandate_state)) {
           showPaymentStatusCallback?.("SUCCESS");
+          await refreshMembershipFromApi();
           return;
         }
         if (isMandateFailure(result.mandate_state)) {
@@ -2165,61 +2580,160 @@ const CoinsPage = ({
     showPaymentStatusCallback?.("PENDING");
   };
 
-  return (
-    <div className="bg-brand-bg md:min-h-screen md:pb-8">
-      <CoinStoreMobile
-        timerPack={timerPack}
-        exclusiveDeals={exclusiveDeals}
-        topPlans={topPlans}
+  if (quickRecharge) {
+    const popup = isBiffle ? (
+      <QuickRechargePopupBiffle
+        packs={displayedPacks}
         selectedPackageId={selectedPackage?.id ?? null}
         onPackSelect={handlePackSelect}
-        onRecharge={handleMobileRecharge}
+        onContinue={handleMobileRecharge}
         isMember={isMember}
         featuredWeeklyPlan={featuredWeeklyPlan}
         basicWeeklyPlan={basicWeeklyPlan}
+        timerPack={timerPack}
+        callContext={quickRechargeCallContext}
+        surface={quickRechargeSurface}
+        headerPack={quickRechargeHeaderPack}
+        paymentInProgress={isPaymentInProgress}
       />
+    ) : (
+      <QuickRechargePopup
+        packs={displayedPacks}
+        selectedPackageId={selectedPackage?.id ?? null}
+        onPackSelect={handlePackSelect}
+        onContinue={handleMobileRecharge}
+        isMember={isMember}
+        featuredWeeklyPlan={featuredWeeklyPlan}
+        basicWeeklyPlan={basicWeeklyPlan}
+        timerPack={timerPack}
+        callContext={quickRechargeCallContext}
+        surface={quickRechargeSurface}
+        headerPack={quickRechargeHeaderPack}
+        paymentInProgress={isPaymentInProgress}
+      />
+    );
+
+    return (
+      <div
+        className={`fixed inset-0 z-50 flex flex-col ${isBiffle ? "bg-white" : "bg-[#001A3D]"}`}
+      >
+        {popup}
+      </div>
+    );
+  }
+
+  const coinStoreMobileProps = {
+    timerPack,
+    exclusiveDeals,
+    topPlans,
+    selectedPackageId: selectedPackage?.id ?? null,
+    onPackSelect: handlePackSelect,
+    onRecharge: handleMobileRecharge,
+    isMember,
+    featuredWeeklyPlan,
+    basicWeeklyPlan,
+    paymentInProgress: isPaymentInProgress,
+  };
+
+  return (
+    <div
+      className={`md:min-h-screen md:pb-8 ${isBiffle ? "bg-[#F5F5F5]" : "bg-brand-bg"}`}
+    >
+      {isBiffle ? (
+        <CoinStoreMobileBiffle {...coinStoreMobileProps} />
+      ) : (
+        <CoinStoreMobile {...coinStoreMobileProps} />
+      )}
 
       <div className="container mx-auto hidden px-4 pb-8 pt-12 md:block md:pb-20">
-        <h2 className="mb-12 text-center text-3xl font-bold text-white">
+        <h2
+          className={`mb-12 text-center text-3xl font-bold ${isBiffle ? "text-gray-900" : "text-white"}`}
+        >
           Coin Packages
         </h2>
 
-        {/* Desktop: Grid layout (same as CoinSection) */}
-        <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
-          {displayedPacks.map((pkg, i) => (
-            <div
-              key={i}
-              className={`relative glass-card rounded-3xl p-6 text-center transition-transform hover:-translate-y-1 ${
-                pkg.highlight
-                  ? "border-2 border-brand-gold shadow-[0_0_20px_rgba(255,215,0,0.3)]"
-                  : "hover:bg-white/5"
-              }`}
-            >
-              {pkg.tag && (
-                <span
-                  className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold px-3 py-1 rounded-full ${
-                    pkg.highlight
-                      ? "bg-brand-gold text-black"
-                      : "text-green-600 bg-green-100"
-                  }`}
-                >
-                  {pkg.tag}
-                </span>
-              )}
-              <h3 className="mb-4 flex items-center justify-center gap-2 text-xl font-bold leading-none text-white">
-                <ZintleCoinIcon className={COIN_ICON_CLASS} />
-                <span>{pkg.coins} Coins</span>
-              </h3>
-              <p className="text-2xl font-bold text-white mb-6">₹{pkg.price}</p>
-              <button
-                onClick={() => handleDesktopRecharge(pkg, i)}
-                className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20"
+        {isBiffle ? (
+          <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+            {displayedPacks.map((pkg, i) => (
+              <div
+                key={i}
+                className={`relative rounded-3xl border bg-white p-6 text-center transition-transform hover:-translate-y-1 ${
+                  pkg.highlight
+                    ? "border-2 border-[#FACC15] shadow-md"
+                    : "border-gray-200 hover:shadow-md"
+                }`}
               >
-                {isLoggedIn ? "Recharge" : "Login"}
-              </button>
-            </div>
-          ))}
-        </div>
+                {pkg.tag && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-violet-600 px-3 py-1 text-xs font-bold text-white">
+                    {pkg.tag}
+                  </span>
+                )}
+                <h3 className="mb-4 flex items-center justify-center gap-2 text-xl font-bold leading-none text-gray-900">
+                  <BiffleCoinIcon className={BIFFLE_COIN_ICON_CLASS} />
+                  <span>{pkg.coins} Coins</span>
+                </h3>
+                <p className="mb-6 text-2xl font-bold text-gray-900">
+                  ₹{pkg.price}
+                </p>
+                <button
+                  onClick={() => handleDesktopRecharge(pkg, i)}
+                  disabled={isPaymentInProgress}
+                  className="w-full rounded-xl py-3 font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                  style={campaignCtaGradientStyle(true)}
+                >
+                  {isPaymentInProgress
+                    ? "Processing..."
+                    : isLoggedIn
+                      ? "Pay"
+                      : "Login"}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+            {displayedPacks.map((pkg, i) => (
+              <div
+                key={i}
+                className={`relative glass-card rounded-3xl p-6 text-center transition-transform hover:-translate-y-1 ${
+                  pkg.highlight
+                    ? "border-2 border-brand-gold shadow-[0_0_20px_rgba(255,215,0,0.3)]"
+                    : "hover:bg-white/5"
+                }`}
+              >
+                {pkg.tag && (
+                  <span
+                    className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold px-3 py-1 rounded-full ${
+                      pkg.highlight
+                        ? "bg-brand-gold text-black"
+                        : "text-green-600 bg-green-100"
+                    }`}
+                  >
+                    {pkg.tag}
+                  </span>
+                )}
+                <h3 className="mb-4 flex items-center justify-center gap-2 text-xl font-bold leading-none text-white">
+                  <ZintleCoinIcon className={COIN_ICON_CLASS} />
+                  <span>{pkg.coins} Coins</span>
+                </h3>
+                <p className="text-2xl font-bold text-white mb-6">
+                  ₹{pkg.price}
+                </p>
+                <button
+                  onClick={() => handleDesktopRecharge(pkg, i)}
+                  disabled={isPaymentInProgress}
+                  className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary hover:opacity-90 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-brand-primary/20 disabled:opacity-40"
+                >
+                  {isPaymentInProgress
+                    ? "Processing..."
+                    : isLoggedIn
+                      ? "Recharge"
+                      : "Login"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2508,6 +3022,33 @@ const mapCoinPack = (p: CoinPackApiRow): CoinStorePack => ({
   highlight: p.isBonusPack || false,
 });
 
+async function fetchCoinPackDetails(
+  organisationId: string,
+  search: string,
+): Promise<CoinStorePack[]> {
+  const searchParams = new URLSearchParams(search);
+  const tokenFromQuery = searchParams.get("id");
+  const rawToken = tokenFromQuery || getJwtFromStorage(organisationId);
+  const jwtToken = headerSafeToken(rawToken);
+  const r = await fetch(
+    `${HOST}/api/v1.2/creator_center/details/get-coin-pack-details/`,
+    {
+      headers: {
+        ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
+        "X-Organisation-ID": organisationId,
+      },
+    },
+  );
+  const data = (await r.json()) as {
+    success?: boolean;
+    data?: CoinPackApiRow[];
+  };
+  if (data.success && Array.isArray(data.data)) {
+    return data.data.filter((p) => p.is_active).map((p) => mapCoinPack(p));
+  }
+  return [];
+}
+
 const Layout = () => {
   const location = useLocation();
   const organisationId = useMemo(
@@ -2519,7 +3060,10 @@ const Layout = () => {
     isCoinsPage && isQuickRechargeFromSearch(location.search);
   const isSubscriptionsPage = location.pathname === "/subscriptions";
   const isCampaignPage =
-    (location.pathname.replace(/\/+$/, "") || "/") === "/campaign";
+    (location.pathname.replace(/\/+$/, "") || "/") === "/campaign" ||
+    location.pathname.replace(/\/+$/, "") === "/campaign/language";
+  const isWelcomeBackOfferPage =
+    location.pathname.replace(/\/+$/, "") === "/welcome-back-offer";
   const isFbRedirectPage = location.pathname === "/fb-redirect";
   const isPaymentStatusPage = location.pathname === "/payment-status";
   const [showLogin, setShowLogin] = useState(false);
@@ -2533,51 +3077,42 @@ const Layout = () => {
     sendMetaPixelPageView(organisationId);
   }, [organisationId, location.pathname]);
 
-  // Fetch coin packs on mount/when logged in changes
-  useEffect(() => {
-    let cancelled = false;
-
-    const fetchPacks = async () => {
-      setCoinPacksLoading(true);
+  const loadCoinPacks = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!options?.silent) setCoinPacksLoading(true);
       try {
-        const searchParams = new URLSearchParams(location.search);
-        const tokenFromQuery = searchParams.get("id");
-        const rawToken = tokenFromQuery || getJwtFromStorage(organisationId);
-        const jwtToken = headerSafeToken(rawToken);
-        const r = await fetch(
-          `${HOST}/api/v1.2/creator_center/details/get-coin-pack-details/`,
-          {
-            headers: {
-              ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
-              "X-Organisation-ID": organisationId,
-            },
-          },
+        const packs = await fetchCoinPackDetails(
+          organisationId,
+          location.search,
         );
-        const data = (await r.json()) as {
-          success?: boolean;
-          data?: CoinPackApiRow[];
-        };
-        if (cancelled) return;
-        if (data.success && Array.isArray(data.data)) {
-          setCoinPacks(
-            data.data
-              .filter((p) => p.is_active)
-              .map((p) => mapCoinPack(p)),
-          );
-        } else {
-          setCoinPacks([]);
-        }
+        setCoinPacks(packs);
       } catch {
-        if (!cancelled) setCoinPacks([]);
+        if (!options?.silent) setCoinPacks([]);
       } finally {
-        if (!cancelled) setCoinPacksLoading(false);
+        if (!options?.silent) setCoinPacksLoading(false);
       }
-    };
-    void fetchPacks();
+    },
+    [organisationId, location.search],
+  );
+
+  // Fetch coin packs on mount/when logged in changes (skip on welcome-back WebView)
+  useEffect(() => {
+    if (isWelcomeBackOfferPage) {
+      setCoinPacksLoading(false);
+      return;
+    }
+    void loadCoinPacks();
+  }, [isLoggedIn, loadCoinPacks, isWelcomeBackOfferPage]);
+
+  // Refresh coin packs after a successful purchase (e.g. one-time packs)
+  useEffect(() => {
+    setRefreshCoinPacksCallback(() => {
+      void loadCoinPacks({ silent: true });
+    });
     return () => {
-      cancelled = true;
+      setRefreshCoinPacksCallback(null);
     };
-  }, [isLoggedIn, organisationId, location.search]);
+  }, [loadCoinPacks]);
 
   // Check JWT changes after CoinStore closes
   useEffect(() => {
@@ -2608,8 +3143,10 @@ const Layout = () => {
       className={`text-brand-text font-sans ${
         isCampaignPage
           ? "h-dvh max-h-dvh overflow-hidden"
-          : isQuickRechargeCoinsPage
-            ? "h-auto min-h-0 bg-transparent"
+          : isWelcomeBackOfferPage
+            ? "flex h-dvh max-h-dvh flex-col overflow-hidden sm:h-auto sm:max-h-none sm:min-h-dvh sm:overflow-y-auto"
+            : isQuickRechargeCoinsPage
+            ? "h-dvh max-h-dvh overflow-hidden bg-transparent"
             : isCoinsPage
               ? ""
               : "min-h-screen"
@@ -2618,6 +3155,7 @@ const Layout = () => {
       {!isCoinsPage &&
         !isSubscriptionsPage &&
         !isCampaignPage &&
+        !isWelcomeBackOfferPage &&
         !isFbRedirectPage &&
         !isPaymentStatusPage && (
           <Header
@@ -2705,6 +3243,25 @@ const Layout = () => {
             />
           }
         />
+        <Route
+          path="/campaign/language"
+          element={
+            <CampaignLanguage
+              organisationId={organisationId}
+              setShowLogin={setShowLogin}
+            />
+          }
+        />
+        <Route
+          path="/welcome-back-offer"
+          element={
+            <WelcomeBackOffer
+              organisationId={organisationId}
+              createOrderAndInitiatePayment={createOrderAndInitiatePayment}
+              onPaymentStatus={setPaymentStatus}
+            />
+          }
+        />
         <Route path="/fb-redirect" element={<FBRedirect />} />
         <Route path="/payment-status" element={<PaymentStatus />} />
       </Routes>
@@ -2712,6 +3269,7 @@ const Layout = () => {
       {!isCoinsPage &&
         !isSubscriptionsPage &&
         !isCampaignPage &&
+        !isWelcomeBackOfferPage &&
         !isFbRedirectPage &&
         !isPaymentStatusPage && <Footer />}
 

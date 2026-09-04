@@ -25,3 +25,25 @@ export function isBiffleOrganisationId(id: string | undefined): boolean {
   if (!id) return false;
   return id.trim().toUpperCase() === BIFFLE_ORGANISATION_ID;
 }
+
+/** Weekly mandate plan IDs: premium (₹100 slot) and basic (₹29 slot) per org. */
+export function getWeeklySubscriptionPlanIds(organisationId: string): {
+  premiumPlanId: number;
+  basicPlanId: number;
+} {
+  if (isBiffleOrganisationId(organisationId)) {
+    return { premiumPlanId: 8, basicPlanId: 5 };
+  }
+  return { premiumPlanId: 10, basicPlanId: 9 };
+}
+
+export function isWeeklySubscriptionPlanId(
+  planId: number | string | undefined,
+  organisationId: string,
+): boolean {
+  if (planId == null) return false;
+  const id = Number(planId);
+  const { premiumPlanId, basicPlanId } =
+    getWeeklySubscriptionPlanIds(organisationId);
+  return id === premiumPlanId || id === basicPlanId;
+}

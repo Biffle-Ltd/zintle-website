@@ -14,6 +14,7 @@ export type CampaignPixelEventName =
   | "campaign_free_trial_viewed"
   | "campaign_otp_requested"
   | "campaign_login_successful"
+  | "campaign_language_saved"
   | "campaign_trial_purchase_initiated"
   | "campaign_start_trial";
 
@@ -41,8 +42,9 @@ export type CampaignPlanEventInfo = {
 
 const ANALYTICS_UNKNOWN = "unknown";
 
-function eventTimestampUnixSeconds(): number {
-  return Math.floor(Date.now() / 1000);
+/** Unix epoch milliseconds. */
+function eventTimestampUnixMs(): number {
+  return Date.now();
 }
 
 function parseJsonQueryParam(
@@ -202,7 +204,7 @@ function buildBaseEventParams(
 ): Record<string, unknown> {
   return {
     user_id: ctx.user_id,
-    timestamp: eventTimestampUnixSeconds(),
+    timestamp: eventTimestampUnixMs(),
     device_id: ctx.device_id,
     platform: ctx.platform,
     organisation_id: ctx.organisation_id,
@@ -287,6 +289,19 @@ export function sendCampaignLoginSuccessful(
     },
   };
   sendCampaignEvent(ctx, "campaign_login_successful", eventParams);
+}
+
+export function sendCampaignLanguageSaved(
+  ctx: ParsedCampaignPixelContext,
+  args: { language_code: string },
+): void {
+  const eventParams = {
+    ...buildBaseEventParams(ctx),
+    event_info: {
+      language_code: args.language_code,
+    },
+  };
+  sendCampaignEvent(ctx, "campaign_language_saved", eventParams);
 }
 
 export function sendCampaignTrialPurchaseInitiated(

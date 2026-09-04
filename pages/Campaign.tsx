@@ -17,6 +17,12 @@ import {
   parseCampaignPixelContext,
   sendCampaignFreeTrialViewed,
 } from "../utils/campaignPixelEvents";
+import {
+  captureCampaignFbclidOnLandingSafe,
+  linkCampaignFacebookAttributionSafe,
+  resolveCampaignFbclid,
+} from "../utils/fbAttribution";
+import { navigateAfterCampaignLoginGate } from "../utils/campaignLanguageGate";
 
 const PAGE_BG = "#162a44";
 const ACCENT_ORANGE = "#f58220";
@@ -222,6 +228,24 @@ export function Campaign({
   const canCheckout = checkoutPath != null && !fetchError && !loading;
   const isLoggedIn = !!getJwtFromStorage(organisationId);
 
+  useEffect(() => {
+    if (!fbclidFromUrl) return;
+    captureCampaignFbclidOnLandingSafe(organisationId, fbclidFromUrl);
+  }, [fbclidFromUrl, organisationId]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const jwt = getJwtFromStorage(organisationId);
+    if (!jwt) return;
+    const fbclid = resolveCampaignFbclid(organisationId, fbclidFromUrl);
+    if (!fbclid) return;
+    linkCampaignFacebookAttributionSafe({
+      fbclid,
+      organisationId,
+      authToken: jwt,
+    });
+  }, [isLoggedIn, fbclidFromUrl, organisationId]);
+
   const videoUrl =
     activePlan?.extra_info &&
     typeof activePlan.extra_info.video_url === "string"
@@ -242,14 +266,24 @@ export function Campaign({
           ? formatPlanPriceInr(activePlan.price)
           : "";
 
-  const handleStartFreeTrial = () => {
+  const handleStartFreeTrial = async () => {
     if (!checkoutPath) return;
     if (!isLoggedIn) {
       sessionStorage.setItem(ZINTLE_POST_LOGIN_REDIRECT_KEY, checkoutPath);
       setShowLogin(true);
       return;
     }
-    navigate(checkoutPath);
+    const jwt = getJwtFromStorage(organisationId);
+    if (!jwt) return;
+    const authToken = headerSafeToken(jwt);
+    if (!authToken) return;
+    await navigateAfterCampaignLoginGate({
+      checkoutPath,
+      token: authToken,
+      organisationId,
+      navigate,
+      languageSearchQuery: location.search,
+    });
   };
 
   const isBiffle = isBiffleOrganisationId(organisationId);

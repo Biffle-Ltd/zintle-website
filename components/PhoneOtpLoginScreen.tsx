@@ -10,6 +10,7 @@ import {
   sendCampaignLoginSuccessful,
   sendCampaignOtpRequested,
 } from "../utils/campaignPixelEvents";
+import { linkCampaignFacebookAttributionSafe, resolveCampaignFbclid } from "../utils/fbAttribution";
 
 const OTP_LENGTH = 6;
 const PHONE_LENGTH = 10;
@@ -238,6 +239,16 @@ export function PhoneOtpLoginScreen({
             organisationId,
           );
           sendCampaignLoginSuccessful(ctx);
+          if (jwt) {
+            const fbclid = resolveCampaignFbclid(organisationId, base.fbclid);
+            if (fbclid) {
+              linkCampaignFacebookAttributionSafe({
+                fbclid,
+                organisationId,
+                authToken: jwt,
+              });
+            }
+          }
         }
         onSuccess();
       } catch (e: unknown) {

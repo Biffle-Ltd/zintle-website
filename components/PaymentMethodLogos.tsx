@@ -153,5 +153,9 @@ export function CampaignPaymentMethodLogo({
       return <UpiLogo size={size} />;
     case "qr":
       return <QrPayLogo size={size} />;
+    default: {
+      const _exhaustive: never = variant;
+      return _exhaustive;
+    }
   }
 }

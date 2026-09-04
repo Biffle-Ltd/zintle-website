@@ -1,22 +1,27 @@
 import React, { useState, useEffect } from "react";
 import { HOST } from "../utils/host";
+import { DEFAULT_ORGANISATION_ID } from "../utils/organisationIdFromUrl";
 
 const PLAY_STORE_URL =
   "https://play.google.com/store/apps/details?id=ai.zintle";
+
+type FbRedirectApiResponse = {
+  data?: {
+    redirect_url?: string;
+  };
+};
 
 const FBRedirect: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [redirectUrl, setRedirectUrl] = useState<string>(PLAY_STORE_URL);
 
   useEffect(() => {
-    // Read fbclid from query params on first render
     const urlParams = new URLSearchParams(window.location.search);
     const fbclid = urlParams.get("fbclid");
 
     console.log("[FBRedirect] fbclid:", fbclid);
     console.log("[FBRedirect] Full URL:", window.location.href);
 
-    // If no fbclid, use Play Store fallback
     if (!fbclid) {
       console.log("[FBRedirect] No fbclid found, using Play Store fallback");
       setRedirectUrl(PLAY_STORE_URL);
@@ -24,13 +29,12 @@ const FBRedirect: React.FC = () => {
       return;
     }
 
-    // Call backend API with fbclid
     const apiUrl = `${HOST}/api/v1/attribution/redirect/fb_redirect/?fbclid=${encodeURIComponent(fbclid)}`;
     console.log("[FBRedirect] Calling API:", apiUrl);
 
     fetch(apiUrl, {
       headers: {
-        "X-Organisation-ID": "ZINTEL1234",
+        "X-Organisation-ID": DEFAULT_ORGANISATION_ID,
       },
     })
       .then((response) => {
@@ -38,7 +42,7 @@ const FBRedirect: React.FC = () => {
         if (!response.ok) {
           throw new Error(`API returned status ${response.status}`);
         }
-        return response.json();
+        return response.json() as Promise<FbRedirectApiResponse>;
       })
       .then((data) => {
         console.log("[FBRedirect] API response data:", data);
@@ -54,7 +58,7 @@ const FBRedirect: React.FC = () => {
           setRedirectUrl(PLAY_STORE_URL);
         }
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         console.error("[FBRedirect] API error:", error);
         console.log("[FBRedirect] Using Play Store fallback due to error");
         setRedirectUrl(PLAY_STORE_URL);
@@ -96,7 +100,6 @@ const FBRedirect: React.FC = () => {
         `}
       </style>
 
-      {/* Logo */}
       <img
         src="/zintle_app_logo.png"
         alt="Zintle"
@@ -135,7 +138,11 @@ const FBRedirect: React.FC = () => {
       ) : (
         <>
           <button
-            onClick={handleContinue}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleContinue();
+            }}
             style={{
               backgroundColor: "#7c3aed",
               color: "#fff",
@@ -147,12 +154,12 @@ const FBRedirect: React.FC = () => {
               cursor: "pointer",
               transition: "background-color 0.2s ease",
             }}
-            onMouseOver={(e) =>
-              (e.currentTarget.style.backgroundColor = "#6d28d9")
-            }
-            onMouseOut={(e) =>
-              (e.currentTarget.style.backgroundColor = "#7c3aed")
-            }
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = "#6d28d9";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = "#7c3aed";
+            }}
           >
             Continue to App
           </button>

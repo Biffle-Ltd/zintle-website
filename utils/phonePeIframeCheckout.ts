@@ -1,14 +1,5 @@
 export type PhonePeIframeCallbackResponse = "USER_CANCEL" | "CONCLUDED";
 
-type PhonePeCheckoutApi = {
-  transact: (options: {
-    tokenUrl: string;
-    type: "IFRAME" | "REDIRECT";
-    callback: (response: PhonePeIframeCallbackResponse) => void;
-  }) => void;
-  closePage?: () => void;
-};
-
 /** Append `isChromeWV=true` to the PhonePe payment / checkout URL from the API. */
 export function appendPhonePeChromeWVParam(url: string): string {
   const trimmed = url.trim();
@@ -34,8 +25,7 @@ export function openPhonePeIframeCheckout(
 ): boolean {
   if (typeof window === "undefined" || !tokenUrl.trim()) return false;
 
-  const PhonePeCheckout = (window as Window & { PhonePeCheckout?: PhonePeCheckoutApi })
-    .PhonePeCheckout;
+  const PhonePeCheckout = window.PhonePeCheckout;
   if (!PhonePeCheckout?.transact) {
     console.error("PhonePe checkout script not loaded");
     return false;

@@ -462,10 +462,6 @@ export function Campaign({
     ? "text-center text-xs text-gray-500 px-2 line-clamp-2"
     : "text-center text-xs text-white/60 px-2 line-clamp-2";
 
-  const hintStrongClass = isBiffle
-    ? "text-gray-800 font-medium"
-    : "text-white/90 font-medium";
-
   return (
     <div className={shellClass} style={shellStyle}>
       <main className="flex-1 min-h-0 w-full max-w-lg mx-auto flex flex-col overflow-hidden px-4 pt-3">
@@ -516,10 +512,9 @@ export function Campaign({
           </div>
 
           <div className={footerClass} style={footerStyle}>
-            {!canCheckout && !loading && (
+            {!canCheckout && !loading && !fetchError && (
               <p className={hintClass}>
-                Add <span className={hintStrongClass}>target_app</span> to the
-                URL to start checkout after login.
+                Checkout isn&apos;t available right now. Please try again later.
               </p>
             )}
             <div className="w-full flex flex-col items-stretch gap-2">

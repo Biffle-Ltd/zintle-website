@@ -64,9 +64,9 @@ type MandateInitResponse = {
       redirectType?: string;
       redirectUrl?: string | null;
       code?: string | null;
-      [key: string]: any;
+      [key: string]: unknown;
     };
-    [key: string]: any;
+    [key: string]: unknown;
   };
 };
 
@@ -586,9 +586,7 @@ function CampaignPaymentMethods({
 const postMandateToReactNative = (
   mandateData: MandateInitResponse,
 ) => {
-  const w = window as Window & {
-    ReactNativeWebView?: { postMessage: (message: string) => void };
-  };
+  const w = window;
   if (!w.ReactNativeWebView?.postMessage) return;
   try {
     w.ReactNativeWebView.postMessage(

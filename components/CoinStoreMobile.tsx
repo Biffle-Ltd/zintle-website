@@ -31,6 +31,9 @@ export type CoinStorePack = {
   name?: string;
   icon_url?: string | null;
   is_micropack?: boolean;
+  color?: string;
+  tag?: string;
+  highlight?: boolean;
 };
 
 export type SubscriptionPlan = {

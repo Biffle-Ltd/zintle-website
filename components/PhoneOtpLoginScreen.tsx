@@ -17,6 +17,8 @@ const COUNTRY_CODE = "91";
 
 const BIFFLE_GRADIENT_H = "linear-gradient(90deg, #7c3aed, #ec4899)";
 
+const AUTH_ACTION_BTN_CLASS = "shrink-0 w-12 h-12";
+
 function AuthRoundButton({
   isBiffle,
   onClick,
@@ -45,8 +47,6 @@ function AuthRoundButton({
 }
 
 /** Fixed width for edit / verify buttons so both rows align on the right. */
-const AUTH_ACTION_BTN_CLASS = "shrink-0 w-12 h-12";
-
 function OtpDigitBoxes({
   value,
   onChange,

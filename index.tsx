@@ -28,6 +28,7 @@ import {
   getCoinPackStoreIndex,
   resolveTimerPack,
   TIMER_COIN_PRODUCT_ID,
+  type CoinStorePack,
   type SubscriptionPlan,
 } from "./components/CoinStoreMobile";
 import { COIN_ICON_CLASS, ZintleCoinIcon } from "./components/ZintleCoinIcon";
@@ -76,11 +77,6 @@ import {
   isMandateInitiated,
   MANDATE_STATUS_POLL_INTERVAL_MS,
 } from "./utils/mandateStatus";
-
-const { VITE_EASEBUZZ_KEY, VITE_EASEBUZZ_ENV } = (import.meta as any).env;
-const EASEBUZZ_KEY = VITE_EASEBUZZ_KEY;
-const EASEBUZZ_ENV = VITE_EASEBUZZ_ENV;
-
 import {
   COIN_ORDER_PAYMENT_GATEWAY,
   getPaymentGatewayFromUrl,
@@ -89,6 +85,9 @@ import {
 } from "./utils/paymentGateway";
 
 export { PAYMENT_GATEWAY };
+
+const EASEBUZZ_KEY = import.meta.env.VITE_EASEBUZZ_KEY;
+const EASEBUZZ_ENV = import.meta.env.VITE_EASEBUZZ_ENV;
 
 // Global callback for showing payment status popup
 let showPaymentStatusCallback: ((status: string) => void) | null = null;
@@ -237,12 +236,57 @@ async function fetchSubscriptionPlans(
   };
 }
 
+type CoinOrderPayload = {
+  id?: number | string;
+  order_uuid?: string;
+  mandate_uuid?: string | number | null;
+};
+
+type CoinOrderApiResponse = {
+  detail?: string;
+  data?: CoinOrderPayload;
+};
+
+type InitiatePaymentPayload = {
+  access_token?: string;
+};
+
+type InitiatePaymentApiResponse = {
+  detail?: string;
+  data?: InitiatePaymentPayload;
+};
+
+type CoinPackApiRow = {
+  id?: number;
+  coin_value?: number;
+  amount?: number;
+  bonus_coins?: number;
+  product_id?: string;
+  name?: string;
+  icon_url?: string | null;
+  is_micropack?: boolean;
+  isMicropack?: boolean;
+  isBonusPack?: boolean;
+  isTrialPack?: boolean;
+  is_active?: boolean;
+};
+
+type CoinPackValidatePayload = {
+  payment_status?: string;
+  failure_reason?: string;
+  message?: string;
+};
+
+type CoinPackValidateApiResponse = {
+  data?: CoinPackValidatePayload;
+};
+
 // Shared helper to create coin purchase orders
 const createCoinOrder = async (
   coinPackId: number | string,
   token?: string | null,
   organisationId: string = DEFAULT_ORGANISATION_ID,
-) => {
+): Promise<CoinOrderApiResponse> => {
   const rawToken = token || getJwtFromStorage(organisationId);
   const jwtToken = headerSafeToken(rawToken);
   const r = await fetch(`${HOST}/api/v1.2/monetization/orders/create/`, {
@@ -257,7 +301,7 @@ const createCoinOrder = async (
       payment_gateway: COIN_ORDER_PAYMENT_GATEWAY,
     }),
   });
-  const data = await r.json();
+  const data = (await r.json()) as CoinOrderApiResponse;
   if (!r.ok) {
     throw new Error(data.detail || "Failed to create order");
   }
@@ -271,7 +315,7 @@ const initiatePayment = async (
   mandateUuid?: number | string | null,
   token?: string | null,
   organisationId: string = DEFAULT_ORGANISATION_ID,
-) => {
+): Promise<InitiatePaymentApiResponse> => {
   const rawToken = token || getJwtFromStorage(organisationId);
   const jwtToken = headerSafeToken(rawToken);
   const r = await fetch(
@@ -289,22 +333,20 @@ const initiatePayment = async (
       }),
     },
   );
-  const data = await r.json();
+  const data = (await r.json()) as InitiatePaymentApiResponse;
   if (!r.ok) {
     throw new Error(data.detail || "Failed to initiate payment");
   }
   return data;
 };
 
-export function extractEasebuzzAccessKey(value) {
+export function extractEasebuzzAccessKey(value: unknown): string {
   if (!value || typeof value !== "string") return "";
 
-  // If full URL, extract last path segment
   if (value.includes("/pay/")) {
-    return value.replace(/\/+$/, "").split("/").pop();
+    return value.replace(/\/+$/, "").split("/").pop() ?? "";
   }
 
-  // Already a token
   return value;
 }
 
@@ -339,20 +381,20 @@ const validateCoinPackPayment = async (
       },
       body: JSON.stringify({ order_uuid: orderUuid }),
     });
-    const data = await r.json().catch(() => null);
+    const data = (await r.json().catch(() => null)) as
+      | CoinPackValidateApiResponse
+      | null;
     if (!r.ok) {
       console.error("Payment validation failed", { status: r.status, data });
       return undefined;
     }
     console.log("Payment validated", data);
 
-    const paymentStatus = data?.data?.payment_status as string | undefined;
+    const paymentStatus = data?.data?.payment_status;
     const ref = lastTrackedCoinPurchaseRef;
     if (ref && orderUuid && ref.orderUuid === orderUuid) {
       const failReason =
-        (data?.data?.failure_reason as string | undefined) ??
-        (data?.data?.message as string | undefined) ??
-        "";
+        data?.data?.failure_reason ?? data?.data?.message ?? "";
       if (paymentStatus === "SUCCESS") {
         sendCoinPaymentSuccess(ref.pixelContext, {
           order_id: ref.orderId,
@@ -482,10 +524,11 @@ const launchEasebuzzCheckout = (
       return;
     }
 
-    const easebuzzCheckout = new (window as any).EasebuzzCheckout(
-      merchantKey,
-      env,
-    );
+    const EasebuzzCheckout = window.EasebuzzCheckout;
+    if (!EasebuzzCheckout) {
+      throw new Error("Easebuzz checkout script not loaded");
+    }
+    const easebuzzCheckout = new EasebuzzCheckout(merchantKey, env);
     const options = {
       access_key: accessKey,
       onResponse: () => {
@@ -517,13 +560,14 @@ const createOrderAndInitiatePayment = async (
   options?: CreateOrderPixelOptions,
   organisationId: string = DEFAULT_ORGANISATION_ID,
 ) => {
+  const pixelContext = options?.pixelContext ?? null;
+  const coinPack = options?.coinPack;
   const trackCoinPurchase =
     Boolean(options?.trackCoinPixels) &&
-    options?.pixelContext != null &&
-    options?.coinPack != null;
+    pixelContext != null &&
+    coinPack != null;
 
   if (trackCoinPurchase) {
-    const { pixelContext, coinPack } = options!;
     sendCoinPaymentInitiated(pixelContext, coinPack);
   }
 
@@ -534,7 +578,6 @@ const createOrderAndInitiatePayment = async (
   }
 
   if (trackCoinPurchase) {
-    const { pixelContext, coinPack } = options!;
     lastTrackedCoinPurchaseRef = {
       orderId: String(order.id),
       orderUuid: String(order.order_uuid),
@@ -1406,7 +1449,7 @@ const CoinStore = ({
 }: {
   onClose: () => void;
   initialStep?: "store" | "login";
-  coinPacks: any[];
+  coinPacks: CoinStorePack[];
   organisationId?: string;
 }) => {
   const navigate = useNavigate();
@@ -1416,7 +1459,7 @@ const CoinStore = ({
     onClose();
   };
   const [step, setStep] = useState<"store" | "login" | "success">(initialStep);
-  const [selectedPack, setSelectedPack] = useState<any>(null);
+  const [selectedPack, setSelectedPack] = useState<CoinStorePack | null>(null);
   const isLoggedIn = !!getJwtFromStorage(organisationId);
   const packs = coinPacks;
 
@@ -1448,7 +1491,7 @@ const CoinStore = ({
     );
   }
 
-  const handleBuy = async (pack: any) => {
+  const handleBuy = async (pack: CoinStorePack) => {
     setSelectedPack(pack);
     if (!isLoggedIn) {
       setStep("login");
@@ -1561,12 +1604,12 @@ const CoinSection = ({
 }: {
   setShowCoins: (v: boolean) => void;
   setShowLogin: (v: boolean) => void;
-  coinPacks: any[];
+  coinPacks: CoinStorePack[];
   organisationId?: string;
 }) => {
   const isLoggedIn = !!getJwtFromStorage(organisationId);
 
-  const handleRechargeClick = async (pkg: any) => {
+  const handleRechargeClick = async (pkg: CoinStorePack) => {
     // If user is logged out, open login popup instead of creating order
     if (!isLoggedIn) {
       setShowLogin(true);
@@ -1712,7 +1755,7 @@ const CoinsPage = ({
 }: {
   setShowCoins: (v: boolean) => void;
   setShowLogin: (v: boolean) => void;
-  coinPacks: any[];
+  coinPacks: CoinStorePack[];
   coinPacksLoading: boolean;
   organisationId?: string;
 }) => {
@@ -1769,7 +1812,9 @@ const CoinsPage = ({
   const token = tokenFromQuery || getJwtFromStorage(organisationId);
   const isLoggedIn = !!token;
 
-  const [selectedPackage, setSelectedPackage] = useState<any>(null);
+  const [selectedPackage, setSelectedPackage] = useState<CoinStorePack | null>(
+    null,
+  );
 
   // Membership state
   const [membershipLoading, setMembershipLoading] = useState(true);
@@ -1871,7 +1916,7 @@ const CoinsPage = ({
 
     // For non-members, default select the featured weekly plan
     if (!isMember && featuredWeeklyPlan) {
-      setSelectedPackage((prev: any) =>
+      setSelectedPackage((prev) =>
         prev ?? {
           id: featuredWeeklyPlan.id,
           coins: 0,
@@ -1902,7 +1947,7 @@ const CoinsPage = ({
       );
       if (!coin100Pack) return;
 
-      setSelectedPackage((prev: any) => prev ?? coin100Pack);
+      setSelectedPackage((prev) => prev ?? coin100Pack);
 
       if (defaultPackSelectedRef.current || !pixelContext) return;
       defaultPackSelectedRef.current = true;
@@ -1929,22 +1974,22 @@ const CoinsPage = ({
     featuredWeeklyPlan,
   ]);
 
-  const handlePackSelect = (pkg: any, index: number) => {
+  const handlePackSelect = (pkg: CoinStorePack, index: number) => {
     setSelectedPackage(pkg);
     sendCoinPackSelected(pixelContext, pkg, index);
   };
 
-  const handleDesktopRecharge = async (pkg: any, index: number) => {
+  const handleDesktopRecharge = async (pkg: CoinStorePack, index: number) => {
     handlePackSelect(pkg, index);
     await handlePayClick(pkg);
   };
 
-  const handleQuickRechargePay = async (pkg: any, index: number) => {
+  const handleQuickRechargePay = async (pkg: CoinStorePack, index: number) => {
     handlePackSelect(pkg, index);
     await handlePayClick(pkg);
   };
 
-  const handlePayClick = async (pkg?: any) => {
+  const handlePayClick = async (pkg?: CoinStorePack) => {
     const packageToUse = pkg;
     if (!packageToUse) return;
 
@@ -2066,9 +2111,7 @@ const CoinsPage = ({
       console.log("[CoinStore] Mandate redirect URL:", redirectUrl);
       if (redirectUrl) {
         // Post to React Native WebView if available (native app handles intent)
-        const w = window as Window & {
-          ReactNativeWebView?: { postMessage: (msg: string) => void };
-        };
+        const w = window;
         if (w.ReactNativeWebView?.postMessage) {
           w.ReactNativeWebView.postMessage(
             JSON.stringify({
@@ -2255,6 +2298,8 @@ const SafetySection = () => (
             <Link to="/guidelines">Community Guidelines</Link>
             <span>·</span>
             <Link to="/privacy">Privacy Policy</Link>
+            <span>·</span>
+            <Link to="/child-safety-standards">Child Safety</Link>
           </div>
         </div>
       </div>
@@ -2378,7 +2423,7 @@ const Footer = () => {
                   </svg>
                 </a>
                 <a
-                  href="https://play.google.com/store/apps/details?id=ai.zintle&pcampaignid=web_share"
+                  href="https://facebook.com/Zintle.ai"
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="Zintle on Facebook"
@@ -2408,6 +2453,7 @@ const Footer = () => {
               <button onClick={() => scrollToSection("safety")}>
                 Trust &amp; Safety
               </button>
+              <Link to="/safety">Safety Center</Link>
               <Link to="/guidelines">Guidelines</Link>
               <button onClick={() => scrollToSection("pricing")}>
                 Plans &amp; Pricing
@@ -2418,6 +2464,7 @@ const Footer = () => {
               <Link to="/terms">Terms of Use</Link>
               <Link to="/privacy">Privacy Policy</Link>
               <Link to="/refund">Refund Policy</Link>
+              <Link to="/child-safety-standards">Child Safety</Link>
             </div>
           </div>
         </div>
@@ -2440,10 +2487,10 @@ const Footer = () => {
   );
 };
 
-const mapCoinPack = (p: any) => ({
-  id: p.id,
-  coins: p.coin_value,
-  price: p.amount,
+const mapCoinPack = (p: CoinPackApiRow): CoinStorePack => ({
+  id: p.id as number,
+  coins: p.coin_value as number,
+  price: p.amount as number,
   bonus: p.bonus_coins,
   bonus_coins: p.bonus_coins ?? 0,
   product_id: p.product_id,
@@ -2478,7 +2525,7 @@ const Layout = () => {
   const [showLogin, setShowLogin] = useState(false);
   const [showCoins, setShowCoins] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(hasAnyJwtInStorage());
-  const [coinPacks, setCoinPacks] = useState<any[]>([]);
+  const [coinPacks, setCoinPacks] = useState<CoinStorePack[]>([]);
   const [coinPacksLoading, setCoinPacksLoading] = useState(true);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
 
@@ -2506,13 +2553,16 @@ const Layout = () => {
             },
           },
         );
-        const data = await r.json();
+        const data = (await r.json()) as {
+          success?: boolean;
+          data?: CoinPackApiRow[];
+        };
         if (cancelled) return;
         if (data.success && Array.isArray(data.data)) {
           setCoinPacks(
             data.data
-              .filter((p: any) => p.is_active)
-              .map((p: any) => mapCoinPack(p)),
+              .filter((p) => p.is_active)
+              .map((p) => mapCoinPack(p)),
           );
         } else {
           setCoinPacks([]);
@@ -2693,5 +2743,9 @@ const App = () => (
   </BrowserRouter>
 );
 
-const appRoot = createRoot(document.getElementById("root")!);
+const appRootEl = document.getElementById("root");
+if (!appRootEl) {
+  throw new Error("Root element #root not found");
+}
+const appRoot = createRoot(appRootEl);
 appRoot.render(<App />);

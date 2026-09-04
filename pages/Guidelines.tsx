@@ -107,6 +107,9 @@ export const Guidelines = () => (
           <div className="znw-callout warn">
             <p><span className="t">Age requirement &amp; mature content</span>Zintle is intended for users 18 and older. Any mature themes permitted by these guidelines are strictly age-gated and kept separate from general experiences. We deploy measures to keep minors away from inappropriate characters and content, and we honour verifiable parental-consent requirements for children's data under the DPDP framework.</p>
           </div>
+          <p style={{ marginTop: 14 }}>
+            <Link to="/child-safety-standards">Read the full Child Safety Standards →</Link>
+          </p>
         </section>
 
         <section className="znw-sec" id="ai">

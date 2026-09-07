@@ -3048,16 +3048,18 @@ const Layout = () => {
   const needsCoinPacks = isCoinsPage || isHomePage || showCoins;
 
   useEffect(() => {
-    let sent = false;
-    const trySend = () => {
-      if (sent || typeof window.fbq !== "function") return;
+    let hasSentPageView = false;
+    const sendPageViewOnce = () => {
+      if (hasSentPageView || typeof window.fbq !== "function") return;
       sendMetaPixelPageView(organisationId);
-      sent = true;
+      hasSentPageView = true;
     };
-    trySend();
-    if (sent) return;
-    const t1 = window.setTimeout(trySend, 2000);
-    const t2 = window.setTimeout(trySend, 4000);
+
+    sendPageViewOnce();
+    if (hasSentPageView) return;
+
+    const t1 = window.setTimeout(sendPageViewOnce, 2000);
+    const t2 = window.setTimeout(sendPageViewOnce, 4000);
     return () => {
       window.clearTimeout(t1);
       window.clearTimeout(t2);

@@ -13,12 +13,25 @@ function iframeSrc(iframe: HTMLIFrameElement): string {
   return (iframe.src || iframe.getAttribute("src") || "").trim();
 }
 
+function iframeSrcAttr(iframe: HTMLIFrameElement): string {
+  return (iframe.getAttribute("src") || "").trim();
+}
+
+/** Empty / about:blank src must not count — Easebuzz inserts the iframe before setting src. */
+function hasRealCheckoutSrc(iframe: HTMLIFrameElement): boolean {
+  const attr = iframeSrcAttr(iframe);
+  if (attr && !/^about:blank$/i.test(attr)) return true;
+  const src = (iframe.src || "").trim();
+  return /phonepe\.com|easebuzz/i.test(src);
+}
+
 function isPhonePeCheckoutIframe(iframe: HTMLIFrameElement): boolean {
-  const src = iframeSrc(iframe);
-  return /phonepe\.com/i.test(src);
+  if (!hasRealCheckoutSrc(iframe)) return false;
+  return /phonepe\.com/i.test(iframeSrc(iframe));
 }
 
 function isEasebuzzCheckoutIframe(iframe: HTMLIFrameElement): boolean {
+  if (!hasRealCheckoutSrc(iframe)) return false;
   const id = iframe.id || "";
   if (id.startsWith("easebuzz-checkout-frame-")) return true;
   return /easebuzz/i.test(iframeSrc(iframe));

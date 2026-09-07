@@ -4,19 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Zintle AI - Interactive Storytelling</title>
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;700&family=Playfair+Display:wght@700;900&display=swap"
-      rel="stylesheet"
-    />
-    <!-- Icons -->
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-    />
-
+    <link rel="preconnect" href="https://prod.biffle.ai" />
+    <link rel="preconnect" href="https://cdn.tailwindcss.com" />
+    <link rel="dns-prefetch" href="https://prod.biffle.ai" />
+    <script>
+      /*__ZNW_BOOT_JS__*/
+      window.__ZNW && window.__ZNW.bootHead();
+    </script>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -105,41 +99,53 @@
         background-image: linear-gradient(to right, #ff4b4b, #ff9068);
       }
     </style>
-    <link rel="stylesheet" href="/index.css" />
-
-    <!-- Meta Pixel Code: script in <head> per Meta; noscript fallback must live in <body> (HTML5 + Vite parse5) -->
-    <script>
-      !(function (f, b, e, v, n, t, s) {
-        if (f.fbq) return;
-        n = f.fbq = function () {
-          n.callMethod
-            ? n.callMethod.apply(n, arguments)
-            : n.queue.push(arguments);
-        };
-        if (!f._fbq) f._fbq = n;
-        n.push = n;
-        n.loaded = !0;
-        n.version = "2.0";
-        n.queue = [];
-        t = b.createElement(e);
-        t.async = !0;
-        t.src = v;
-        s = b.getElementsByTagName(e)[0];
-        s.parentNode.insertBefore(t, s);
-      })(
-        window,
-        document,
-        "script",
-        "https://connect.facebook.net/en_US/fbevents.js",
-      );
-      fbq("init", "1223829379897212");
-      fbq("init", "661930529945825");
-    </script>
-    <!-- End Meta Pixel Code (script) -->
   </head>
   <body
     class="text-brand-text font-sans antialiased selection:bg-brand-primary selection:text-white"
   >
+    <!-- Atmospheric background — rendered outside React so nothing can cover it -->
+    <div id="znw-bg" aria-hidden="true"></div>
+    <div id="root"></div>
+    <script>
+      window.__ZNW && window.__ZNW.bootPaint();
+    </script>
+    <script>
+      (function () {
+        var webview = !!(window.__ZNW_BOOT && window.__ZNW_BOOT.webview);
+        function injectPixel() {
+          if (window.fbq) return;
+          !(function (f, b, e, v, n, t, s) {
+            if (f.fbq) return;
+            n = f.fbq = function () {
+              n.callMethod
+                ? n.callMethod.apply(n, arguments)
+                : n.queue.push(arguments);
+            };
+            if (!f._fbq) f._fbq = n;
+            n.push = n;
+            n.loaded = !0;
+            n.version = "2.0";
+            n.queue = [];
+            t = b.createElement(e);
+            t.async = !0;
+            t.src = v;
+            s = b.getElementsByTagName(e)[0];
+            s.parentNode.insertBefore(t, s);
+          })(
+            window,
+            document,
+            "script",
+            "https://connect.facebook.net/en_US/fbevents.js",
+          );
+          fbq("init", "1223829379897212");
+          fbq("init", "661930529945825");
+        }
+        if (!webview) injectPixel();
+        else if ("requestIdleCallback" in window)
+          requestIdleCallback(injectPixel, { timeout: 2500 });
+        else setTimeout(injectPixel, 1800);
+      })();
+    </script>
     <!-- Meta Pixel noscript fallback (invalid inside <head> per HTML5; must be in body) -->
     <noscript
       ><img
@@ -149,11 +155,6 @@
         alt=""
         src="https://www.facebook.com/tr?id=1223829379897212&amp;ev=PageView&amp;noscript=1"
     /></noscript>
-    <!-- Atmospheric background — rendered outside React so nothing can cover it -->
-    <div id="znw-bg" aria-hidden="true"></div>
-    <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
-    <script src="https://ebz-static.s3.ap-south-1.amazonaws.com/easecheckout/v2.0.0/easebuzz-checkout-v2.min.js"></script>
-    <script src="https://mercury.phonepe.com/web/bundle/checkout.js"></script>
   </body>
 </html>

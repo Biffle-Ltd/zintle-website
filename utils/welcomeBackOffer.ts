@@ -104,12 +104,34 @@ export function isClearPaymentStatus(status: string | undefined): boolean {
   return normalized === "SUCCESS" || normalized === "FAILED";
 }
 
+/** Keep the prefetch URL in `znw-boot.js` in sync with `HOST` in `utils/host.ts`. */
 export async function fetchWelcomeBackOffer(
   token: string | null | undefined,
   organisationId: string,
   signal?: AbortSignal,
 ): Promise<WelcomeBackOfferResponse> {
   const jwtToken = headerSafeToken(token);
+  const pre =
+    typeof window !== "undefined" ? window.__ZNW_WELCOME_BACK : undefined;
+  if (
+    pre?.promise &&
+    pre.organisationId === organisationId &&
+    !pre.consumed &&
+    Boolean(pre.hasAuth) === Boolean(jwtToken)
+  ) {
+    pre.consumed = true;
+    try {
+      const r = await pre.promise;
+      const data = (await r.json().catch(() => null)) as WelcomeBackOfferResponse | null;
+      if (!r.ok || !data) {
+        throw new Error("Failed to fetch welcome back offer");
+      }
+      return data;
+    } catch {
+      /* fall through to a fresh fetch */
+    }
+  }
+
   const r = await fetch(
     `${HOST}/api/v1/creator_center/details/get-welcome-back-offer/`,
     {
@@ -122,8 +144,8 @@ export async function fetchWelcomeBackOffer(
       signal,
     },
   );
-  const data = (await r.json().catch(() => null)) as WelcomeBackOfferResponse;
-  if (!r.ok) {
+  const data = (await r.json().catch(() => null)) as WelcomeBackOfferResponse | null;
+  if (!r.ok || !data) {
     throw new Error("Failed to fetch welcome back offer");
   }
   return data;

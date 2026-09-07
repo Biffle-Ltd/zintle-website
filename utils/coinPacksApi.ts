@@ -91,6 +91,9 @@ export async function fetchCoinPackDetails(
       },
     },
   );
+  if (!r.ok) {
+    throw new Error(`Coin pack fetch failed: ${r.status}`);
+  }
   const data = (await r.json()) as {
     success?: boolean;
     data?: CoinPackApiRow[];

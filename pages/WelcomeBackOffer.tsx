@@ -234,7 +234,7 @@ export function WelcomeBackOffer({
       setErrorMessage(null);
       try {
         const response = await fetchWelcomeBackOffer(token, orgId, signal);
-        if (!response.success) {
+        if (!response.success || !response.data) {
           throw new Error("Failed to load offer");
         }
         if (!response.data.is_eligible) {
@@ -330,7 +330,7 @@ export function WelcomeBackOffer({
 
       try {
         const response = await fetchWelcomeBackOffer(token, orgId);
-        if (!response.data.is_eligible) {
+        if (response.data && !response.data.is_eligible) {
           onPaymentStatus(greyStatus);
           setPageState("ineligible");
           setCoinPack(null);

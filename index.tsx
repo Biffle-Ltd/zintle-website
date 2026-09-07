@@ -2092,6 +2092,8 @@ const CoinsPage = ({
       return;
     }
 
+    let cancelled = false;
+
     // If is_member is passed as a URL query param, use it directly (skip API call)
     const isMemberParam = searchParams.get("is_member");
     console.log(
@@ -2115,6 +2117,7 @@ const CoinsPage = ({
         fetchSubscriptionPlans(token, organisationId, controller.signal)
           .then(
             ({ featuredWeeklyPlan, basicWeeklyPlan, subscriptionPlanIds }) => {
+              if (cancelled) return;
               console.log("[CoinStore] Plans fetched:", {
                 featuredWeeklyPlan,
                 basicWeeklyPlan,
@@ -2125,6 +2128,7 @@ const CoinsPage = ({
             },
           )
           .catch((err) => {
+            if (cancelled) return;
             console.error(
               "[CoinStore] Plans fetch failed for non-member:",
               err,
@@ -2133,10 +2137,11 @@ const CoinsPage = ({
           })
           .finally(() => {
             clearTimeout(timeout);
-            setMembershipLoading(false);
+            if (!cancelled) setMembershipLoading(false);
           });
 
         return () => {
+          cancelled = true;
           controller.abort();
           clearTimeout(timeout);
         };
@@ -2151,25 +2156,28 @@ const CoinsPage = ({
 
     syncCoinStoreMembershipState(token, organisationId, controller.signal)
       .then((state) => {
+        if (cancelled) return;
         setIsMember(state.isMember);
         setFeaturedWeeklyPlan(state.featuredWeeklyPlan);
         setBasicWeeklyPlan(state.basicWeeklyPlan);
         setSubscriptionPlanIds(state.subscriptionPlanIds);
       })
       .catch(() => {
+        if (cancelled) return;
         // Membership check failed → treat as member
         setIsMember(true);
       })
       .finally(() => {
         clearTimeout(timeout);
-        setMembershipLoading(false);
+        if (!cancelled) setMembershipLoading(false);
       });
 
     return () => {
+      cancelled = true;
       controller.abort();
       clearTimeout(timeout);
     };
-  }, [token, organisationId]);
+  }, [token, organisationId, location.search]);
 
   const refreshMembershipFromApi = useCallback(async () => {
     if (!token) return;
@@ -3058,11 +3066,14 @@ const Layout = () => {
     sendPageViewOnce();
     if (hasSentPageView) return;
 
-    const t1 = window.setTimeout(sendPageViewOnce, 2000);
-    const t2 = window.setTimeout(sendPageViewOnce, 4000);
+    const poll = window.setInterval(() => {
+      sendPageViewOnce();
+      if (hasSentPageView) window.clearInterval(poll);
+    }, 250);
+    const giveUp = window.setTimeout(() => window.clearInterval(poll), 4000);
     return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
+      window.clearInterval(poll);
+      window.clearTimeout(giveUp);
     };
   }, [organisationId, location.pathname]);
 

@@ -196,7 +196,10 @@ function normalizePlatform(raw: string): "web" | "android" | "ios" {
 }
 
 export function isQuickRechargeFromSearch(search: string): boolean {
-  return searchParamsFromSearch(search).get("quick_recharge")?.toLocaleLowerCase() === "true";
+  return (
+    searchParamsFromSearch(search).get("quick_recharge")?.toLowerCase() ===
+    "true"
+  );
 }
 
 function buildBaseEventParams(

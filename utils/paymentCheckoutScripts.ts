@@ -14,6 +14,12 @@ function findCheckoutScript(src: string): HTMLScriptElement | null {
   return null;
 }
 
+function isCheckoutSdkReady(src: string): boolean {
+  if (src === EASEBUZZ_SRC) return Boolean(window.EasebuzzCheckout);
+  if (src === PHONEPE_SRC) return Boolean(window.PhonePeCheckout?.transact);
+  return false;
+}
+
 function loadExternalScript(src: string): Promise<void> {
   const existing = scriptLoads.get(src);
   if (existing) return existing;
@@ -37,7 +43,12 @@ function loadExternalScript(src: string): Promise<void> {
     };
 
     const timer = window.setTimeout(() => {
-      settleErr(findCheckoutScript(src));
+      const script = findCheckoutScript(src);
+      if (isCheckoutSdkReady(src)) {
+        settleOk(script);
+        return;
+      }
+      settleErr(script);
     }, LOAD_TIMEOUT_MS);
 
     const wrapOk = (script: HTMLScriptElement | null) => {
@@ -51,12 +62,19 @@ function loadExternalScript(src: string): Promise<void> {
 
     const already = findCheckoutScript(src);
     if (already) {
-      if (already.getAttribute("data-znw-loaded") === "1") {
+      if (
+        already.getAttribute("data-znw-loaded") === "1" ||
+        isCheckoutSdkReady(src)
+      ) {
         wrapOk(already);
         return;
       }
       already.addEventListener("load", () => wrapOk(already), { once: true });
       already.addEventListener("error", () => wrapErr(already), { once: true });
+      // load may already have fired before we attached listeners.
+      window.setTimeout(() => {
+        if (!settled && isCheckoutSdkReady(src)) wrapOk(already);
+      }, 0);
       return;
     }
 
@@ -72,16 +90,34 @@ function loadExternalScript(src: string): Promise<void> {
   return load;
 }
 
+async function ensureCheckoutScript(
+  src: string,
+  isReady: () => boolean,
+  sdkName: string,
+): Promise<void> {
+  if (isReady()) return;
+  await loadExternalScript(src);
+  if (isReady()) return;
+  scriptLoads.delete(src);
+  findCheckoutScript(src)?.remove();
+  throw new Error(`${sdkName} checkout script loaded but SDK is missing`);
+}
+
 export function loadEasebuzzCheckoutScript(): Promise<void> {
-  if (typeof window !== "undefined" && window.EasebuzzCheckout) {
-    return Promise.resolve();
-  }
-  return loadExternalScript(EASEBUZZ_SRC);
+  return ensureCheckoutScript(
+    EASEBUZZ_SRC,
+    () => Boolean(typeof window !== "undefined" && window.EasebuzzCheckout),
+    "Easebuzz",
+  );
 }
 
 export function loadPhonePeCheckoutScript(): Promise<void> {
-  if (typeof window !== "undefined" && window.PhonePeCheckout?.transact) {
-    return Promise.resolve();
-  }
-  return loadExternalScript(PHONEPE_SRC);
+  return ensureCheckoutScript(
+    PHONEPE_SRC,
+    () =>
+      Boolean(
+        typeof window !== "undefined" && window.PhonePeCheckout?.transact,
+      ),
+    "PhonePe",
+  );
 }

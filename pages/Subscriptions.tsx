@@ -147,7 +147,11 @@ async function fetchPlanDetailsResponse(
   ) {
     pre.consumed = true;
     try {
-      return await pre.promise;
+      const r = await pre.promise;
+      if (!r.ok) {
+        throw new Error(`Plan details prefetch failed: ${r.status}`);
+      }
+      return r;
     } catch {
       /* fall through to a fresh fetch */
     }

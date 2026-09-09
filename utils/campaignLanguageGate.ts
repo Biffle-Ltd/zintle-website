@@ -1,4 +1,5 @@
 import type { NavigateFunction } from "react-router-dom";
+import { refreshCampaignCheckoutPlanPath } from "./campaignFreePlan";
 import { isBiffleOrganisationId } from "./organisationIdFromUrl";
 import {
   buildCampaignLanguagePath,
@@ -23,6 +24,21 @@ export function isBiffleCampaignLanguageFlow(organisationId: string): boolean {
 function searchFromRelativePath(path: string): string {
   const idx = path.indexOf("?");
   return idx >= 0 ? path.slice(idx) : "";
+}
+
+/** Org/fbclid only — used when checkout must not open on a stale anonymous SKU. */
+function campaignLandingFromCheckoutPath(checkoutPath: string): string {
+  const query = searchFromRelativePath(checkoutPath);
+  const params = new URLSearchParams(
+    query.startsWith("?") ? query.slice(1) : query,
+  );
+  const preserved = new URLSearchParams();
+  for (const key of ["organisation_id", "fbclid"] as const) {
+    const value = params.get(key);
+    if (value?.trim()) preserved.set(key, value.trim());
+  }
+  const q = preserved.toString();
+  return q ? `/campaign?${q}` : "/campaign";
 }
 
 /** Call before navigating to campaign checkout after language is confirmed. */
@@ -91,8 +107,20 @@ export async function navigateAfterCampaignLoginGate(opts: {
       opts.navigate(buildCampaignLanguagePath(languageSearch));
       return;
     }
+    let checkoutPath: string;
+    try {
+      checkoutPath = await refreshCampaignCheckoutPlanPath({
+        checkoutPath: opts.checkoutPath,
+        organisationId: opts.organisationId,
+        token: opts.token,
+      });
+    } catch (refreshErr) {
+      console.error("[Campaign] Failed to refresh plan details", refreshErr);
+      opts.navigate(campaignLandingFromCheckoutPath(opts.checkoutPath));
+      return;
+    }
     markCampaignLanguageGatePassed(opts.organisationId);
-    opts.navigate(opts.checkoutPath);
+    opts.navigate(checkoutPath);
   } catch (err) {
     console.error("[Campaign] Language gate failed", err);
     goToLanguageScreen();

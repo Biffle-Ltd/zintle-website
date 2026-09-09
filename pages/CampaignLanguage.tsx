@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { CampaignPrimaryCta } from "../components/CampaignCta";
 import { getJwtFromStorage } from "../utils/authStorage";
@@ -17,6 +17,10 @@ import {
 import { headerSafeToken } from "../utils/headerSafeToken";
 import { isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
 import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
+import {
+  campaignFreePlanErrorStatus,
+  refreshCampaignCheckoutPlanPath,
+} from "../utils/campaignFreePlan";
 import {
   fetchAvailableLanguages,
   fetchUserDetails,
@@ -72,11 +76,19 @@ export function CampaignLanguage({
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const aliveRef = useRef(true);
 
   const campaignBackPath = useMemo(
     () => buildCampaignBackPath(location.search),
     [location.search],
   );
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   const pixelContext = useMemo(() => {
     const base = parseCampaignPixelContext(location.search, location.pathname, {
@@ -86,17 +98,6 @@ export function CampaignLanguage({
     return enrichCampaignPixelContext(base, organisationId);
   }, [authToken, location.pathname, location.search, organisationId]);
 
-  const forwardToCheckout = useCallback(() => {
-    const pending = getCampaignLanguageCheckoutRedirect();
-    clearCampaignLanguageCheckoutRedirect();
-    if (pending?.startsWith("/")) {
-      markCampaignLanguageGatePassed(organisationId);
-      navigate(pending);
-      return;
-    }
-    navigate(campaignBackPath);
-  }, [campaignBackPath, navigate, organisationId]);
-
   const requireLogin = useCallback(() => {
     const checkout =
       getCampaignLanguageCheckoutRedirect() ??
@@ -105,6 +106,31 @@ export function CampaignLanguage({
     navigate(campaignBackPath);
     setShowLogin(true);
   }, [campaignBackPath, location.pathname, location.search, navigate, setShowLogin]);
+
+  const forwardToCheckout = useCallback(async () => {
+    const pending = getCampaignLanguageCheckoutRedirect();
+    if (!pending?.startsWith("/")) {
+      if (aliveRef.current) navigate(campaignBackPath);
+      return;
+    }
+
+    if (!authToken) {
+      requireLogin();
+      return;
+    }
+
+    const dest = await refreshCampaignCheckoutPlanPath({
+      checkoutPath: pending,
+      organisationId,
+      token: authToken,
+    });
+
+    if (!aliveRef.current) return;
+
+    clearCampaignLanguageCheckoutRedirect();
+    markCampaignLanguageGatePassed(organisationId);
+    navigate(dest);
+  }, [authToken, campaignBackPath, navigate, organisationId, requireLogin]);
 
   const loadLanguages = useCallback(async () => {
     if (!isBiffleCampaignLanguageFlow(organisationId)) {
@@ -129,7 +155,21 @@ export function CampaignLanguage({
     try {
       const details = await fetchUserDetails(authToken, organisationId);
       if (!userNeedsLanguageSelection(details)) {
-        forwardToCheckout();
+        try {
+          await forwardToCheckout();
+        } catch (err) {
+          if (
+            handleCampaignUnauthorized(
+              campaignFreePlanErrorStatus(err),
+              organisationId,
+              requireLogin,
+            )
+          ) {
+            return;
+          }
+          setLoadError("Could not load plan details. Please try again.");
+          setPhase("error");
+        }
         return;
       }
 
@@ -146,12 +186,12 @@ export function CampaignLanguage({
       setLanguages(options);
       setPhase("ready");
     } catch (err) {
-      const status =
-        err && typeof err === "object" && "status" in err
-          ? Number((err as { status?: number }).status)
-          : 0;
       if (
-        handleCampaignUnauthorized(status, organisationId, requireLogin)
+        handleCampaignUnauthorized(
+          campaignFreePlanErrorStatus(err),
+          organisationId,
+          requireLogin,
+        )
       ) {
         return;
       }
@@ -177,23 +217,30 @@ export function CampaignLanguage({
     setSaving(true);
     setSaveError(null);
 
+    let languageSaved = false;
     try {
       await updateUserLanguages(authToken, organisationId, selectedCode);
       sendCampaignLanguageSaved(pixelContext, { language_code: selectedCode });
-      forwardToCheckout();
+      languageSaved = true;
+      await forwardToCheckout();
     } catch (err) {
-      const status =
-        err && typeof err === "object" && "status" in err
-          ? Number((err as { status?: number }).status)
-          : 0;
+      if (!aliveRef.current) return;
       if (
-        handleCampaignUnauthorized(status, organisationId, requireLogin)
+        handleCampaignUnauthorized(
+          campaignFreePlanErrorStatus(err),
+          organisationId,
+          requireLogin,
+        )
       ) {
         return;
       }
-      setSaveError("Could not save your language. Please try again.");
+      setSaveError(
+        languageSaved
+          ? "Could not load plan details. Please try again."
+          : "Could not save your language. Please try again.",
+      );
     } finally {
-      setSaving(false);
+      if (aliveRef.current) setSaving(false);
     }
   };
 
@@ -304,7 +351,7 @@ export function CampaignLanguage({
             showChevron={false}
             onClick={() => void handleContinue()}
           >
-            {saving ? "Saving…" : "Continue"}
+            {saving ? "Continuing…" : "Continue"}
           </CampaignPrimaryCta>
         </div>
       </div>

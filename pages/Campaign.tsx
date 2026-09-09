@@ -1,8 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import type { MonetizationPlanDetails } from "./Subscriptions";
-import { HOST } from "../utils/host";
 import { headerSafeToken } from "../utils/headerSafeToken";
+import {
+  buildCampaignCheckoutPath,
+  campaignFreePlanErrorStatus,
+  fetchCampaignActiveFreePlan,
+  isCampaignFreePlanAbortError,
+  isNoActiveCampaignFreePlanError,
+  type CampaignFreePlanDetails,
+} from "../utils/campaignFreePlan";
 import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
 import {
   CampaignCtaDisclaimer,
@@ -33,49 +39,6 @@ const BIFFLE_GRADIENT_H = "linear-gradient(90deg, #7c3aed, #ec4899)";
 /** Vertical gradient for headline rupee amount. */
 const BIFFLE_GRADIENT_V = "linear-gradient(180deg, #6d28d9, #db2777)";
 
-type FreePlanApiPlan = {
-  id: number;
-  plan_name?: string;
-  plan_description?: string;
-  plan_duration?: number;
-  price?: string | number;
-  is_freetrial_allowed?: boolean;
-  free_plan_duration?: number;
-  trial_token_amount?: number;
-  token_amount?: number;
-  extra_info?: { video_url?: string; [key: string]: unknown };
-  is_active?: boolean;
-  subscription_id?: string;
-  organisation_id?: string;
-};
-
-type FreePlanInfoResponse = {
-  success?: boolean;
-  data?: {
-    count?: number;
-    plans?: FreePlanApiPlan[];
-    active_free_plan?: string;
-  };
-};
-
-function apiPlanToDetails(p: FreePlanApiPlan): MonetizationPlanDetails {
-  return {
-    id: p.id,
-    plan_name: p.plan_name,
-    plan_description: p.plan_description,
-    plan_duration: p.plan_duration,
-    price: p.price,
-    is_freetrial_allowed: p.is_freetrial_allowed,
-    free_plan_duration: p.free_plan_duration,
-    trial_token_amount: p.trial_token_amount,
-    token_amount: p.token_amount,
-    extra_info: p.extra_info as Record<string, unknown> | undefined,
-    is_active: p.is_active,
-    subscription_id: p.subscription_id,
-    organisation_id: p.organisation_id,
-  };
-}
-
 function parsePlanPriceNumber(price: string | number | undefined): number {
   if (typeof price === "number" && Number.isFinite(price)) return price;
   if (typeof price === "string" && price.trim() !== "") {
@@ -101,7 +64,7 @@ function getBillingUnit(
   return null;
 }
 
-function getTrialTokenRupee(plan: MonetizationPlanDetails): number {
+function getTrialTokenRupee(plan: CampaignFreePlanDetails): number {
   const t = plan.trial_token_amount ?? plan.token_amount;
   if (typeof t === "number" && Number.isFinite(t)) return t;
   if (plan.is_freetrial_allowed) return 2;
@@ -130,69 +93,50 @@ export function Campaign({
   const fbclidFromUrl = searchParams.get("fbclid")?.trim() ?? "";
   const freeTrialViewedSentRef = useRef(false);
 
-  const [activePlan, setActivePlan] = useState<MonetizationPlanDetails | null>(
+  const [activePlan, setActivePlan] = useState<CampaignFreePlanDetails | null>(
     null,
   );
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    const abort = new AbortController();
     (async () => {
       setLoading(true);
       setFetchError(null);
       try {
         const rawJwt = getJwtFromStorage(organisationId);
         const jwt = headerSafeToken(rawJwt);
-        const r = await fetch(
-          `${HOST}/api/v1/monetization/plans/free-plan/info/?source=campaign`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-              "X-Organisation-ID": organisationId,
-            },
-          },
+        const plan = await fetchCampaignActiveFreePlan(
+          organisationId,
+          jwt,
+          abort.signal,
         );
-        const json = (await r.json()) as FreePlanInfoResponse;
-        if (cancelled) return;
+        if (abort.signal.aborted) return;
+        setActivePlan(plan);
+      } catch (err) {
+        if (abort.signal.aborted || isCampaignFreePlanAbortError(err)) return;
         if (
-          handleCampaignUnauthorized(r.status, organisationId, () =>
-            setShowLogin(true),
+          handleCampaignUnauthorized(
+            campaignFreePlanErrorStatus(err),
+            organisationId,
+            () => setShowLogin(true),
           )
         ) {
           return;
         }
-        if (!r.ok || json.success === false) {
-          setActivePlan(null);
-          setFetchError("Could not load plan details. Try again later.");
-          return;
-        }
-        const data = json.data;
-        const activeKey = data?.active_free_plan?.trim();
-        const plans = data?.plans ?? [];
-        const picked =
-          activeKey != null && activeKey !== ""
-            ? plans.find((p) => p.subscription_id === activeKey)
-            : null;
-        if (!picked) {
-          setActivePlan(null);
-          setFetchError("No active free plan is configured for this org.");
-          return;
-        }
-        setActivePlan(apiPlanToDetails(picked));
-      } catch {
-        if (!cancelled) {
-          setActivePlan(null);
-          setFetchError("Could not load plan details. Try again later.");
-        }
+        setActivePlan(null);
+        setFetchError(
+          isNoActiveCampaignFreePlanError(err)
+            ? "No active free plan is configured for this org."
+            : "Could not load plan details. Try again later.",
+        );
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!abort.signal.aborted) setLoading(false);
       }
     })();
     return () => {
-      cancelled = true;
+      abort.abort();
     };
   }, [organisationId]);
 
@@ -214,15 +158,12 @@ export function Campaign({
   }, [activePlan, location.pathname, location.search, organisationId]);
 
   const checkoutPath = useMemo(() => {
-    if (!activePlan?.id) return null;
-    const params = new URLSearchParams();
-    params.set("plan_id", String(activePlan.id));
-    params.set("organisation_id", organisationId);
-    params.set("is_campaign", "true");
-    const wrapped = { data: activePlan };
-    params.set("plan_details", encodeURIComponent(JSON.stringify(wrapped)));
-    if (fbclidFromUrl) params.set("fbclid", fbclidFromUrl);
-    return `/subscriptions?${params.toString()}`;
+    if (!activePlan) return null;
+    return buildCampaignCheckoutPath({
+      plan: activePlan,
+      organisationId,
+      fbclid: fbclidFromUrl,
+    });
   }, [activePlan, organisationId, fbclidFromUrl]);
 
   const canCheckout = checkoutPath != null && !fetchError && !loading;

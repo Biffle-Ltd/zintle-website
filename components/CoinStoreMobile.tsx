@@ -1,5 +1,6 @@
 import React, { Fragment, useEffect, useMemo, useState } from "react";
 import { COIN_ICON_CLASS, ZintleCoinIcon } from "./ZintleCoinIcon";
+import { StopwatchIcon } from "./UiIcons";
 import {
   formatCountdown,
   getCoinStoreTimerEndMs,
@@ -155,10 +156,7 @@ function LimitedOfferCard({
             Limited offer
           </p>
           <div className="mt-2.5 inline-flex items-center gap-2.5 rounded-full bg-white px-4 py-2 shadow-sm">
-            <i
-              className="fa-solid fa-stopwatch text-[15px] text-[#0B1121]"
-              aria-hidden
-            />
+            <StopwatchIcon className="h-[15px] w-[15px] text-[#0B1121]" />
             <span className="text-[15px] font-bold tabular-nums text-[#0B1121]">
               {formatCountdown(remainingMs)}
             </span>
@@ -231,10 +229,7 @@ function WeeklyPlanLimitedOfferCard({
             Weekly Plan
           </p>
           <div className="mt-2.5 inline-flex items-center gap-2.5 rounded-full bg-white px-4 py-2 shadow-sm">
-            <i
-              className="fa-solid fa-stopwatch text-[15px] text-[#0B1121]"
-              aria-hidden
-            />
+            <StopwatchIcon className="h-[15px] w-[15px] text-[#0B1121]" />
             <span className="text-[15px] font-bold tabular-nums text-[#0B1121]">
               {formatCountdown(remainingMs)}
             </span>

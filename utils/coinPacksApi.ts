@@ -1,6 +1,13 @@
 import type { CoinStorePack } from "../components/CoinStoreMobile";
 import { HOST } from "./host";
 import { resolvePageAuthToken } from "./authStorage";
+import {
+  COIN_PACKS_CACHE_TTL_MS,
+  readApiCache,
+  takeBootPrefetchJson,
+  tokenFingerprint,
+  writeApiCache,
+} from "./webviewApiCache";
 
 export type CoinPackApiRow = {
   id?: number;
@@ -38,14 +45,42 @@ export const mapCoinPack = (p: CoinPackApiRow): CoinStorePack => ({
   highlight: p.isBonusPack || false,
 });
 
-function parsePacksPayload(data: {
+type CoinPacksApiResponse = {
   success?: boolean;
   data?: CoinPackApiRow[];
-}): CoinStorePack[] {
-  if (data.success && Array.isArray(data.data)) {
-    return data.data.filter((p) => p.is_active).map((p) => mapCoinPack(p));
-  }
-  return [];
+};
+
+function parsePacksPayload(data: CoinPacksApiResponse): CoinStorePack[] | null {
+  if (!data.success || !Array.isArray(data.data)) return null;
+  return data.data.filter((p) => p.is_active).map((p) => mapCoinPack(p));
+}
+
+function coinPacksCacheKey(
+  organisationId: string,
+  token: string | null,
+): string {
+  return `znw.v1.packs.${organisationId}.${tokenFingerprint(token)}`;
+}
+
+/** `null` = cache miss. `[]` = confirmed empty catalog. */
+export function readCachedCoinPacks(
+  organisationId: string,
+  token: string | null,
+): CoinStorePack[] | null {
+  const packs = readApiCache<CoinStorePack[]>(
+    coinPacksCacheKey(organisationId, token),
+    COIN_PACKS_CACHE_TTL_MS,
+  );
+  return Array.isArray(packs) ? packs : null;
+}
+
+function rememberCoinPacks(
+  organisationId: string,
+  token: string | null,
+  packs: CoinStorePack[],
+): CoinStorePack[] {
+  writeApiCache(coinPacksCacheKey(organisationId, token), packs);
+  return packs;
 }
 
 /**
@@ -58,27 +93,17 @@ export async function fetchCoinPackDetails(
   search: string,
 ): Promise<CoinStorePack[]> {
   const jwtToken = resolvePageAuthToken(search, organisationId);
+  const hasAuth = Boolean(jwtToken);
 
-  const pre = typeof window !== "undefined" ? window.__ZNW_COIN_PACKS : undefined;
-  if (
-    pre?.promise &&
-    pre.organisationId === organisationId &&
-    !pre.consumed &&
-    Boolean(pre.hasAuth) === Boolean(jwtToken)
-  ) {
-    pre.consumed = true;
-    try {
-      const r = await pre.promise;
-      if (!r.ok) {
-        throw new Error(`Coin pack prefetch failed: ${r.status}`);
-      }
-      const data = (await r.json()) as {
-        success?: boolean;
-        data?: CoinPackApiRow[];
-      };
-      return parsePacksPayload(data);
-    } catch {
-      /* fall through to a fresh fetch */
+  const boot = await takeBootPrefetchJson<CoinPacksApiResponse>(
+    typeof window !== "undefined" ? window.__ZNW_COIN_PACKS : undefined,
+    organisationId,
+    hasAuth,
+  );
+  if (boot?.ok) {
+    const packs = parsePacksPayload(boot.json);
+    if (packs) {
+      return rememberCoinPacks(organisationId, jwtToken, packs);
     }
   }
 
@@ -94,9 +119,9 @@ export async function fetchCoinPackDetails(
   if (!r.ok) {
     throw new Error(`Coin pack fetch failed: ${r.status}`);
   }
-  const data = (await r.json()) as {
-    success?: boolean;
-    data?: CoinPackApiRow[];
-  };
-  return parsePacksPayload(data);
+  const data = (await r.json()) as CoinPacksApiResponse;
+  const packs = parsePacksPayload(data);
+  // Invalid payload: same as before — empty catalog, do not cache garbage.
+  if (!packs) return [];
+  return rememberCoinPacks(organisationId, jwtToken, packs);
 }

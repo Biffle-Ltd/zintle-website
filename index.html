@@ -5,100 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Zintle AI - Interactive Storytelling</title>
     <link rel="preconnect" href="https://prod.biffle.ai" />
-    <link rel="preconnect" href="https://cdn.tailwindcss.com" />
     <link rel="dns-prefetch" href="https://prod.biffle.ai" />
     <script>
       /*__ZNW_BOOT_JS__*/
       window.__ZNW && window.__ZNW.bootHead();
     </script>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: "class",
-        theme: {
-          extend: {
-            colors: {
-              brand: {
-                bg: "#0B1121", // Deep Navy Background
-                surface: "#151E32", // Card Background
-                primary: "#FF4B4B", // App Primary Red/Orange
-                secondary: "#FF9068", // Gradient End
-                blue: "#3B82F6", // Accent Blue
-                teal: "#14B8A6", // Accent Teal
-                gold: "#FFD700",
-                text: "#FFFFFF",
-                muted: "#94A3B8",
-              },
-            },
-            fontFamily: {
-              sans: ["Inter", "sans-serif"],
-              heading: ["Outfit", "sans-serif"],
-              serif: ["Playfair Display", "serif"],
-            },
-            animation: {
-              float: "float 6s ease-in-out infinite",
-              "fade-in": "fadeIn 0.5s ease-out forwards",
-              "slide-up": "slideUp 0.5s ease-out forwards",
-              "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-            },
-            keyframes: {
-              float: {
-                "0%, 100%": { transform: "translateY(0)" },
-                "50%": { transform: "translateY(-20px)" },
-              },
-              fadeIn: {
-                "0%": { opacity: "0" },
-                "100%": { opacity: "1" },
-              },
-              slideUp: {
-                "0%": { opacity: "0", transform: "translateY(20px)" },
-                "100%": { opacity: "1", transform: "translateY(0)" },
-              },
-            },
-          },
-        },
-      };
-    </script>
-
-    <style>
-      /* Custom Scrollbar */
-      ::-webkit-scrollbar {
-        width: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #0b1121;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #334155;
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #475569;
-      }
-
-      /* Glassmorphism utilities */
-      .glass {
-        background: rgba(11, 17, 33, 0.7);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      }
-
-      .glass-card {
-        background: rgba(21, 30, 50, 0.6);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-      }
-
-      .text-gradient {
-        background-clip: text;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-image: linear-gradient(to right, #ff4b4b, #ff9068);
-      }
-    </style>
   </head>
   <body
     class="text-brand-text font-sans antialiased selection:bg-brand-primary selection:text-white"

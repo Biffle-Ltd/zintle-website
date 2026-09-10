@@ -70,6 +70,18 @@ interface Window {
     consumed?: boolean;
     hasAuth?: boolean;
   };
+  __ZNW_USER_DETAILS?: {
+    organisationId: string;
+    promise: Promise<Response>;
+    consumed?: boolean;
+    hasAuth?: boolean;
+  };
+  __ZNW_SUBSCRIPTION_PACKS?: {
+    organisationId: string;
+    promise: Promise<Response>;
+    consumed?: boolean;
+    hasAuth?: boolean;
+  };
   __ZNW_WELCOME_BACK?: {
     organisationId: string;
     promise: Promise<Response>;

@@ -1,4 +1,13 @@
 import React from "react";
+import {
+  BanIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  CloseIcon,
+  HourglassIcon,
+  QuestionCircleIcon,
+  TimesCircleIcon,
+} from "./UiIcons";
 
 export const PaymentStatusPopup = ({
   status,
@@ -11,7 +20,7 @@ export const PaymentStatusPopup = ({
     switch (status) {
       case "SUCCESS":
         return {
-          icon: "fa-check-circle",
+          icon: <CheckCircleIcon className="h-10 w-10" />,
           iconColor: "text-green-500",
           bgColor: "bg-green-500/20",
           title: "Payment Successful!",
@@ -21,7 +30,7 @@ export const PaymentStatusPopup = ({
         };
       case "FAILED":
         return {
-          icon: "fa-times-circle",
+          icon: <TimesCircleIcon className="h-10 w-10" />,
           iconColor: "text-red-500",
           bgColor: "bg-red-500/20",
           title: "Payment Failed",
@@ -31,7 +40,7 @@ export const PaymentStatusPopup = ({
         };
       case "CANCELLED":
         return {
-          icon: "fa-ban",
+          icon: <BanIcon className="h-10 w-10" />,
           iconColor: "text-orange-500",
           bgColor: "bg-orange-500/20",
           title: "Payment Cancelled",
@@ -41,7 +50,7 @@ export const PaymentStatusPopup = ({
         };
       case "PENDING":
         return {
-          icon: "fa-clock",
+          icon: <ClockIcon className="h-10 w-10" />,
           iconColor: "text-yellow-500",
           bgColor: "bg-yellow-500/20",
           title: "Payment Pending",
@@ -51,7 +60,7 @@ export const PaymentStatusPopup = ({
         };
       case "INITIATED":
         return {
-          icon: "fa-hourglass-half",
+          icon: <HourglassIcon className="h-10 w-10" />,
           iconColor: "text-blue-500",
           bgColor: "bg-blue-500/20",
           title: "Payment Initiated",
@@ -62,7 +71,7 @@ export const PaymentStatusPopup = ({
       case "UNKNOWN":
       default:
         return {
-          icon: "fa-question-circle",
+          icon: <QuestionCircleIcon className="h-10 w-10" />,
           iconColor: "text-gray-500",
           bgColor: "bg-gray-500/20",
           title: "Payment Status Unknown",
@@ -83,14 +92,14 @@ export const PaymentStatusPopup = ({
           className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white hover:text-red-400 transition-all z-10"
           aria-label="Close"
         >
-          <i className="fa-solid fa-xmark text-sm"></i>
+          <CloseIcon className="h-3.5 w-3.5" />
         </button>
 
         <div className="p-8 text-center">
           <div
-            className={`w-20 h-20 ${config.bgColor} ${config.iconColor} rounded-full flex items-center justify-center text-4xl mx-auto mb-6`}
+            className={`w-20 h-20 ${config.bgColor} ${config.iconColor} rounded-full flex items-center justify-center mx-auto mb-6`}
           >
-            <i className={`fa-solid ${config.icon}`}></i>
+            {config.icon}
           </div>
           <h3 className="text-2xl font-bold text-white mb-3">{config.title}</h3>
           <p className="text-brand-muted mb-6 text-sm leading-relaxed">

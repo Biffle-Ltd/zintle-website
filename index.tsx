@@ -1,3 +1,4 @@
+import "./styles/app.css";
 import React, {
   Suspense,
   useState,
@@ -31,6 +32,7 @@ import { WelcomeBackOfferSkeleton } from "./components/WelcomeBackOfferSkeleton"
 import { SubscriptionsSkeleton } from "./components/SubscriptionsSkeleton";
 import { campaignCtaGradientStyle } from "./components/CampaignCta";
 import { COIN_ICON_CLASS, ZintleCoinIcon } from "./components/ZintleCoinIcon";
+import { CheckIcon, CloseIcon, ShieldIcon } from "./components/UiIcons";
 import {
   BIFFLE_COIN_ICON_CLASS,
   BiffleCoinIcon,
@@ -84,13 +86,28 @@ import {
   resolveStartSessionDefaultPack,
 } from "./utils/quickRecharge";
 import { HOST } from "./utils/host";
-import { fetchUserDetails } from "./utils/userProfileApi";
+import {
+  clearCachedUserDetails,
+  fetchUserDetails,
+} from "./utils/userProfileApi";
+import { fetchSubscriptionPlans } from "./utils/subscriptionPlansApi";
+import {
+  coinStoreSessionKey,
+  parseIsMemberQueryParam,
+  readInitialCoinPacksState,
+  seedCoinStoreMembership,
+} from "./utils/coinStoreBootstrap";
+import {
+  clearAllApiCache,
+  discardBootPrefetch,
+  tokenFingerprint,
+} from "./utils/webviewApiCache";
 import {
   appendPhonePeChromeWVParam,
   openPhonePeIframeCheckout,
 } from "./utils/phonePeIframeCheckout";
 import { watchPaymentCheckoutIframeLoad } from "./utils/paymentCheckoutIframeLoad";
-import { fetchCoinPackDetails } from "./utils/coinPacksApi";
+import { fetchCoinPackDetails, readCachedCoinPacks } from "./utils/coinPacksApi";
 import {
   loadEasebuzzCheckoutScript,
   loadPhonePeCheckoutScript,
@@ -242,91 +259,6 @@ async function fetchMembershipStatus(
   return { isMember: Boolean(data.is_member) };
 }
 
-// --- Subscription plans fetch helper ---
-
-type CoinStoreSubscriptionPlans = {
-  featuredWeeklyPlan: SubscriptionPlan | null;
-  basicWeeklyPlan: SubscriptionPlan | null;
-  subscriptionPlanIds: number[];
-};
-
-function normalizeSubscriptionPlan(raw: unknown): SubscriptionPlan | null {
-  if (!raw || typeof raw !== "object") return null;
-  const plan = raw as Record<string, unknown>;
-  const id = typeof plan.id === "number" ? plan.id : null;
-  if (id == null) return null;
-
-  const priceRaw = plan.price;
-  const price =
-    typeof priceRaw === "number"
-      ? priceRaw
-      : typeof priceRaw === "string"
-        ? parseFloat(priceRaw)
-        : NaN;
-  if (!Number.isFinite(price)) return null;
-
-  return {
-    id,
-    plan_name: String(plan.plan_name ?? ""),
-    plan_description:
-      typeof plan.plan_description === "string"
-        ? plan.plan_description
-        : undefined,
-    price,
-    plan_duration:
-      typeof plan.plan_duration === "number" ? plan.plan_duration : 0,
-    coin_value:
-      typeof plan.coin_value === "number" ? plan.coin_value : undefined,
-    subscription_id:
-      typeof plan.subscription_id === "string"
-        ? plan.subscription_id
-        : undefined,
-  };
-}
-
-function partitionCoinStoreSubscriptionPlans(
-  plans: SubscriptionPlan[],
-): Pick<CoinStoreSubscriptionPlans, "featuredWeeklyPlan" | "basicWeeklyPlan"> {
-  const sorted = [...plans].sort((a, b) => b.price - a.price);
-  return {
-    featuredWeeklyPlan: sorted[0] ?? null,
-    basicWeeklyPlan: sorted[1] ?? null,
-  };
-}
-
-async function fetchSubscriptionPlans(
-  token: string,
-  organisationId: string,
-  signal?: AbortSignal,
-): Promise<CoinStoreSubscriptionPlans> {
-  const jwtToken = headerSafeToken(token);
-  const response = await fetch(
-    `${HOST}/api/v1/monetization/plans/subscription-packs/`,
-    {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
-        "X-Organisation-ID": organisationId,
-      },
-      signal,
-    },
-  );
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const json = await response.json();
-  const rawPlans: unknown[] = json?.data?.plans ?? [];
-  const plans = rawPlans
-    .map(normalizeSubscriptionPlan)
-    .filter((plan): plan is SubscriptionPlan => plan != null);
-  const { featuredWeeklyPlan, basicWeeklyPlan } =
-    partitionCoinStoreSubscriptionPlans(plans);
-  return {
-    featuredWeeklyPlan,
-    basicWeeklyPlan,
-    subscriptionPlanIds: plans.map((plan) => plan.id),
-  };
-}
-
 type CoinOrderPayload = {
   id?: number | string;
   order_uuid?: string;
@@ -377,6 +309,9 @@ async function syncCoinStoreMembershipState(
     signal,
   );
   if (isMember) {
+    if (typeof window !== "undefined") {
+      discardBootPrefetch(window.__ZNW_SUBSCRIPTION_PACKS);
+    }
     return {
       isMember: true,
       featuredWeeklyPlan: null,
@@ -388,7 +323,7 @@ async function syncCoinStoreMembershipState(
     const plans = await fetchSubscriptionPlans(token, organisationId, signal);
     return { isMember: false, ...plans };
   } catch {
-    // Plans fetch failed → fall back to member coin pack display
+    // Same as before: plans fetch failed → coin packs only, never a stale mandate CTA.
     return {
       isMember: true,
       featuredWeeklyPlan: null,
@@ -1740,7 +1675,7 @@ const CoinStore = ({
           className={`absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center transition-all z-10 shadow-lg border ${isBiffle ? "bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200 hover:text-red-600" : "bg-white/10 hover:bg-white/20 text-white hover:text-red-400 border-white/20"}`}
           aria-label="Close"
         >
-          <i className="fa-solid fa-xmark text-lg"></i>
+          <CloseIcon className="h-5 w-5" />
         </button>
         <div className="p-6 md:p-8 overflow-y-auto flex-1 pb-8">
           {step === "store" && (
@@ -1781,15 +1716,15 @@ const CoinStore = ({
                 ))}
               </div>
               <p className="text-center text-sm text-brand-muted flex items-center justify-center gap-2 pt-4 border-t border-white/10">
-                <i className="fa-solid fa-shield-halved"></i> 100% Secure
+                <ShieldIcon className="h-4 w-4" /> 100% Secure
                 Payment
               </p>
             </div>
           )}
           {step === "success" && (
             <div className="text-center py-8 animate-fade-in">
-              <div className="w-20 h-20 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center text-4xl mx-auto mb-6">
-                <i className="fa-solid fa-check"></i>
+              <div className="w-20 h-20 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <CheckIcon className="h-10 w-10" />
               </div>
               <h3 className="text-2xl font-bold text-white mb-2">
                 Payment Successful!
@@ -1978,6 +1913,7 @@ const CoinsPage = ({
   const isBiffle = isBiffleOrganisationId(organisationId);
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
+  const isMemberQuery = parseIsMemberQueryParam(searchParams.get("is_member"));
 
   const pixelContext = useMemo(
     () => parseCoinPixelContext(location.search, location.pathname),
@@ -2053,6 +1989,10 @@ const CoinsPage = ({
   const token = resolvePageAuthToken(location.search, organisationId);
   const isLoggedIn = !!token;
 
+  const [membershipSeed] = useState(() =>
+    seedCoinStoreMembership(token, organisationId, location.search),
+  );
+
   const [selectedPackage, setSelectedPackage] = useState<CoinStorePack | null>(
     null,
   );
@@ -2076,37 +2016,43 @@ const CoinsPage = ({
     return true;
   }, []);
 
-  // Membership state
-  const [membershipLoading, setMembershipLoading] = useState(true);
-  const [isMember, setIsMember] = useState(true);
+  // Membership state — seed from session cache / is_member URL so the skeleton can skip
+  const [membershipLoading, setMembershipLoading] = useState(
+    membershipSeed.loading,
+  );
+  const [isMember, setIsMember] = useState(membershipSeed.isMember);
   const [featuredWeeklyPlan, setFeaturedWeeklyPlan] =
-    useState<SubscriptionPlan | null>(null);
+    useState<SubscriptionPlan | null>(membershipSeed.featuredWeeklyPlan);
   const [basicWeeklyPlan, setBasicWeeklyPlan] =
-    useState<SubscriptionPlan | null>(null);
-  const [subscriptionPlanIds, setSubscriptionPlanIds] = useState<number[]>([]);
+    useState<SubscriptionPlan | null>(membershipSeed.basicWeeklyPlan);
+  const [subscriptionPlanIds, setSubscriptionPlanIds] = useState<number[]>(
+    membershipSeed.subscriptionPlanIds,
+  );
 
-  // Membership check on mount — use URL param if provided, otherwise call API
+  // Membership check — seed already applied; this revalidates from network / prefetch.
   useEffect(() => {
     if (!token) {
+      if (typeof window !== "undefined") {
+        discardBootPrefetch(window.__ZNW_USER_DETAILS);
+        discardBootPrefetch(window.__ZNW_SUBSCRIPTION_PACKS);
+      }
       setMembershipLoading(false);
       return;
     }
 
     let cancelled = false;
 
-    // If is_member is passed as a URL query param, use it directly (skip API call)
-    const isMemberParam = searchParams.get("is_member");
+    const isMemberParam = isMemberQuery;
     console.log(
       "[CoinStore] is_member URL param:",
-      isMemberParam,
+      searchParams.get("is_member"),
       "| token present:",
       !!token,
       "| orgId:",
       organisationId,
     );
     if (isMemberParam !== null) {
-      const memberStatus =
-        isMemberParam.toLowerCase() === "true" || isMemberParam === "1";
+      const memberStatus = isMemberParam;
       console.log("[CoinStore] Using URL param is_member:", memberStatus);
       setIsMember(memberStatus);
 
@@ -2133,7 +2079,6 @@ const CoinsPage = ({
               "[CoinStore] Plans fetch failed for non-member:",
               err,
             );
-            // Plans fetch failed — still show non-member view, just without plan cards
           })
           .finally(() => {
             clearTimeout(timeout);
@@ -2145,9 +2090,13 @@ const CoinsPage = ({
           controller.abort();
           clearTimeout(timeout);
         };
-      } else {
-        setMembershipLoading(false);
       }
+
+      if (typeof window !== "undefined") {
+        discardBootPrefetch(window.__ZNW_USER_DETAILS);
+        discardBootPrefetch(window.__ZNW_SUBSCRIPTION_PACKS);
+      }
+      setMembershipLoading(false);
       return;
     }
 
@@ -2164,8 +2113,13 @@ const CoinsPage = ({
       })
       .catch(() => {
         if (cancelled) return;
-        // Membership check failed → treat as member
+        // Membership check failed → treat as member (original fail-closed).
+        // Also drop any seeded plan cards so recharge cannot hit mandate with
+        // a stale weekly plan id.
         setIsMember(true);
+        setFeaturedWeeklyPlan(null);
+        setBasicWeeklyPlan(null);
+        setSubscriptionPlanIds([]);
       })
       .finally(() => {
         clearTimeout(timeout);
@@ -2177,11 +2131,12 @@ const CoinsPage = ({
       controller.abort();
       clearTimeout(timeout);
     };
-  }, [token, organisationId, location.search]);
+  }, [token, organisationId, isMemberQuery]);
 
   const refreshMembershipFromApi = useCallback(async () => {
     if (!token) return;
     try {
+      clearCachedUserDetails(token, organisationId);
       const state = await syncCoinStoreMembershipState(token, organisationId);
       setIsMember(state.isMember);
       setFeaturedWeeklyPlan(state.featuredWeeklyPlan);
@@ -2452,12 +2407,8 @@ const CoinsPage = ({
     }
   };
 
-  const isMemberQuery = searchParams.get("is_member");
   const waitForNonMemberPlans =
-    isMemberQuery !== null &&
-    isMemberQuery.toLowerCase() !== "true" &&
-    isMemberQuery !== "1" &&
-    membershipLoading;
+    isMemberQuery === false && membershipLoading;
 
   if (coinPacksLoading || waitForNonMemberPlans) {
     return (
@@ -3047,8 +2998,9 @@ const Layout = () => {
   const [showLogin, setShowLogin] = useState(false);
   const [showCoins, setShowCoins] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(hasAnyJwtInStorage());
-  const [coinPacks, setCoinPacks] = useState<CoinStorePack[]>([]);
-  const [coinPacksLoading, setCoinPacksLoading] = useState(true);
+  const [packBoot] = useState(() => readInitialCoinPacksState());
+  const [coinPacks, setCoinPacks] = useState<CoinStorePack[]>(packBoot.packs);
+  const [coinPacksLoading, setCoinPacksLoading] = useState(packBoot.loading);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const coinPacksRef = useRef(coinPacks);
   coinPacksRef.current = coinPacks;
@@ -3078,8 +3030,17 @@ const Layout = () => {
   }, [organisationId, location.pathname]);
 
   const loadCoinPacks = useCallback(
-    async (options?: { silent?: boolean }) => {
-      if (!options?.silent) setCoinPacksLoading(true);
+    async (options?: { silent?: boolean; clearOnMiss?: boolean }) => {
+      const token = resolvePageAuthToken(location.search, organisationId);
+      const cached = readCachedCoinPacks(organisationId, token);
+      if (cached != null) {
+        setCoinPacks(cached);
+        setCoinPacksLoading(false);
+      } else {
+        if (options?.clearOnMiss) setCoinPacks([]);
+        if (!options?.silent) setCoinPacksLoading(true);
+      }
+
       try {
         const packs = await fetchCoinPackDetails(
           organisationId,
@@ -3087,22 +3048,35 @@ const Layout = () => {
         );
         setCoinPacks(packs);
       } catch {
-        if (!options?.silent) setCoinPacks([]);
+        if (cached == null && !options?.silent) setCoinPacks([]);
       } finally {
-        if (!options?.silent) setCoinPacksLoading(false);
+        setCoinPacksLoading(false);
       }
     },
     [organisationId, location.search],
   );
 
+  const packScopeRef = useRef(
+    `${organisationId}:${tokenFingerprint(
+      resolvePageAuthToken(location.search, organisationId),
+    )}`,
+  );
   // Fetch coin packs for home / coins / overlay only (skip campaign, legal, WebView extras)
   useEffect(() => {
     if (!needsCoinPacks) {
       setCoinPacksLoading(false);
       return;
     }
-    void loadCoinPacks({ silent: coinPacksRef.current.length > 0 });
-  }, [isLoggedIn, loadCoinPacks, needsCoinPacks]);
+    const scope = `${organisationId}:${tokenFingerprint(
+      resolvePageAuthToken(location.search, organisationId),
+    )}`;
+    const scopeChanged = packScopeRef.current !== scope;
+    packScopeRef.current = scope;
+    void loadCoinPacks({
+      silent: !scopeChanged && coinPacksRef.current.length > 0,
+      clearOnMiss: scopeChanged,
+    });
+  }, [isLoggedIn, loadCoinPacks, needsCoinPacks, organisationId, location.search]);
 
   // Refresh coin packs after a successful purchase (e.g. one-time packs)
   useEffect(() => {
@@ -3133,6 +3107,7 @@ const Layout = () => {
   // Logout clears JWT
   const handleLogout = () => {
     clearAllJwtStorage();
+    clearAllApiCache();
     setIsLoggedIn(false);
     setShowLogin(false);
     setShowCoins(false);
@@ -3230,6 +3205,7 @@ const Layout = () => {
           path="/coins"
           element={
             <CoinsPage
+              key={coinStoreSessionKey(organisationId, location.search)}
               setShowCoins={setShowCoins}
               setShowLogin={setShowLogin}
               coinPacks={coinPacks}

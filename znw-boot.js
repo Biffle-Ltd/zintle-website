@@ -5,6 +5,9 @@
  * Keep HOST in sync with utils/host.ts.
  * Keep org mapping in sync with utils/organisationIdFromUrl.ts.
  * Keep token sanitizing in sync with utils/headerSafeToken.ts.
+ * Keep JWT storage keys in sync with utils/authStorage.ts.
+ * Keep /coins prefetch URLs in sync with coinPacksApi, userProfileApi,
+ *   and subscriptionPlansApi.
  */
 (function (window) {
   var HOST = "https://prod.biffle.ai";
@@ -42,6 +45,15 @@
     return "ZINTEL1234";
   }
 
+  function jwtFromStorage(org) {
+    try {
+      var key = org === "BIFFLE1234" ? "biffle_jwt" : "zintle_jwt";
+      return headerSafeToken(window.localStorage.getItem(key));
+    } catch (e) {
+      return "";
+    }
+  }
+
   function detectBoot() {
     var path = (window.location.pathname || "/").replace(/\/+$/, "") || "/";
     var coins = path === "/coins";
@@ -51,7 +63,8 @@
     var rawOrg = (params.get("organisation_id") || "").trim();
     var org = organisationIdFromRaw(rawOrg);
     var biffle = org === "BIFFLE1234";
-    var token = headerSafeToken(params.get("id"));
+    var token =
+      headerSafeToken(params.get("id")) || jwtFromStorage(org);
     var boot = {
       coins: coins,
       biffle: biffle,
@@ -125,7 +138,7 @@
         "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
       );
       addStylesheet("/index.css");
-    } else {
+    } else if (!boot.coins) {
       var fa = document.createElement("link");
       fa.rel = "stylesheet";
       fa.href =
@@ -151,6 +164,49 @@
         };
       } catch (e) {
         /* invalid headers must not abort fonts / later prefetches */
+      }
+
+      /* Keep is_member parsing in sync with utils/coinStoreBootstrap.ts. */
+      var isMemberKnown = null;
+      var isMemberRaw = params.get("is_member");
+      if (isMemberRaw != null && String(isMemberRaw).trim() !== "") {
+        var memberVal = String(isMemberRaw).trim().toLowerCase();
+        if (memberVal === "true" || memberVal === "1") isMemberKnown = true;
+        else if (memberVal === "false" || memberVal === "0") isMemberKnown = false;
+      }
+
+      if (token && isMemberKnown !== true) {
+        var authJsonHeaders = {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+          "X-Organisation-ID": org,
+        };
+        if (isMemberKnown == null) {
+          try {
+            window.__ZNW_USER_DETAILS = {
+              organisationId: org,
+              hasAuth: true,
+              promise: fetch(
+                HOST + "/api/v1/user_center/details/get-user-details/",
+                { method: "GET", headers: authJsonHeaders },
+              ),
+            };
+          } catch (e) {
+            /* invalid headers must not abort later prefetches */
+          }
+        }
+        try {
+          window.__ZNW_SUBSCRIPTION_PACKS = {
+            organisationId: org,
+            hasAuth: true,
+            promise: fetch(
+              HOST + "/api/v1/monetization/plans/subscription-packs/",
+              { method: "GET", headers: authJsonHeaders },
+            ),
+          };
+        } catch (e) {
+          /* invalid headers must not abort later prefetches */
+        }
       }
     }
     if (boot.welcome) {

@@ -1,5 +1,13 @@
 import { HOST } from "./host";
 import { headerSafeToken } from "./headerSafeToken";
+import {
+  USER_DETAILS_CACHE_TTL_MS,
+  clearApiCache,
+  readApiCache,
+  takeBootPrefetchJson,
+  tokenFingerprint,
+  writeApiCache,
+} from "./webviewApiCache";
 
 export type LanguageOption = {
   id: number;
@@ -60,12 +68,88 @@ export function userNeedsLanguageSelection(
   );
 }
 
+type UserDetailsApiResponse = {
+  data?: UserDetailsData;
+};
+
+type CachedMembership = {
+  is_member: boolean;
+};
+
+function userDetailsCacheKey(
+  organisationId: string,
+  token: string | null,
+): string {
+  return `znw.v1.userDetails.${organisationId}.${tokenFingerprint(token)}`;
+}
+
+export function readCachedUserDetails(
+  token: string,
+  organisationId: string,
+): CachedMembership | null {
+  const jwtToken = headerSafeToken(token);
+  if (!jwtToken) return null;
+  const cached = readApiCache<CachedMembership>(
+    userDetailsCacheKey(organisationId, jwtToken),
+    USER_DETAILS_CACHE_TTL_MS,
+  );
+  if (!cached || typeof cached.is_member !== "boolean") return null;
+  return cached;
+}
+
+export function clearCachedUserDetails(
+  token: string | null | undefined,
+  organisationId: string,
+): void {
+  const jwtToken = headerSafeToken(token);
+  if (!jwtToken) return;
+  clearApiCache(userDetailsCacheKey(organisationId, jwtToken));
+}
+
+function rememberUserDetails(
+  organisationId: string,
+  token: string | null,
+  data: UserDetailsData,
+): UserDetailsData {
+  if (token && typeof data.is_member === "boolean") {
+    writeApiCache(userDetailsCacheKey(organisationId, token), {
+      is_member: data.is_member,
+    });
+  }
+  return data;
+}
+
+function userDetailsHttpError(status: number): Error & { status?: number } {
+  const err = new Error(`HTTP ${status}`) as Error & { status?: number };
+  err.status = status;
+  return err;
+}
+
+/**
+ * Reuses the HTML-boot prefetch (`window.__ZNW_USER_DETAILS`) when present.
+ * Keep the prefetch URL in `znw-boot.js` in sync with `HOST` in `utils/host.ts`.
+ */
 export async function fetchUserDetails(
   token: string,
   organisationId: string,
   signal?: AbortSignal,
 ): Promise<UserDetailsData> {
   const jwtToken = headerSafeToken(token);
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+  const boot = await takeBootPrefetchJson<UserDetailsApiResponse>(
+    typeof window !== "undefined" ? window.__ZNW_USER_DETAILS : undefined,
+    organisationId,
+    Boolean(jwtToken),
+  );
+  if (boot?.ok) {
+    return rememberUserDetails(
+      organisationId,
+      jwtToken,
+      boot.json?.data ?? {},
+    );
+  }
+
   const response = await fetch(
     `${HOST}/api/v1/user_center/details/get-user-details/`,
     {
@@ -79,14 +163,10 @@ export async function fetchUserDetails(
     },
   );
   if (!response.ok) {
-    const err = new Error(`HTTP ${response.status}`) as Error & {
-      status?: number;
-    };
-    err.status = response.status;
-    throw err;
+    throw userDetailsHttpError(response.status);
   }
-  const json = (await response.json()) as { data?: UserDetailsData };
-  return json?.data ?? {};
+  const json = (await response.json()) as UserDetailsApiResponse;
+  return rememberUserDetails(organisationId, jwtToken, json?.data ?? {});
 }
 
 export async function fetchAvailableLanguages(

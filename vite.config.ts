@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ZNW_BOOT_FILE = path.join(__dirname, "znw-boot.js");
@@ -41,7 +42,7 @@ function inlineWebviewBoot(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [inlineWebviewBoot(), react()],
+  plugins: [inlineWebviewBoot(), tailwindcss(), react()],
   server: {
     port: 3000,
     host: "127.0.0.1",

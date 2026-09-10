@@ -11,6 +11,12 @@ import {
   sendCampaignOtpRequested,
 } from "../utils/campaignPixelEvents";
 import { linkCampaignFacebookAttributionSafe, resolveCampaignFbclid } from "../utils/fbAttribution";
+import {
+  ChevronRightIcon,
+  CloseIcon,
+  PenIcon,
+  SpinnerIcon,
+} from "./UiIcons";
 
 const OTP_LENGTH = 6;
 const PHONE_LENGTH = 10;
@@ -281,7 +287,7 @@ export function PhoneOtpLoginScreen({
         }`}
         aria-label="Close"
       >
-        <i className="fa-solid fa-xmark text-xl" aria-hidden />
+        <CloseIcon className="h-5 w-5" />
       </button>
 
       <div className="flex-1 min-h-0 flex flex-col w-full max-w-lg mx-auto px-6 pt-[max(3.5rem,calc(env(safe-area-inset-top)+2.5rem))] pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -364,7 +370,7 @@ export function PhoneOtpLoginScreen({
                 disabled={loading}
                 ariaLabel="Edit mobile number"
               >
-                <i className="fa-solid fa-pen text-sm" aria-hidden />
+                <PenIcon className="h-4 w-4" />
               </AuthRoundButton>
             ) : (
               <AuthRoundButton
@@ -374,15 +380,9 @@ export function PhoneOtpLoginScreen({
                 ariaLabel="Send OTP"
               >
                 {loading ? (
-                  <i
-                    className="fa-solid fa-spinner fa-spin text-sm"
-                    aria-hidden
-                  />
+                  <SpinnerIcon className="h-4 w-4" />
                 ) : (
-                  <i
-                    className="fa-solid fa-chevron-right text-sm"
-                    aria-hidden
-                  />
+                  <ChevronRightIcon className="h-4 w-4" />
                 )}
               </AuthRoundButton>
             )}
@@ -406,15 +406,9 @@ export function PhoneOtpLoginScreen({
                   ariaLabel="Verify OTP"
                 >
                   {loading ? (
-                    <i
-                      className="fa-solid fa-spinner fa-spin text-sm"
-                      aria-hidden
-                    />
+                    <SpinnerIcon className="h-4 w-4" />
                   ) : (
-                    <i
-                      className="fa-solid fa-chevron-right text-sm"
-                      aria-hidden
-                    />
+                    <ChevronRightIcon className="h-4 w-4" />
                   )}
                 </AuthRoundButton>
               </div>

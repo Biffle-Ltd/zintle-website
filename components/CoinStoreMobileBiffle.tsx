@@ -2,6 +2,7 @@ import React, { Fragment, useEffect, useMemo, useState } from "react";
 import { campaignCtaGradientStyle } from "./CampaignCta";
 import { BiffleFeaturedWeeklyPlanCard } from "./BiffleFeaturedWeeklyPlanCard";
 import { BIFFLE_COIN_ICON_CLASS, BiffleCoinIcon } from "./BiffleCoinIcon";
+import { HourglassIcon } from "./UiIcons";
 import type { CoinStorePack, SubscriptionPlan } from "./CoinStoreMobile";
 import {
   formatCountdown,
@@ -153,10 +154,7 @@ function BiffleLimitedOfferCard({
 
         <div className="relative z-[1] my-2 flex items-center justify-between gap-3">
           <div className="inline-flex items-center gap-2 rounded-md bg-white px-3.5 py-1.5 shadow-sm">
-            <i
-              className="fa-solid fa-hourglass-half text-[14px] text-amber-700/90"
-              aria-hidden
-            />
+            <HourglassIcon className="h-[14px] w-[14px] text-amber-700/90" />
             <span className="text-[14px] font-bold tabular-nums tracking-tight text-[#A21CAF]">
               {formatCountdown(remainingMs)}
             </span>

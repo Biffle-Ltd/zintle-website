@@ -47,6 +47,7 @@ interface Window {
     HOST: string;
     bootHead: () => void;
     bootPaint: () => void;
+    ensureFontAwesome?: () => void;
     coinsSkeletonHtml: (opts?: { biffle?: boolean; qr?: boolean }) => string;
     welcomeSkeletonHtml: () => string;
     subscriptionsSkeletonHtml: (opts?: {
@@ -65,6 +66,18 @@ interface Window {
     isCampaign: boolean;
   };
   __ZNW_COIN_PACKS?: {
+    organisationId: string;
+    promise: Promise<Response>;
+    consumed?: boolean;
+    hasAuth?: boolean;
+  };
+  __ZNW_USER_DETAILS?: {
+    organisationId: string;
+    promise: Promise<Response>;
+    consumed?: boolean;
+    hasAuth?: boolean;
+  };
+  __ZNW_SUBSCRIPTION_PACKS?: {
     organisationId: string;
     promise: Promise<Response>;
     consumed?: boolean;

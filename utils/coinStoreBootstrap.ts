@@ -1,14 +1,14 @@
-import type { CoinStorePack } from "../components/CoinStoreMobile";
-import { resolvePageAuthToken } from "./authStorage";
-import { getOrganisationIdFromSearch } from "./organisationIdFromUrl";
-import { readCachedCoinPacks } from "./coinPacksApi";
-import { tokenFingerprint } from "./webviewApiCache";
+import type { CoinStorePack } from "../components/CoinStoreMobile.tsx";
+import { resolvePageAuthToken } from "./authStorage.ts";
+import { getOrganisationIdFromSearch } from "./organisationIdFromUrl.ts";
+import { readCachedCoinPacks } from "./coinPacksApi.ts";
+import { tokenFingerprint } from "./webviewApiCache.ts";
 import {
   EMPTY_COIN_STORE_PLANS,
   readCachedSubscriptionPlans,
   type CoinStoreSubscriptionPlans,
-} from "./subscriptionPlansApi";
-import { readCachedUserDetails } from "./userProfileApi";
+} from "./subscriptionPlansApi.ts";
+import { readCachedUserDetails } from "./userProfileApi.ts";
 
 export type CoinStoreMembershipSeed = CoinStoreSubscriptionPlans & {
   isMember: boolean;
@@ -74,6 +74,10 @@ export function seedCoinStoreMembership(
   organisationId: string,
   search: string,
 ): CoinStoreMembershipSeed {
+  if (!token) {
+    return { loading: false, isMember: true, ...EMPTY_COIN_STORE_PLANS };
+  }
+
   const isMemberParam = parseIsMemberQueryParam(
     new URLSearchParams(
       search.startsWith("?") ? search.slice(1) : search,
@@ -85,18 +89,11 @@ export function seedCoinStoreMembership(
   }
 
   if (isMemberParam === false) {
-    if (!token) {
-      return { loading: false, isMember: false, ...EMPTY_COIN_STORE_PLANS };
-    }
     const plans = readCachedSubscriptionPlans(token, organisationId);
     if (plans) {
       return { loading: false, isMember: false, ...plans };
     }
     return { loading: true, isMember: false, ...EMPTY_COIN_STORE_PLANS };
-  }
-
-  if (!token) {
-    return { loading: false, isMember: true, ...EMPTY_COIN_STORE_PLANS };
   }
 
   const details = readCachedUserDetails(token, organisationId);
@@ -106,9 +103,8 @@ export function seedCoinStoreMembership(
   if (details.is_member) {
     return { loading: false, isMember: true, ...EMPTY_COIN_STORE_PLANS };
   }
-  const plans = readCachedSubscriptionPlans(token, organisationId);
-  if (plans) {
-    return { loading: false, isMember: false, ...plans };
-  }
-  return { loading: true, isMember: false, ...EMPTY_COIN_STORE_PLANS };
+  // Cached non-member without native `is_member` is not enough to paint a
+  // mandate CTA. Original fail-closed default is member until the network
+  // confirms — otherwise a stale cache can route Pay to mandate.
+  return { loading: true, isMember: true, ...EMPTY_COIN_STORE_PLANS };
 }

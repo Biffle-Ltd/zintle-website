@@ -11,6 +11,8 @@
  */
 (function (window) {
   var HOST = "https://prod.biffle.ai";
+  var FA_HREF =
+    "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css";
   var BONE = "znw-skel-bone";
   var ZINTLE_CTA =
     "linear-gradient(90deg,#FF4B7A,#FF5E4D,#FF8A3D)";
@@ -94,6 +96,22 @@
     document.head.appendChild(l);
   }
 
+  /** Idempotent. Keep /coins first paint free of FA; SPA nav can call this later. */
+  function ensureFontAwesome(opts) {
+    if (document.querySelector('link[data-znw-fa="1"]')) return;
+    var fa = document.createElement("link");
+    fa.rel = "stylesheet";
+    fa.href = FA_HREF;
+    fa.setAttribute("data-znw-fa", "1");
+    if (opts && opts.defer) {
+      fa.media = "print";
+      fa.onload = function () {
+        this.media = "all";
+      };
+    }
+    document.head.appendChild(fa);
+  }
+
   function injectBootCss() {
     if (document.getElementById("znw-boot-css")) return;
     var style = document.createElement("style");
@@ -134,20 +152,10 @@
       addStylesheet(
         "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;700&family=Playfair+Display:wght@700;900&display=swap",
       );
-      addStylesheet(
-        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
-      );
+      ensureFontAwesome();
       addStylesheet("/index.css");
     } else if (!boot.coins) {
-      var fa = document.createElement("link");
-      fa.rel = "stylesheet";
-      fa.href =
-        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css";
-      fa.media = "print";
-      fa.onload = function () {
-        this.media = "all";
-      };
-      document.head.appendChild(fa);
+      ensureFontAwesome({ defer: true });
     }
 
     if (boot.coins) {
@@ -602,6 +610,9 @@
     HOST: HOST,
     bootHead: bootHead,
     bootPaint: bootPaint,
+    ensureFontAwesome: function () {
+      ensureFontAwesome();
+    },
     coinsSkeletonHtml: coinsSkeletonHtml,
     welcomeSkeletonHtml: welcomeSkeletonHtml,
     subscriptionsSkeletonHtml: subscriptionsSkeletonHtml,

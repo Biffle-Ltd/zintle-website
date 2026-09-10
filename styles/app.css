@@ -76,3 +76,20 @@
   -webkit-text-fill-color: transparent;
   background-image: linear-gradient(to right, #ff4b4b, #ff9068);
 }
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0b1121;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}

@@ -9,11 +9,23 @@ export const SUBSCRIPTION_PACKS_CACHE_TTL_MS = 10 * 60 * 1000;
 /** Membership can change after a purchase — keep this short and bust on success. */
 export const USER_DETAILS_CACHE_TTL_MS = 60 * 1000;
 
-const API_CACHE_KEY_PREFIX = "znw.v1.";
+/** Bumped after fingerprint keys stopped embedding JWT suffixes. */
+export const API_CACHE_KEY_PREFIX = "znw.v2.";
+const LEGACY_API_CACHE_PREFIXES = ["znw.v1."] as const;
 /** Drop unread keys (JWT refresh orphans) even if their per-entry TTL was shorter. */
 const API_CACHE_HARD_EXPIRE_MS = 10 * 60 * 1000;
 
 let prunedThisDocument = false;
+
+export type ApiCacheKind = "packs" | "subPacks" | "userDetails";
+
+export function apiCacheStorageKey(
+  kind: ApiCacheKind,
+  organisationId: string,
+  token: string | null | undefined,
+): string {
+  return `${API_CACHE_KEY_PREFIX}${kind}.${organisationId}.${tokenFingerprint(token)}`;
+}
 
 export type BootPrefetchHandle = {
   organisationId: string;
@@ -31,7 +43,19 @@ export function tokenFingerprint(
   token: string | null | undefined,
 ): string {
   if (!token) return "anon";
-  return token.length <= 16 ? token : token.slice(-16);
+  // FNV-1a 32 with a length-mixed second pass — storage keys must not hold token bytes.
+  const a = fnv1a32(token, 0x811c9dc5);
+  const b = fnv1a32(token, 0x811c9dc5 ^ token.length);
+  return `h${a.toString(16).padStart(8, "0")}${b.toString(16).padStart(8, "0")}`;
+}
+
+function fnv1a32(value: string, seed: number): number {
+  let h = seed;
+  for (let i = 0; i < value.length; i++) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
 }
 
 function getApiCacheStorage(): Storage | null {
@@ -55,6 +79,25 @@ function collectPrefixedKeys(storage: Storage, prefix: string): string[] {
     if (key?.startsWith(prefix)) keys.push(key);
   }
   return keys;
+}
+
+function wipeLegacyApiCache(storage: Storage): void {
+  for (const prefix of LEGACY_API_CACHE_PREFIXES) {
+    for (const key of collectPrefixedKeys(storage, prefix)) {
+      try {
+        storage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+function ensurePruned(storage: Storage): void {
+  wipeLegacyApiCache(storage);
+  if (prunedThisDocument) return;
+  pruneExpiredApiCache(storage);
+  prunedThisDocument = true;
 }
 
 function pruneExpiredApiCache(storage: Storage): void {
@@ -85,6 +128,7 @@ export function readApiCache<T>(key: string, ttlMs: number): T | null {
   const storage = getApiCacheStorage();
   if (!storage) return null;
   try {
+    ensurePruned(storage);
     const raw = storage.getItem(key);
     if (!raw) return null;
     const entry = JSON.parse(raw) as CacheEntry<T>;
@@ -100,6 +144,11 @@ export function readApiCache<T>(key: string, ttlMs: number): T | null {
     }
     return entry.v;
   } catch {
+    try {
+      storage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
     return null;
   }
 }
@@ -112,13 +161,11 @@ export function writeApiCache<T>(key: string, value: T): void {
     storage.setItem(key, JSON.stringify(entry));
   };
   try {
-    if (!prunedThisDocument) {
-      pruneExpiredApiCache(storage);
-      prunedThisDocument = true;
-    }
+    ensurePruned(storage);
     persist();
   } catch {
     try {
+      wipeLegacyApiCache(storage);
       pruneExpiredApiCache(storage);
       prunedThisDocument = true;
       persist();
@@ -142,6 +189,7 @@ export function clearApiCache(key: string): void {
 export function clearAllApiCache(): void {
   const storage = getApiCacheStorage();
   if (!storage) return;
+  wipeLegacyApiCache(storage);
   for (const key of collectPrefixedKeys(storage, API_CACHE_KEY_PREFIX)) {
     try {
       storage.removeItem(key);

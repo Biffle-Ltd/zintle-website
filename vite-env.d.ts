@@ -47,6 +47,7 @@ interface Window {
     HOST: string;
     bootHead: () => void;
     bootPaint: () => void;
+    ensureFontAwesome?: () => void;
     coinsSkeletonHtml: (opts?: { biffle?: boolean; qr?: boolean }) => string;
     welcomeSkeletonHtml: () => string;
     subscriptionsSkeletonHtml: (opts?: {

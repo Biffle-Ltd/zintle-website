@@ -3008,6 +3008,11 @@ const Layout = () => {
   const needsCoinPacks = isCoinsPage || isHomePage || showCoins;
 
   useEffect(() => {
+    if (isCoinsPage) return;
+    window.__ZNW?.ensureFontAwesome?.();
+  }, [isCoinsPage]);
+
+  useEffect(() => {
     let hasSentPageView = false;
     const sendPageViewOnce = () => {
       if (hasSentPageView || typeof window.fbq !== "function") return;

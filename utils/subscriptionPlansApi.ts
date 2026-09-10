@@ -1,13 +1,13 @@
-import type { SubscriptionPlan } from "../components/CoinStoreMobile";
-import { HOST } from "./host";
-import { headerSafeToken } from "./headerSafeToken";
+import type { SubscriptionPlan } from "../components/CoinStoreMobile.tsx";
+import { HOST } from "./host.ts";
+import { headerSafeToken } from "./headerSafeToken.ts";
 import {
   SUBSCRIPTION_PACKS_CACHE_TTL_MS,
+  apiCacheStorageKey,
   readApiCache,
   takeBootPrefetchJson,
-  tokenFingerprint,
   writeApiCache,
-} from "./webviewApiCache";
+} from "./webviewApiCache.ts";
 
 export type CoinStoreSubscriptionPlans = {
   featuredWeeklyPlan: SubscriptionPlan | null;
@@ -23,7 +23,37 @@ function subscriptionPacksCacheKey(
   organisationId: string,
   token: string | null,
 ): string {
-  return `znw.v1.subPacks.${organisationId}.${tokenFingerprint(token)}`;
+  return apiCacheStorageKey("subPacks", organisationId, token);
+}
+
+function isFinitePlanId(id: unknown): id is number {
+  return typeof id === "number" && Number.isFinite(id);
+}
+
+function cachedPlansFromStorage(
+  cached: CoinStoreSubscriptionPlans,
+): CoinStoreSubscriptionPlans | null {
+  if (!Array.isArray(cached.subscriptionPlanIds)) return null;
+  const subscriptionPlanIds = cached.subscriptionPlanIds.filter(isFinitePlanId);
+  if (subscriptionPlanIds.length === 0) return null;
+
+  const featuredWeeklyPlan = cached.featuredWeeklyPlan
+    ? normalizeSubscriptionPlan(cached.featuredWeeklyPlan)
+    : null;
+  const basicWeeklyPlan = cached.basicWeeklyPlan
+    ? normalizeSubscriptionPlan(cached.basicWeeklyPlan)
+    : null;
+  if (!featuredWeeklyPlan) return null;
+  if (!subscriptionPlanIds.includes(featuredWeeklyPlan.id)) return null;
+  if (basicWeeklyPlan && !subscriptionPlanIds.includes(basicWeeklyPlan.id)) {
+    return null;
+  }
+
+  return {
+    featuredWeeklyPlan,
+    basicWeeklyPlan,
+    subscriptionPlanIds,
+  };
 }
 
 export function readCachedSubscriptionPlans(
@@ -36,8 +66,8 @@ export function readCachedSubscriptionPlans(
     subscriptionPacksCacheKey(organisationId, jwtToken),
     SUBSCRIPTION_PACKS_CACHE_TTL_MS,
   );
-  if (!cached || cached.subscriptionPlanIds.length === 0) return null;
-  return cached;
+  if (!cached) return null;
+  return cachedPlansFromStorage(cached);
 }
 
 export const EMPTY_COIN_STORE_PLANS: CoinStoreSubscriptionPlans = {
@@ -127,6 +157,7 @@ export async function fetchSubscriptionPlans(
   organisationId: string,
   signal?: AbortSignal,
 ): Promise<CoinStoreSubscriptionPlans> {
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   const jwtToken = headerSafeToken(token);
   const pre =
     typeof window !== "undefined" ? window.__ZNW_SUBSCRIPTION_PACKS : undefined;

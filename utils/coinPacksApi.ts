@@ -1,13 +1,13 @@
-import type { CoinStorePack } from "../components/CoinStoreMobile";
-import { HOST } from "./host";
-import { resolvePageAuthToken } from "./authStorage";
+import type { CoinStorePack } from "../components/CoinStoreMobile.tsx";
+import { HOST } from "./host.ts";
+import { resolvePageAuthToken } from "./authStorage.ts";
 import {
   COIN_PACKS_CACHE_TTL_MS,
+  apiCacheStorageKey,
   readApiCache,
   takeBootPrefetchJson,
-  tokenFingerprint,
   writeApiCache,
-} from "./webviewApiCache";
+} from "./webviewApiCache.ts";
 
 export type CoinPackApiRow = {
   id?: number;
@@ -59,7 +59,20 @@ function coinPacksCacheKey(
   organisationId: string,
   token: string | null,
 ): string {
-  return `znw.v1.packs.${organisationId}.${tokenFingerprint(token)}`;
+  return apiCacheStorageKey("packs", organisationId, token);
+}
+
+function isValidCachedPack(row: unknown): row is CoinStorePack {
+  if (!row || typeof row !== "object") return false;
+  const pack = row as CoinStorePack;
+  return (
+    typeof pack.id === "number" &&
+    Number.isFinite(pack.id) &&
+    typeof pack.coins === "number" &&
+    Number.isFinite(pack.coins) &&
+    typeof pack.price === "number" &&
+    Number.isFinite(pack.price)
+  );
 }
 
 /** `null` = cache miss. `[]` = confirmed empty catalog. */
@@ -71,7 +84,9 @@ export function readCachedCoinPacks(
     coinPacksCacheKey(organisationId, token),
     COIN_PACKS_CACHE_TTL_MS,
   );
-  return Array.isArray(packs) ? packs : null;
+  if (!Array.isArray(packs)) return null;
+  if (packs.length === 0) return packs;
+  return packs.every(isValidCachedPack) ? packs : null;
 }
 
 function rememberCoinPacks(

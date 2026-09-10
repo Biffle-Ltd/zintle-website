@@ -1,13 +1,13 @@
-import { HOST } from "./host";
-import { headerSafeToken } from "./headerSafeToken";
+import { HOST } from "./host.ts";
+import { headerSafeToken } from "./headerSafeToken.ts";
 import {
   USER_DETAILS_CACHE_TTL_MS,
+  apiCacheStorageKey,
   clearApiCache,
   readApiCache,
   takeBootPrefetchJson,
-  tokenFingerprint,
   writeApiCache,
-} from "./webviewApiCache";
+} from "./webviewApiCache.ts";
 
 export type LanguageOption = {
   id: number;
@@ -80,7 +80,7 @@ function userDetailsCacheKey(
   organisationId: string,
   token: string | null,
 ): string {
-  return `znw.v1.userDetails.${organisationId}.${tokenFingerprint(token)}`;
+  return apiCacheStorageKey("userDetails", organisationId, token);
 }
 
 export function readCachedUserDetails(

@@ -1,6 +1,6 @@
-import { isBiffleOrganisationId } from "./organisationIdFromUrl";
-import { headerSafeToken } from "./headerSafeToken";
-import { clearAllLoginContactStorage } from "./loginContactStorage";
+import { isBiffleOrganisationId } from "./organisationIdFromUrl.ts";
+import { headerSafeToken } from "./headerSafeToken.ts";
+import { clearAllLoginContactStorage } from "./loginContactStorage.ts";
 
 export const ZINTLE_JWT_STORAGE_KEY = "zintle_jwt";
 export const BIFFLE_JWT_STORAGE_KEY = "biffle_jwt";

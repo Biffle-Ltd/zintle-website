@@ -38,11 +38,17 @@ describe("tokenFingerprint", () => {
     assert.equal(cache.tokenFingerprint(""), "anon");
   });
 
-  it("keeps short tokens and suffixes long JWTs", () => {
-    assert.equal(cache.tokenFingerprint("short-token"), "short-token");
+  it("returns a stable non-reversible fingerprint", () => {
+    const token = "short-token";
+    const fp1 = cache.tokenFingerprint(token);
+    const fp2 = cache.tokenFingerprint(token);
+    assert.equal(fp1, fp2);
+    assert.equal(fp1.startsWith("h"), true);
+    assert.equal(fp1.includes(token), false);
+    const jwt = "aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbb";
     assert.equal(
-      cache.tokenFingerprint("aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbb"),
-      "bbbbbbbbbbbbbbbb",
+      cache.tokenFingerprint(jwt).includes("bbbbbbbbbbbbbbbb"),
+      false,
     );
   });
 
@@ -54,33 +60,60 @@ describe("tokenFingerprint", () => {
   });
 });
 
-describe("znw.v1 cache hygiene", () => {
+describe("znw cache hygiene", () => {
   before(() => {
     memory.clear();
   });
 
   it("prunes expired znw keys on write and leaves unrelated keys", () => {
     memory.setItem(
-      "znw.v1.packs.ZINTEL1234.dead",
+      "znw.v2.packs.ZINTEL1234.dead",
       JSON.stringify({ t: Date.now() - 11 * 60 * 1000, v: [] }),
     );
     memory.setItem("keep.me", "x");
-    cache.writeApiCache("znw.v1.packs.ZINTEL1234.live", ["ok"]);
-    assert.equal(memory.getItem("znw.v1.packs.ZINTEL1234.dead"), null);
+    cache.writeApiCache("znw.v2.packs.ZINTEL1234.live", ["ok"]);
+    assert.equal(memory.getItem("znw.v2.packs.ZINTEL1234.dead"), null);
     assert.equal(memory.getItem("keep.me"), "x");
     assert.deepEqual(
-      cache.readApiCache("znw.v1.packs.ZINTEL1234.live", 10 * 60 * 1000),
+      cache.readApiCache("znw.v2.packs.ZINTEL1234.live", 10 * 60 * 1000),
       ["ok"],
     );
   });
 
-  it("clearAllApiCache only drops znw.v1 keys", () => {
-    cache.writeApiCache("znw.v1.userDetails.x", { is_member: false });
+  it("wipes leftover znw.v1 keys that could still hold JWT suffixes", () => {
+    memory.setItem(
+      "znw.v1.packs.BIFFLE1234.bbbbbbbbbbbbbbbb",
+      JSON.stringify({ t: Date.now(), v: [] }),
+    );
+    cache.writeApiCache("znw.v2.packs.BIFFLE1234.live", ["ok"]);
+    assert.equal(
+      memory.getItem("znw.v1.packs.BIFFLE1234.bbbbbbbbbbbbbbbb"),
+      null,
+    );
+    assert.equal(memory.getItem("keep.me"), "x");
+  });
+
+  it("clearAllApiCache only drops znw cache keys", () => {
+    cache.writeApiCache("znw.v2.userDetails.x", { is_member: false });
     memory.setItem("zintle_jwt", "token");
+    memory.setItem(
+      "znw.v1.packs.orphan.suffix",
+      JSON.stringify({ t: Date.now(), v: [] }),
+    );
     cache.clearAllApiCache();
-    assert.equal(memory.getItem("znw.v1.userDetails.x"), null);
-    assert.equal(memory.getItem("znw.v1.packs.ZINTEL1234.live"), null);
+    assert.equal(memory.getItem("znw.v2.userDetails.x"), null);
+    assert.equal(memory.getItem("znw.v2.packs.ZINTEL1234.live"), null);
+    assert.equal(memory.getItem("znw.v1.packs.orphan.suffix"), null);
     assert.equal(memory.getItem("zintle_jwt"), "token");
     assert.equal(memory.getItem("keep.me"), "x");
+  });
+
+  it("drops corrupt cache entries on read", () => {
+    memory.setItem("znw.v2.packs.ZINTEL1234.bad", "{not-json");
+    assert.equal(
+      cache.readApiCache("znw.v2.packs.ZINTEL1234.bad", 10 * 60 * 1000),
+      null,
+    );
+    assert.equal(memory.getItem("znw.v2.packs.ZINTEL1234.bad"), null);
   });
 });

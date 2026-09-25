@@ -5,6 +5,7 @@ import {
   formatCountdown,
   getCoinStoreTimerEndMs,
 } from "../utils/coinStoreTimer";
+import { weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
 
 export const TIMER_COIN_PRODUCT_ID = "coin_100";
 export const TIMER_COIN_FALLBACK_PRODUCT_ID = "coin_149";
@@ -437,15 +438,7 @@ export const CoinStoreMobile = ({
             plan={featuredWeeklyPlan}
             selected={selectedPackageId === featuredWeeklyPlan.id}
             onSelect={() =>
-              onPackSelect(
-                {
-                  id: featuredWeeklyPlan.id,
-                  coins: 0,
-                  price: featuredWeeklyPlan.price,
-                  name: featuredWeeklyPlan.plan_name,
-                },
-                0
-              )
+              onPackSelect(weeklyPlanToStorePack(featuredWeeklyPlan), 0)
             }
           />
         )}
@@ -459,15 +452,7 @@ export const CoinStoreMobile = ({
                 plan={basicWeeklyPlan}
                 selected={selectedPackageId === basicWeeklyPlan.id}
                 onSelect={() =>
-                  onPackSelect(
-                    {
-                      id: basicWeeklyPlan.id,
-                      coins: 0,
-                      price: basicWeeklyPlan.price,
-                      name: basicWeeklyPlan.plan_name,
-                    },
-                    1
-                  )
+                  onPackSelect(weeklyPlanToStorePack(basicWeeklyPlan), 1)
                 }
               />
             </div>

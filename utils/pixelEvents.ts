@@ -47,6 +47,8 @@ export type CoinPackForAnalytics = {
   coins: number;
   price: number;
   bonus_coins?: number;
+  is_subscription?: boolean;
+  is_limited_plan?: boolean;
 };
 
 export enum CoinPixelEventName {
@@ -238,8 +240,9 @@ function buildCoinPackSelectedEventInfo(
     price: pack.price,
     currency: CURRENCY,
     bonus_pct: false,
-    is_limited_plan: false,
+    is_limited_plan: pack.is_limited_plan === true,
     position,
+    ...(pack.is_subscription ? { is_subscription: true } : {}),
     ...(options?.selected_by_default ? { selected_by_default: true } : {}),
   };
 }
@@ -253,6 +256,7 @@ function buildCoinPaymentInitiatedEventInfo(
     price: pack.price,
     currency: CURRENCY,
     payment_gateway: PAYMENT_GATEWAY,
+    ...(pack.is_subscription ? { is_subscription: true } : {}),
   };
 }
 
@@ -390,6 +394,8 @@ export function sendCoinPaymentSuccess(
     amount: number;
     coin_pack_id: number;
     coin_quantity: number;
+    mandate_uuid?: string;
+    is_subscription?: boolean;
   },
 ): void {
   if (!ctx) return;
@@ -407,13 +413,19 @@ export function sendCoinPaymentSuccess(
     event_timestamp: eventTimestampUnixMs(),
     platform: ctx.platform,
     device_id: ctx.device_id,
+    ...(args.mandate_uuid ? { mandate_uuid: args.mandate_uuid } : {}),
+    ...(args.is_subscription ? { is_subscription: true } : {}),
   };
   sendCoinEvent(ctx, CoinPixelEventName.CoinPaymentSuccess, eventParams);
 }
 
 export function sendCoinPaymentFailed(
   ctx: ParsedCoinPixelContext | null,
-  args: { failure_reason?: string },
+  args: {
+    failure_reason?: string;
+    coin_pack_id?: number;
+    is_subscription?: boolean;
+  },
 ): void {
   if (!ctx) return;
   const eventParams: Record<string, unknown> = {
@@ -426,6 +438,8 @@ export function sendCoinPaymentFailed(
     event_timestamp: eventTimestampUnixMs(),
     platform: ctx.platform,
     device_id: ctx.device_id,
+    ...(args.coin_pack_id != null ? { coin_pack_id: args.coin_pack_id } : {}),
+    ...(args.is_subscription ? { is_subscription: true } : {}),
   };
   sendCoinEvent(ctx, CoinPixelEventName.CoinPaymentFailed, eventParams);
 }

@@ -17,6 +17,7 @@ import {
   isInSessionCoinPopupSurface,
   type CoinPurchaseSurface,
 } from "../utils/pixelEvents";
+import { weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
 
 export type QuickRechargePack = {
   id: number;
@@ -323,14 +324,7 @@ export const QuickRechargePopupBiffle = ({
             plan={featuredWeeklyPlan}
             selected={selectedPackageId === featuredWeeklyPlan.id}
             onSelect={() =>
-              onPackSelect(
-                {
-                  id: featuredWeeklyPlan.id,
-                  coins: featuredWeeklyPlan.coin_value ?? 0,
-                  price: featuredWeeklyPlan.price,
-                } as QuickRechargePack,
-                0,
-              )
+              onPackSelect(weeklyPlanToStorePack(featuredWeeklyPlan), 0)
             }
           />
         )}
@@ -348,14 +342,7 @@ export const QuickRechargePopupBiffle = ({
             plan={basicWeeklyPlan}
             selected={selectedPackageId === basicWeeklyPlan.id}
             onSelect={() =>
-              onPackSelect(
-                {
-                  id: basicWeeklyPlan.id,
-                  coins: basicWeeklyPlan.coin_value ?? 0,
-                  price: basicWeeklyPlan.price,
-                } as QuickRechargePack,
-                1,
-              )
+              onPackSelect(weeklyPlanToStorePack(basicWeeklyPlan), 1)
             }
           />
         )}

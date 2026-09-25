@@ -21,7 +21,6 @@ import { PaymentStatusPopup } from "./components/PaymentStatusPopup";
 import { PhoneOtpLoginScreen } from "./components/PhoneOtpLoginScreen";
 import {
   CoinStoreMobile,
-  getCoinPackStoreIndex,
   resolveTimerPack,
   TIMER_COIN_PRODUCT_ID,
   type CoinStorePack,
@@ -120,7 +119,6 @@ import {
   fetchMandateStatus,
   isMandateActive,
   isMandateFailure,
-  isMandateInitiated,
   MANDATE_STATUS_POLL_INTERVAL_MS,
 } from "./utils/mandateStatus";
 import {
@@ -130,6 +128,20 @@ import {
   type PaymentGateway,
 } from "./utils/paymentGateway";
 import type { CreateOrderPixelOptions as BaseCreateOrderPixelOptions } from "./utils/coinCheckoutOptions";
+import {
+  analyticsFlagsForStorePack,
+  enrichStorePackWithWeeklyPlan,
+  getVisibleCoinStorePacks,
+  getVisibleQuickRechargePacks,
+  toCoinPackForAnalytics,
+  weeklyPlanToStorePack,
+} from "./utils/coinStoreVisiblePacks";
+import {
+  clearTrackedMandate,
+  peekTrackedMandate,
+  saveTrackedMandate,
+  takeTrackedMandate,
+} from "./utils/trackedMandatePurchase";
 
 const FBRedirect = React.lazy(() => import("./pages/FbRedirect"));
 const About = React.lazy(() =>
@@ -219,6 +231,29 @@ type LastTrackedCoinPurchase = {
 };
 
 let lastTrackedCoinPurchaseRef: LastTrackedCoinPurchase | null = null;
+
+function fireDefaultCoinPackSelected(
+  pixelContext: ParsedCoinPixelContext | null,
+  pack: CoinStorePack,
+  visiblePacks: CoinStorePack[],
+  alreadySentRef: { current: boolean },
+  featuredWeeklyPlan: SubscriptionPlan | null,
+  basicWeeklyPlan: SubscriptionPlan | null,
+): void {
+  if (alreadySentRef.current || !pixelContext) return;
+  const index = visiblePacks.findIndex((p) => p.id === pack.id);
+  if (index < 0) return;
+  alreadySentRef.current = true;
+  sendCoinPackSelected(
+    pixelContext,
+    toCoinPackForAnalytics(
+      pack,
+      analyticsFlagsForStorePack(pack, featuredWeeklyPlan, basicWeeklyPlan),
+    ),
+    index,
+    { selected_by_default: true },
+  );
+}
 
 const COIN_PAYMENT_POLL_INTERVAL_MS = 5000;
 const COIN_PAYMENT_POLL_MAX_ATTEMPTS = 8;
@@ -1970,21 +2005,6 @@ const CoinsPage = ({
     setQuickRechargeHeaderPack(null);
   }, [location.search]);
 
-  useEffect(() => {
-    if (
-      !pixelContext ||
-      storeViewedSentRef.current ||
-      displayedPacks.length === 0
-    )
-      return;
-    storeViewedSentRef.current = true;
-    if (quickRecharge) {
-      sendQuickRechargePopupViewed(pixelContext, displayedPacks);
-    } else {
-      sendCoinStoreViewed(pixelContext, displayedPacks);
-    }
-  }, [pixelContext, displayedPacks, quickRecharge]);
-
   // Use token from query params if available, otherwise fall back to localStorage
   const token = resolvePageAuthToken(location.search, organisationId);
   const isLoggedIn = !!token;
@@ -2003,6 +2023,7 @@ const CoinsPage = ({
   } | null>(null);
   const [isPaymentInProgress, setIsPaymentInProgress] = useState(false);
   const paymentInProgressRef = useRef(false);
+  const mandatePollGenRef = useRef(0);
 
   const releasePaymentLock = useCallback(() => {
     paymentInProgressRef.current = false;
@@ -2168,8 +2189,154 @@ const CoinsPage = ({
     }
   }, [token, organisationId, timerPack, displayedPacks]);
 
+  const refreshMembershipFromApiRef = useRef(refreshMembershipFromApi);
+  refreshMembershipFromApiRef.current = refreshMembershipFromApi;
+
+  const pollMandateStatus = useCallback(
+    async (mandateId: number) => {
+      if (!Number.isFinite(mandateId)) return;
+      const gen = ++mandatePollGenRef.current;
+      const authToken = headerSafeToken(token);
+      for (let attempt = 0; attempt < 12; attempt++) {
+        if (attempt > 0) {
+          await new Promise((resolve) =>
+            window.setTimeout(resolve, MANDATE_STATUS_POLL_INTERVAL_MS),
+          );
+        }
+        if (gen !== mandatePollGenRef.current) return;
+        try {
+          const result = await fetchMandateStatus({
+            host: HOST,
+            mandateId,
+            authToken,
+            organisationId,
+          });
+          if (gen !== mandatePollGenRef.current) return;
+          if (isMandateActive(result.mandate_state)) {
+            const ref = takeTrackedMandate(mandateId);
+            if (ref) {
+              const mandateUuid = result.mandate_uuid || ref.mandateUuid;
+              sendCoinPaymentSuccess(ref.pixelContext, {
+                order_id: mandateUuid || String(result.id),
+                transaction_id: mandateUuid || String(result.id),
+                amount: ref.amount,
+                coin_pack_id: ref.coinPackId,
+                coin_quantity: ref.coinQuantity,
+                ...(mandateUuid ? { mandate_uuid: mandateUuid } : {}),
+                is_subscription: true,
+              });
+            }
+            showPaymentStatusCallback?.("SUCCESS");
+            await refreshMembershipFromApiRef.current();
+            return;
+          }
+          if (isMandateFailure(result.mandate_state)) {
+            const ref = takeTrackedMandate(mandateId);
+            if (ref) {
+              sendCoinPaymentFailed(ref.pixelContext, {
+                failure_reason: result.mandate_state,
+                coin_pack_id: ref.coinPackId,
+                is_subscription: true,
+              });
+            }
+            showPaymentStatusCallback?.("FAILED");
+            return;
+          }
+        } catch {
+          // Transient error, keep polling
+        }
+      }
+      if (gen !== mandatePollGenRef.current) return;
+      // Keep session tracking so a later resume can still close the funnel.
+      showPaymentStatusCallback?.("PENDING");
+    },
+    [token, organisationId],
+  );
+
   useEffect(() => {
-    if (membershipLoading || displayedPacks.length === 0) return;
+    const resume = () => {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState === "hidden"
+      ) {
+        return;
+      }
+      const ref = peekTrackedMandate();
+      if (ref) void pollMandateStatus(ref.mandateId);
+    };
+    resume();
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("focus", resume);
+    window.addEventListener("pageshow", resume);
+    return () => {
+      mandatePollGenRef.current += 1;
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("focus", resume);
+      window.removeEventListener("pageshow", resume);
+    };
+  }, [pollMandateStatus]);
+
+  const visibleAnalyticsPacks = useMemo(
+    () =>
+      quickRecharge
+        ? getVisibleQuickRechargePacks({
+            isMember,
+            featuredWeeklyPlan,
+            basicWeeklyPlan,
+            timerPack,
+            micropacks: displayedPacks,
+          })
+        : getVisibleCoinStorePacks({
+            isMember,
+            featuredWeeklyPlan,
+            basicWeeklyPlan,
+            timerPack,
+            exclusiveDeals,
+            topPlans,
+          }),
+    [
+      quickRecharge,
+      isMember,
+      featuredWeeklyPlan,
+      basicWeeklyPlan,
+      timerPack,
+      displayedPacks,
+      exclusiveDeals,
+      topPlans,
+    ],
+  );
+
+  useEffect(() => {
+    if (
+      !pixelContext ||
+      storeViewedSentRef.current ||
+      membershipLoading ||
+      coinPacksLoading
+    ) {
+      return;
+    }
+    if (visibleAnalyticsPacks.length === 0) return;
+    storeViewedSentRef.current = true;
+    const packs = visibleAnalyticsPacks.map(toCoinPackForAnalytics);
+    if (quickRecharge) {
+      sendQuickRechargePopupViewed(pixelContext, packs);
+    } else {
+      sendCoinStoreViewed(pixelContext, packs);
+    }
+  }, [
+    pixelContext,
+    membershipLoading,
+    coinPacksLoading,
+    visibleAnalyticsPacks,
+    quickRecharge,
+  ]);
+
+  useEffect(() => {
+    const hasAnyPack =
+      displayedPacks.length > 0 ||
+      !!timerPack ||
+      (!isMember && !!(featuredWeeklyPlan || basicWeeklyPlan));
+    if (membershipLoading || coinPacksLoading || !hasAnyPack) return;
 
     if (quickRecharge) {
       if (
@@ -2198,16 +2365,25 @@ const CoinsPage = ({
               )
             : null);
         if (recommended) {
-          setSelectedPackage({
+          const initial: CoinStorePack = {
             id: recommended.id,
             coins: recommended.coins,
             price: recommended.price,
             name: recommended.name,
-          });
+          };
+          setSelectedPackage(initial);
           setQuickRechargeHeaderPack({
             coins: recommended.coins,
             price: recommended.price,
           });
+          fireDefaultCoinPackSelected(
+            pixelContext,
+            initial,
+            visibleAnalyticsPacks,
+            defaultPackSelectedRef,
+            featuredWeeklyPlan,
+            basicWeeklyPlan,
+          );
           return;
         }
       }
@@ -2228,17 +2404,20 @@ const CoinsPage = ({
               price: inCallPack.price,
             });
           }
+          fireDefaultCoinPackSelected(
+            pixelContext,
+            inCallPack,
+            visibleAnalyticsPacks,
+            defaultPackSelectedRef,
+            featuredWeeklyPlan,
+            basicWeeklyPlan,
+          );
           return;
         }
       }
 
       if (!isMember && featuredWeeklyPlan) {
-        const initial = {
-          id: featuredWeeklyPlan.id,
-          coins: featuredWeeklyPlan.coin_value ?? 0,
-          price: featuredWeeklyPlan.price,
-          name: featuredWeeklyPlan.plan_name,
-        };
+        const initial = weeklyPlanToStorePack(featuredWeeklyPlan);
         setSelectedPackage((prev) => prev ?? initial);
         if (!quickRechargeHeaderLockedRef.current) {
           if (isInSessionCoinPopupSurface(quickRechargeSurface)) {
@@ -2246,6 +2425,16 @@ const CoinsPage = ({
           }
           setQuickRechargeHeaderPack((prev) =>
             prev ?? { coins: initial.coins, price: initial.price },
+          );
+        }
+        if (!quickRechargeManualSelectRef.current) {
+          fireDefaultCoinPackSelected(
+            pixelContext,
+            initial,
+            visibleAnalyticsPacks,
+            defaultPackSelectedRef,
+            featuredWeeklyPlan,
+            basicWeeklyPlan,
           );
         }
       } else if (isMember && timerPack) {
@@ -2256,6 +2445,16 @@ const CoinsPage = ({
           }
           setQuickRechargeHeaderPack((prev) =>
             prev ?? { coins: timerPack.coins, price: timerPack.price },
+          );
+        }
+        if (!quickRechargeManualSelectRef.current) {
+          fireDefaultCoinPackSelected(
+            pixelContext,
+            timerPack,
+            visibleAnalyticsPacks,
+            defaultPackSelectedRef,
+            featuredWeeklyPlan,
+            basicWeeklyPlan,
           );
         }
       } else if (displayedPacks[0]) {
@@ -2269,32 +2468,31 @@ const CoinsPage = ({
             prev ?? { coins: initial.coins, price: initial.price },
           );
         }
+        if (!quickRechargeManualSelectRef.current) {
+          fireDefaultCoinPackSelected(
+            pixelContext,
+            initial,
+            visibleAnalyticsPacks,
+            defaultPackSelectedRef,
+            featuredWeeklyPlan,
+            basicWeeklyPlan,
+          );
+        }
       }
       return;
     }
 
     // For non-members, default select the featured weekly plan
     if (!isMember && featuredWeeklyPlan) {
-      setSelectedPackage((prev) =>
-        prev ?? {
-          id: featuredWeeklyPlan.id,
-          coins: 0,
-          price: featuredWeeklyPlan.price,
-          name: featuredWeeklyPlan.plan_name,
-        },
-      );
-
-      if (defaultPackSelectedRef.current || !pixelContext) return;
-      defaultPackSelectedRef.current = true;
-      sendCoinPackSelected(
+      const initial = weeklyPlanToStorePack(featuredWeeklyPlan);
+      setSelectedPackage((prev) => prev ?? initial);
+      fireDefaultCoinPackSelected(
         pixelContext,
-        {
-          id: featuredWeeklyPlan.id,
-          coins: featuredWeeklyPlan.coin_value ?? 0,
-          price: featuredWeeklyPlan.price,
-        },
-        0,
-        { selected_by_default: true },
+        initial,
+        visibleAnalyticsPacks,
+        defaultPackSelectedRef,
+        featuredWeeklyPlan,
+        basicWeeklyPlan,
       );
       return;
     }
@@ -2307,33 +2505,28 @@ const CoinsPage = ({
       if (!coin100Pack) return;
 
       setSelectedPackage((prev) => prev ?? coin100Pack);
-
-      if (defaultPackSelectedRef.current || !pixelContext) return;
-      defaultPackSelectedRef.current = true;
-
-      const index = getCoinPackStoreIndex(
-        coin100Pack.id,
-        timerPack,
-        exclusiveDeals,
-        topPlans,
+      fireDefaultCoinPackSelected(
+        pixelContext,
+        coin100Pack,
+        visibleAnalyticsPacks,
+        defaultPackSelectedRef,
+        featuredWeeklyPlan,
+        basicWeeklyPlan,
       );
-      sendCoinPackSelected(pixelContext, coin100Pack, index, {
-        selected_by_default: true,
-      });
     }
   }, [
     membershipLoading,
+    coinPacksLoading,
     quickRecharge,
     quickRechargeSurface,
     quickRechargeCallContext,
     displayedPacks,
     pixelContext,
     timerPack,
-    exclusiveDeals,
-    topPlans,
     isMember,
     featuredWeeklyPlan,
     basicWeeklyPlan,
+    visibleAnalyticsPacks,
   ]);
 
   useEffect(() => {
@@ -2351,8 +2544,27 @@ const CoinsPage = ({
     if (quickRecharge) {
       quickRechargeManualSelectRef.current = true;
     }
-    setSelectedPackage(pkg);
-    sendCoinPackSelected(pixelContext, pkg, index);
+    const enriched = enrichStorePackWithWeeklyPlan(
+      pkg,
+      featuredWeeklyPlan,
+      basicWeeklyPlan,
+    );
+    setSelectedPackage(enriched);
+    const resolvedIndex = visibleAnalyticsPacks.findIndex(
+      (p) => p.id === enriched.id,
+    );
+    sendCoinPackSelected(
+      pixelContext,
+      toCoinPackForAnalytics(
+        enriched,
+        analyticsFlagsForStorePack(
+          enriched,
+          featuredWeeklyPlan,
+          basicWeeklyPlan,
+        ),
+      ),
+      resolvedIndex >= 0 ? resolvedIndex : index,
+    );
   };
 
   const handleDesktopRecharge = async (pkg: CoinStorePack, index: number) => {
@@ -2450,6 +2662,42 @@ const CoinsPage = ({
       setShowLogin(true);
       return;
     }
+    const source =
+      selectedPackage?.id === planId
+        ? enrichStorePackWithWeeklyPlan(
+            selectedPackage,
+            featuredWeeklyPlan,
+            basicWeeklyPlan,
+          )
+        : featuredWeeklyPlan?.id === planId
+          ? weeklyPlanToStorePack(featuredWeeklyPlan)
+          : basicWeeklyPlan?.id === planId
+            ? weeklyPlanToStorePack(basicWeeklyPlan)
+            : null;
+    const analyticsPack = source
+      ? toCoinPackForAnalytics(
+          source,
+          analyticsFlagsForStorePack(
+            source,
+            featuredWeeklyPlan,
+            basicWeeklyPlan,
+          ),
+        )
+      : null;
+    if (analyticsPack) {
+      sendCoinPaymentInitiated(pixelContext, analyticsPack);
+    }
+    const failArgs = (failure_reason: string) => ({
+      failure_reason,
+      ...(analyticsPack
+        ? {
+            coin_pack_id: analyticsPack.id,
+            ...(analyticsPack.is_subscription
+              ? { is_subscription: true as const }
+              : {}),
+          }
+        : {}),
+    });
     try {
       const authToken = headerSafeToken(token);
       const targetApp =
@@ -2478,16 +2726,45 @@ const CoinsPage = ({
       if (!r.ok || !data.success || !data.data) {
         const errMsg = data.error_message ?? "Failed to initiate subscription";
         console.error("[CoinStore] Mandate initiation failed:", errMsg);
+        sendCoinPaymentFailed(pixelContext, failArgs(errMsg));
         showPaymentStatusCallback?.("FAILED");
         return;
       }
       const mandateData = data.data;
+      const mandateId = Number(mandateData.id);
       const redirectUrl = resolveMandateRedirectUrl(mandateData);
       console.log("[CoinStore] Mandate redirect URL:", redirectUrl);
-      if (redirectUrl) {
-        // Post to React Native WebView if available (native app handles intent)
-        const w = window;
-        if (w.ReactNativeWebView?.postMessage) {
+      if (!redirectUrl) {
+        console.error(
+          "[CoinStore] No redirect URL in mandate response",
+          mandateData,
+        );
+        sendCoinPaymentFailed(
+          pixelContext,
+          failArgs("No redirect URL in mandate response"),
+        );
+        clearTrackedMandate();
+        showPaymentStatusCallback?.("FAILED");
+        return;
+      }
+      if (analyticsPack && pixelContext && Number.isFinite(mandateId)) {
+        const mandateUuid =
+          mandateData.mandate_uuid != null
+            ? String(mandateData.mandate_uuid)
+            : "";
+        saveTrackedMandate({
+          mandateId,
+          mandateUuid,
+          coinPackId: analyticsPack.id,
+          amount: analyticsPack.price,
+          coinQuantity: analyticsPack.coins,
+          isSubscription: true,
+          pixelContext,
+        });
+      }
+      const w = window;
+      if (w.ReactNativeWebView?.postMessage) {
+        try {
           w.ReactNativeWebView.postMessage(
             JSON.stringify({
               mandateId: String(mandateData.id),
@@ -2495,53 +2772,26 @@ const CoinsPage = ({
               redirectUrl,
             }),
           );
+        } catch {
+          // Native bridge unavailable — still open UPI below
         }
-        // Direct navigation — same approach as Subscriptions page
-        window.location.href = redirectUrl;
-        // Start polling for mandate status
-        void pollMandateStatus(mandateData.id);
-      } else {
-        console.error(
-          "[CoinStore] No redirect URL in mandate response",
-          mandateData,
-        );
-        showPaymentStatusCallback?.("FAILED");
+      }
+      // Intent/UPI via hidden anchor keeps this document alive so polling can finish.
+      openMandateRedirectUrl(redirectUrl, targetApp);
+      if (Number.isFinite(mandateId)) {
+        void pollMandateStatus(mandateId);
       }
     } catch (e) {
       console.error("[CoinStore] Mandate initiation error:", e);
+      sendCoinPaymentFailed(
+        pixelContext,
+        failArgs(
+          e instanceof Error ? e.message : "Mandate initiation error",
+        ),
+      );
+      clearTrackedMandate();
       showPaymentStatusCallback?.("FAILED");
     }
-  };
-
-  const pollMandateStatus = async (mandateId: number) => {
-    const authToken = headerSafeToken(token);
-    for (let attempt = 0; attempt < 12; attempt++) {
-      await new Promise((resolve) =>
-        window.setTimeout(resolve, MANDATE_STATUS_POLL_INTERVAL_MS),
-      );
-      try {
-        const result = await fetchMandateStatus({
-          host: HOST,
-          mandateId,
-          authToken,
-          organisationId,
-        });
-        if (isMandateActive(result.mandate_state)) {
-          showPaymentStatusCallback?.("SUCCESS");
-          await refreshMembershipFromApi();
-          return;
-        }
-        if (isMandateFailure(result.mandate_state)) {
-          showPaymentStatusCallback?.("FAILED");
-          return;
-        }
-        // Still INITIATED — keep polling
-      } catch {
-        // Transient error, keep polling
-      }
-    }
-    // Timed out
-    showPaymentStatusCallback?.("PENDING");
   };
 
   if (quickRecharge) {

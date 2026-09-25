@@ -8,6 +8,7 @@ import {
   formatCountdown,
   getCoinStoreTimerEndMs,
 } from "../utils/coinStoreTimer";
+import { weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
 
 type CoinStoreMobileBiffleProps = {
   timerPack: CoinStorePack | null;
@@ -346,15 +347,7 @@ export const CoinStoreMobileBiffle = ({
                 plan={featuredWeeklyPlan}
                 selected={selectedPackageId === featuredWeeklyPlan.id}
                 onSelect={() =>
-                  onPackSelect(
-                    {
-                      id: featuredWeeklyPlan.id,
-                      coins: 0,
-                      price: featuredWeeklyPlan.price,
-                      name: featuredWeeklyPlan.plan_name,
-                    },
-                    0,
-                  )
+                  onPackSelect(weeklyPlanToStorePack(featuredWeeklyPlan), 0)
                 }
               />
             )}
@@ -363,15 +356,7 @@ export const CoinStoreMobileBiffle = ({
                 plan={basicWeeklyPlan}
                 selected={selectedPackageId === basicWeeklyPlan.id}
                 onSelect={() =>
-                  onPackSelect(
-                    {
-                      id: basicWeeklyPlan.id,
-                      coins: 0,
-                      price: basicWeeklyPlan.price,
-                      name: basicWeeklyPlan.plan_name,
-                    },
-                    1,
-                  )
+                  onPackSelect(weeklyPlanToStorePack(basicWeeklyPlan), 1)
                 }
               />
             )}

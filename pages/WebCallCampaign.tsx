@@ -34,6 +34,23 @@ import { pickWebCallPreviewCreator } from "../utils/webCallPreviewCreators";
 
 const BIFFLE_GRADIENT = "linear-gradient(90deg, #7c3aed, #ec4899)";
 
+type PaywallExitSheet = "none" | "guilt" | "install";
+
+function nextPaywallExitSheet(sheet: PaywallExitSheet): PaywallExitSheet {
+  switch (sheet) {
+    case "none":
+      return "guilt";
+    case "guilt":
+      return "install";
+    case "install":
+      return "install";
+    default: {
+      const exhaustive: never = sheet;
+      return exhaustive;
+    }
+  }
+}
+
 function WebCallRouteWait({
   actionLabel,
   onAction,
@@ -93,8 +110,8 @@ export function WebCallCampaign({
       : stepParam === "install"
         ? "install"
         : "incoming";
-  const [guilt, setGuilt] = useState(
-    () => searchParams.get("nudge") === "1",
+  const [exitSheet, setExitSheet] = useState<PaywallExitSheet>(() =>
+    searchParams.get("nudge") === "1" ? "guilt" : "none",
   );
   const [routeError, setRouteError] = useState(false);
   const [offer, setOffer] = useState<WebCallOffer | null>(null);
@@ -163,7 +180,8 @@ export function WebCallCampaign({
   ]);
 
   useEffect(() => {
-    if (step !== "paywall" || previewOffer || !token || guilt) return;
+    if (step !== "paywall" || previewOffer || !token || exitSheet !== "none")
+      return;
     let cancelled = false;
     void nextLoggedInWebCallStep({
       organisationId,
@@ -181,7 +199,7 @@ export function WebCallCampaign({
     step,
     previewOffer,
     token,
-    guilt,
+    exitSheet,
     organisationId,
     location.search,
     navigate,
@@ -192,15 +210,13 @@ export function WebCallCampaign({
     if (step !== "incoming") return;
     if (hideFakeTrigger) return;
     window.history.pushState({ webCallGuilt: true }, "");
-    const onPop = () => setGuilt(true);
+    const onPop = () => setExitSheet("guilt");
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [step, hideFakeTrigger]);
 
-  const guiltRef = React.useRef(guilt);
-  guiltRef.current = guilt;
-  const searchRef = React.useRef(location.search);
-  searchRef.current = location.search;
+  const exitSheetRef = React.useRef(exitSheet);
+  exitSheetRef.current = exitSheet;
   const payingRef = React.useRef(paying);
   payingRef.current = paying;
   const wasPayingRef = React.useRef(false);
@@ -210,17 +226,13 @@ export function WebCallCampaign({
     return trapBrowserBack(
       () => {
         if (payingRef.current) return;
-        if (guiltRef.current) {
-          setGuilt(false);
-          navigate(webCallInstallPath(searchRef.current), { replace: true });
-          return;
-        }
-        guiltRef.current = true;
-        setGuilt(true);
+        const next = nextPaywallExitSheet(exitSheetRef.current);
+        exitSheetRef.current = next;
+        setExitSheet(next);
       },
       { isPaused: () => payingRef.current },
     );
-  }, [step, token, navigate]);
+  }, [step, token]);
 
   useEffect(() => {
     if (step !== "paywall" || !token) return;
@@ -277,7 +289,7 @@ export function WebCallCampaign({
     if (step !== "paywall" || previewOffer || !token) return;
     if (!offer?.already_claimed) return;
     if (webCallOfferPaid()) return;
-    navigate(webCallInstallPath(location.search), { replace: true });
+    setExitSheet("install");
   }, [offer, step, previewOffer, token, location.search, navigate]);
 
   const startLogin = () => {
@@ -302,6 +314,10 @@ export function WebCallCampaign({
     if (!authToken) {
       persistWebCampaignContextFromSearch(organisationId, location.search);
       requireWebCallLogin(location.pathname, location.search, setShowLogin);
+      return;
+    }
+    if (step === "paywall") {
+      setExitSheet("install");
       return;
     }
     navigate(webCallInstallPath(location.search));
@@ -376,7 +392,7 @@ export function WebCallCampaign({
           photoUrl={preview.profilePicUrl}
           onAccept={startLogin}
         />
-        {guilt ? (
+        {exitSheet === "guilt" ? (
           <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-4">
             <div className="w-full max-w-md rounded-2xl bg-white p-5 text-left">
               <p className="text-lg font-semibold text-neutral-900">
@@ -388,7 +404,7 @@ export function WebCallCampaign({
               <button
                 type="button"
                 onClick={() => {
-                  setGuilt(false);
+                  setExitSheet("none");
                   startLogin();
                 }}
                 className="mt-4 w-full rounded-full py-3 text-sm font-semibold text-white"
@@ -450,20 +466,28 @@ export function WebCallCampaign({
         onPay={() => void pay()}
         onStartCall={goToInstall}
       />
-      {guilt ? (
+      {exitSheet === "guilt" ? (
         <WebCallGuiltNudge
           amountLabel={amount}
           posterUrl={preview.profilePicUrl}
           stayLabel={offer?.already_claimed ? "Install the app" : "Recharge Now"}
           onStay={() => {
-            setGuilt(false);
             if (offer?.already_claimed) {
-              goToInstall();
+              setExitSheet("install");
               return;
             }
+            setExitSheet("none");
             void pay();
           }}
         />
+      ) : null}
+      {exitSheet === "install" ? (
+        <div className="fixed inset-0 z-50">
+          <WebCallInstallNudge
+            organisationId={organisationId}
+            variant="purchased"
+          />
+        </div>
       ) : null}
     </>
   );

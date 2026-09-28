@@ -772,13 +772,8 @@ export function WebCallRoom({
   }
 
   if (preview === "ended") {
-    const shell = isBiffle ? "bg-white text-gray-900" : "bg-[#162a44] text-white";
     return (
-      <div className={`flex min-h-dvh flex-col items-center justify-center px-6 ${shell}`}>
-        <div className="w-full max-w-md">
-          <WebCallInstallNudge organisationId={organisationId} variant="ended" />
-        </div>
-      </div>
+      <WebCallInstallNudge organisationId={organisationId} variant="ended" />
     );
   }
 
@@ -865,16 +860,11 @@ export function WebCallRoom({
   }
 
   if (installVariant) {
-    const shell = isBiffle ? "bg-white text-gray-900" : "bg-[#162a44] text-white";
     return (
-      <div className={`flex min-h-dvh flex-col items-center justify-center px-6 ${shell}`}>
-        <div className="w-full max-w-md">
-          <WebCallInstallNudge
-            organisationId={organisationId}
-            variant={installVariant}
-          />
-        </div>
-      </div>
+      <WebCallInstallNudge
+        organisationId={organisationId}
+        variant={installVariant}
+      />
     );
   }
 

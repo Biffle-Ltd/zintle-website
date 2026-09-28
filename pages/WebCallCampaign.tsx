@@ -363,14 +363,10 @@ export function WebCallCampaign({
       );
     }
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-white px-6">
-        <div className="w-full max-w-md">
-          <WebCallInstallNudge
-            organisationId={organisationId}
-            variant="purchased"
-          />
-        </div>
-      </div>
+      <WebCallInstallNudge
+        organisationId={organisationId}
+        variant="purchased"
+      />
     );
   }
 

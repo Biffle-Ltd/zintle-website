@@ -138,14 +138,10 @@ export function WebCallIncoming({
 
   if (phase === "empty") {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-white px-6">
-        <div className="w-full max-w-md">
-          <WebCallInstallNudge
-            organisationId={organisationId}
-            variant="unconnected"
-          />
-        </div>
-      </div>
+      <WebCallInstallNudge
+        organisationId={organisationId}
+        variant="unconnected"
+      />
     );
   }
 

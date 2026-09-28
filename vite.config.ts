@@ -15,14 +15,12 @@ function inlineWebviewBoot(apiHost: string): Plugin {
     if (source.includes("</script")) {
       throw new Error("znw-boot.js must not contain </script");
     }
-    const next = source.replace(
-      /var HOST = "[^"]*";/,
-      `var HOST = ${JSON.stringify(apiHost)};`,
-    );
-    if (next === source) {
+    const hostLine = /var HOST = "[^"]*";/;
+    if (!hostLine.test(source)) {
       throw new Error('znw-boot.js missing `var HOST = "..."` to inject');
     }
-    return next;
+    // Identity replace is success: znw-boot already has this host.
+    return source.replace(hostLine, `var HOST = ${JSON.stringify(apiHost)};`);
   };
 
   return {

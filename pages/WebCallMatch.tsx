@@ -188,7 +188,7 @@ export function WebCallGender({
         How do you identify yourself?
       </CampaignOnboardingTitle>
       <div
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain"
         role="radiogroup"
         aria-label="How do you identify yourself?"
       >

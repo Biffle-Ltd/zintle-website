@@ -25,7 +25,7 @@ export function WebCallAutoCallTrigger({
   const showPhoto = Boolean(photoUrl) && !photoFailed;
 
   return (
-    <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-white px-4 py-10">
+    <div className="relative flex h-dvh max-h-dvh items-center justify-center overflow-hidden overscroll-none bg-white px-4 py-10">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-[-45%] rotate-[-18deg]"

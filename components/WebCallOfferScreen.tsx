@@ -19,7 +19,7 @@ function OfferHero() {
       alt="Welcome offer pack"
       width={456}
       height={456}
-      className="block h-auto w-full"
+      className="block h-auto max-h-[min(42svh,280px)] w-full object-contain"
     />
   );
 }
@@ -46,7 +46,7 @@ export function WebCallOfferScreen({
   const canPay = !loading && !packMissing && !paying;
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden font-figtree text-white">
+    <div className="relative flex h-dvh max-h-dvh flex-col overflow-hidden overscroll-none font-figtree text-white">
       <div
         className="absolute inset-0"
         style={{ background: SCREEN_GRADIENT }}
@@ -65,7 +65,7 @@ export function WebCallOfferScreen({
         }}
       />
 
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center pt-[max(0.25rem,env(safe-area-inset-top))]">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center overflow-hidden pt-[max(0.25rem,env(safe-area-inset-top))]">
         <div className="flex w-full max-w-md flex-1 flex-col items-center justify-center text-center">
           <OfferHero />
           <div className="px-6">

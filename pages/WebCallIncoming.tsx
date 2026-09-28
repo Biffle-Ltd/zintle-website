@@ -121,7 +121,7 @@ export function WebCallIncoming({
 
   if (!token) {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center bg-white px-6">
+      <div className="flex h-dvh max-h-dvh flex-col items-center justify-center overflow-hidden overscroll-none bg-white px-6">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-700" />
         <button
           type="button"

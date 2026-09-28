@@ -41,7 +41,7 @@ function WebCallRouteWait({
   onAction?: () => void;
 }) {
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-white px-6">
+    <div className="flex h-dvh max-h-dvh flex-col items-center justify-center overflow-hidden overscroll-none bg-white px-6">
       <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-700" />
       {actionLabel && onAction ? (
         <button
@@ -95,6 +95,7 @@ export function WebCallCampaign({
   const [guilt, setGuilt] = useState(
     () => searchParams.get("nudge") === "1",
   );
+  const [routeError, setRouteError] = useState(false);
   const [offer, setOffer] = useState<WebCallOffer | null>(null);
   const [offerReady, setOfferReady] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -111,22 +112,32 @@ export function WebCallCampaign({
   }, [location.pathname, location.search, navigate]);
 
   useEffect(() => {
-    if (step === "paywall" || previewOffer) return;
+    if (step === "paywall" || step === "install" || previewOffer) return;
     const authToken = resolveWebCallToken(organisationId, location.search);
     if (!authToken) return;
     let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (!cancelled) setRouteError(true);
+    }, 12000);
     void nextLoggedInWebCallStep({
       organisationId,
       authToken,
       coinPackId: context.coinPackId,
       search: location.search,
-    }).then((next) => {
-      if (cancelled) return;
-      if (step === "install" && next === "install") return;
-      navigate(webCallPathForStep(next, location.search), { replace: true });
-    });
+    })
+      .then((next) => {
+        if (cancelled) return;
+        navigate(webCallPathForStep(next, location.search), { replace: true });
+      })
+      .catch(() => {
+        if (!cancelled) setRouteError(true);
+      })
+      .finally(() => {
+        window.clearTimeout(timer);
+      });
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [
     step,
@@ -151,7 +162,7 @@ export function WebCallCampaign({
   ]);
 
   useEffect(() => {
-    if (step !== "paywall" || previewOffer || !token) return;
+    if (step !== "paywall" || previewOffer || !token || guilt) return;
     let cancelled = false;
     void nextLoggedInWebCallStep({
       organisationId,
@@ -169,6 +180,7 @@ export function WebCallCampaign({
     step,
     previewOffer,
     token,
+    guilt,
     organisationId,
     location.search,
     navigate,
@@ -184,11 +196,27 @@ export function WebCallCampaign({
     return () => window.removeEventListener("popstate", onPop);
   }, [step, hideFakeTrigger]);
 
+  const guiltRef = React.useRef(guilt);
+  guiltRef.current = guilt;
+  const searchRef = React.useRef(location.search);
+  searchRef.current = location.search;
+
   useEffect(() => {
     if (step !== "paywall") return;
     if (paying || !token) return;
-    return trapBrowserBack(() => setGuilt(true));
-  }, [step, paying, token]);
+    return trapBrowserBack(() => {
+      if (guiltRef.current) {
+        const dest = webCallInstallPath(searchRef.current);
+        setGuilt(false);
+        window.setTimeout(() => {
+          navigate(dest, { replace: true });
+        }, 0);
+        return false;
+      }
+      guiltRef.current = true;
+      setGuilt(true);
+    });
+  }, [step, paying, token, navigate]);
 
   useEffect(() => {
     if (step !== "paywall") return;
@@ -312,8 +340,10 @@ export function WebCallCampaign({
     if (hideFakeTrigger) {
       return (
         <WebCallRouteWait
-          actionLabel={token ? undefined : "Log in to continue"}
-          onAction={token ? undefined : startLogin}
+          actionLabel={
+            token && !routeError ? undefined : "Log in to continue"
+          }
+          onAction={token && !routeError ? undefined : startLogin}
         />
       );
     }

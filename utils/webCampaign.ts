@@ -11,6 +11,45 @@ export const WEB_CAMPAIGN_STORAGE_KEY = "zintle_web_campaign_context";
 
 export type WebLoginMode = "phone" | "google" | "both";
 
+export type WebCallLoginOption = "A" | "B";
+
+const WEB_CALL_LOGIN_OPTION_KEY = "zintle_web_call_login_option";
+
+function optionFromSearch(search: string): WebCallLoginOption | null {
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search,
+  );
+  const raw = (params.get("option") || "").trim().toUpperCase();
+  if (raw === "A" || raw === "B") return raw;
+  return null;
+}
+
+export function persistWebCallLoginOption(search: string): void {
+  const option = optionFromSearch(search);
+  if (option) sessionStorage.setItem(WEB_CALL_LOGIN_OPTION_KEY, option);
+}
+
+/** Ad flag: A = phone + Google, B = Google only. Defaults to A. */
+export function readWebCallLoginOption(search?: string): WebCallLoginOption {
+  if (search != null) {
+    const fromSearch = optionFromSearch(search);
+    if (fromSearch) return fromSearch;
+  }
+  if (typeof window !== "undefined") {
+    const fromWindow = optionFromSearch(window.location.search);
+    if (fromWindow) return fromWindow;
+    const stored = sessionStorage.getItem(WEB_CALL_LOGIN_OPTION_KEY);
+    if (stored === "A" || stored === "B") return stored;
+    const pending = sessionStorage.getItem(ZINTLE_POST_LOGIN_REDIRECT_KEY) || "";
+    const q = pending.indexOf("?");
+    if (q >= 0) {
+      const fromPending = optionFromSearch(pending.slice(q));
+      if (fromPending) return fromPending;
+    }
+  }
+  return "A";
+}
+
 export type WebCampaignContext = {
   campaignId: string | null;
   coinPackId: number | null;
@@ -81,6 +120,7 @@ export function persistWebCampaignContextFromSearch(
     fbclid,
   };
   persistWebCampaignContext(ctx);
+  persistWebCallLoginOption(search);
   return ctx;
 }
 
@@ -107,9 +147,10 @@ export function isWhaleLoginPath(): boolean {
   );
 }
 
-/** Phone-only off-campaign. On m-web call, Google + phone. */
+/** Phone-only off-campaign. On m-web call, option A = both, B = Google only. */
 export function whaleLoginMode(): WebLoginMode {
-  return isWhaleLoginPath() ? "both" : "phone";
+  if (!isWhaleLoginPath()) return "phone";
+  return readWebCallLoginOption() === "B" ? "google" : "both";
 }
 
 export function buildWebCallPath(search: string, step?: string): string {

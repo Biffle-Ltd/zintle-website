@@ -28,6 +28,31 @@ html, body {
   background: var(--navy-deep);
 }
 
+/* Campaign / m-web call: lock the document so iOS rubber-band does not
+   reveal the navy html/body bar under the screen. */
+html.znw-campaign-lock {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #fff;
+}
+html.znw-campaign-lock body {
+  height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #fff;
+}
+html.znw-campaign-lock #root {
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100dvh !important;
+  overflow: hidden;
+}
+html.znw-campaign-lock #znw-bg {
+  display: none;
+}
+
 body {
   color: var(--text);
   font-family: 'Inter', sans-serif;

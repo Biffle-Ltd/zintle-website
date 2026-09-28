@@ -11,7 +11,7 @@ export function CampaignOnboardingShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-dvh max-h-dvh flex-col bg-white font-sans antialiased">
+    <div className="flex h-dvh max-h-dvh flex-col overflow-hidden overscroll-none bg-white font-sans antialiased">
       {children}
     </div>
   );
@@ -132,7 +132,7 @@ export function CampaignLanguageList({
 }) {
   return (
     <div
-      className="min-h-0 flex-1 space-y-3 overflow-y-auto"
+      className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain"
       role="radiogroup"
       aria-label="Languages You Speak"
     >

@@ -18,6 +18,7 @@ import {
 import {
   isWhaleLoginPath,
   persistWebCampaignContextFromSearch,
+  persistWebCallLoginOption,
   saveWebCampaignLink,
   whaleLoginMode,
   type WebLoginMode,
@@ -175,6 +176,7 @@ export function PhoneOtpLoginScreen({
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || "";
 
   useEffect(() => {
+    persistWebCallLoginOption(window.location.search);
     setLoginMode(whaleLoginMode());
   }, []);
 
@@ -451,7 +453,7 @@ export function PhoneOtpLoginScreen({
 
   return (
     <div
-      className={`fixed inset-0 z-[300] flex flex-col h-dvh max-h-dvh overflow-hidden touch-manipulation ${shellClass}`}
+      className={`fixed inset-0 z-[300] flex flex-col h-dvh max-h-dvh overflow-hidden overscroll-none touch-manipulation ${shellClass}`}
     >
       <button
         type="button"

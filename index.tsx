@@ -69,6 +69,10 @@ import {
   canonicalizeWebCallPostLoginPath,
   webCallPathAfterLogin,
 } from "./utils/webCall";
+import { persistWebCallLoginOption } from "./utils/webCampaign";
+import { clearChunkReloadFlag, lazyWithRetry } from "./utils/lazyWithRetry";
+import { AppErrorBoundary } from "./components/AppErrorBoundary";
+import { WebCallCampaign } from "./pages/WebCallCampaign";
 import { navigateAfterCampaignLoginGate } from "./utils/campaignLanguageGate";
 import {
   isCampaignPostLoginRedirect,
@@ -147,86 +151,81 @@ import {
   takeTrackedMandate,
 } from "./utils/trackedMandatePurchase";
 
-const FBRedirect = React.lazy(() => import("./pages/FbRedirect"));
-const About = React.lazy(() =>
+const FBRedirect = lazyWithRetry(() => import("./pages/FbRedirect"));
+const About = lazyWithRetry(() =>
   import("./pages/About").then((m) => ({ default: m.About })),
 );
-const Contact = React.lazy(() =>
+const Contact = lazyWithRetry(() =>
   import("./pages/Contact").then((m) => ({ default: m.Contact })),
 );
-const Safety = React.lazy(() =>
+const Safety = lazyWithRetry(() =>
   import("./pages/Safety").then((m) => ({ default: m.Safety })),
 );
-const Guidelines = React.lazy(() =>
+const Guidelines = lazyWithRetry(() =>
   import("./pages/Guidelines").then((m) => ({ default: m.Guidelines })),
 );
-const Privacy = React.lazy(() =>
+const Privacy = lazyWithRetry(() =>
   import("./pages/Privacy").then((m) => ({ default: m.Privacy })),
 );
-const Terms = React.lazy(() =>
+const Terms = lazyWithRetry(() =>
   import("./pages/Terms").then((m) => ({ default: m.Terms })),
 );
-const Refund = React.lazy(() =>
+const Refund = lazyWithRetry(() =>
   import("./pages/Refund").then((m) => ({ default: m.Refund })),
 );
-const ChildSafety = React.lazy(() =>
+const ChildSafety = lazyWithRetry(() =>
   import("./pages/ChildSafety").then((m) => ({ default: m.ChildSafety })),
 );
-const Subscriptions = React.lazy(() =>
+const Subscriptions = lazyWithRetry(() =>
   import("./pages/Subscriptions").then((m) => ({ default: m.Subscriptions })),
 );
-const Campaign = React.lazy(() =>
+const Campaign = lazyWithRetry(() =>
   import("./pages/Campaign").then((m) => ({ default: m.Campaign })),
 );
-const CampaignLanguage = React.lazy(() =>
+const CampaignLanguage = lazyWithRetry(() =>
   import("./pages/CampaignLanguage").then((m) => ({
     default: m.CampaignLanguage,
   })),
 );
-const WebCallCampaign = React.lazy(() =>
-  import("./pages/WebCallCampaign").then((m) => ({
-    default: m.WebCallCampaign,
-  })),
-);
-const WebCallRoom = React.lazy(() =>
+const WebCallRoom = lazyWithRetry(() =>
   import("./pages/WebCallRoom").then((m) => ({
     default: m.WebCallRoom,
   })),
 );
-const WebCallLanguage = React.lazy(() =>
+const WebCallLanguage = lazyWithRetry(() =>
   import("./pages/WebCallMatch").then((m) => ({
     default: m.WebCallLanguage,
   })),
 );
-const WebCallGender = React.lazy(() =>
+const WebCallGender = lazyWithRetry(() =>
   import("./pages/WebCallMatch").then((m) => ({
     default: m.WebCallGender,
   })),
 );
-const WebCallIncoming = React.lazy(() =>
+const WebCallIncoming = lazyWithRetry(() =>
   import("./pages/WebCallIncoming").then((m) => ({
     default: m.WebCallIncoming,
   })),
 );
-const WelcomeBackOffer = React.lazy(() =>
+const WelcomeBackOffer = lazyWithRetry(() =>
   import("./pages/WelcomeBackOffer").then((m) => ({
     default: m.WelcomeBackOffer,
   })),
 );
-const PaymentStatus = React.lazy(() =>
+const PaymentStatus = lazyWithRetry(() =>
   import("./pages/PaymentStatus").then((m) => ({ default: m.PaymentStatus })),
 );
-const QuickRechargePopup = React.lazy(() =>
+const QuickRechargePopup = lazyWithRetry(() =>
   import("./components/QuickRechargePopup").then((m) => ({
     default: m.QuickRechargePopup,
   })),
 );
-const QuickRechargePopupBiffle = React.lazy(() =>
+const QuickRechargePopupBiffle = lazyWithRetry(() =>
   import("./components/QuickRechargePopupBiffle").then((m) => ({
     default: m.QuickRechargePopupBiffle,
   })),
 );
-const CoinStoreMobileBiffle = React.lazy(() =>
+const CoinStoreMobileBiffle = lazyWithRetry(() =>
   import("./components/CoinStoreMobileBiffle").then((m) => ({
     default: m.CoinStoreMobileBiffle,
   })),
@@ -3328,6 +3327,25 @@ const Layout = () => {
   const needsCoinPacks = isCoinsPage || isHomePage || showCoins;
 
   useEffect(() => {
+    clearChunkReloadFlag();
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle(
+      "znw-campaign-lock",
+      isCampaignPage,
+    );
+    return () => {
+      document.documentElement.classList.remove("znw-campaign-lock");
+    };
+  }, [isCampaignPage]);
+
+  useEffect(() => {
+    if (!isCampaignPage) return;
+    persistWebCallLoginOption(location.search);
+  }, [isCampaignPage, location.search]);
+
+  useEffect(() => {
     if (isCoinsPage) return;
     window.__ZNW?.ensureFontAwesome?.();
   }, [isCoinsPage]);
@@ -3442,7 +3460,7 @@ const Layout = () => {
     <div
       className={`text-brand-text font-sans ${
         isCampaignPage
-          ? "h-dvh max-h-dvh overflow-hidden"
+          ? "h-full max-h-full overflow-hidden overscroll-none"
           : isWelcomeBackOfferPage
             ? "flex h-dvh max-h-dvh flex-col overflow-hidden sm:h-auto sm:max-h-none sm:min-h-dvh sm:overflow-y-auto"
             : isQuickRechargeCoinsPage
@@ -3479,6 +3497,10 @@ const Layout = () => {
             hasQueryAuth ? (
               <SubscriptionsSkeleton showPaymentMethods={isCampaignQuery} />
             ) : null
+          ) : isCampaignPage ? (
+            <div className="flex h-full min-h-dvh items-center justify-center bg-white">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-700" />
+            </div>
           ) : null
         }
       >
@@ -3674,9 +3696,11 @@ const TrailingSlashGate = () => {
 };
 
 const App = () => (
-  <BrowserRouter>
-    <TrailingSlashGate />
-  </BrowserRouter>
+  <AppErrorBoundary>
+    <BrowserRouter>
+      <TrailingSlashGate />
+    </BrowserRouter>
+  </AppErrorBoundary>
 );
 
 const appRootEl = document.getElementById("root");

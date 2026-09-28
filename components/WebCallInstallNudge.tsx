@@ -79,7 +79,7 @@ export function WebCallInstallNudge({
     : ZINTLE_PLAY_STORE_URL;
 
   return (
-    <div className="relative flex h-dvh min-h-dvh flex-col overflow-hidden font-figtree text-white">
+    <div className="relative flex h-dvh max-h-dvh flex-col overflow-hidden overscroll-none font-figtree text-white">
       <h1 className="sr-only">{title}</h1>
       <div
         className="absolute inset-0"

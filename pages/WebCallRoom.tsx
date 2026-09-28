@@ -751,7 +751,7 @@ export function WebCallRoom({
 
   if (preview === "connected" || preview === "recharge") {
     return (
-      <div className="relative min-h-dvh">
+      <div className="relative h-dvh max-h-dvh overflow-hidden overscroll-none">
         {connectedScreen(
           previewCreator.profilePicUrl,
           previewCreator.name,
@@ -799,7 +799,7 @@ export function WebCallRoom({
       setPhase("ended");
     };
     return (
-      <div className="relative min-h-dvh">
+      <div className="relative h-dvh max-h-dvh overflow-hidden overscroll-none">
         <WebCallRingingScreen
           name={shownCreator?.name || "Creator"}
           photoUrl={shownCreator?.profilePicUrl}
@@ -824,7 +824,7 @@ export function WebCallRoom({
 
   if (phase === "live") {
     return (
-      <div className="relative min-h-dvh">
+      <div className="relative h-dvh max-h-dvh overflow-hidden overscroll-none">
         {connectedScreen(
           shownCreator?.profilePicUrl,
           shownCreator?.name || "Creator",
@@ -871,7 +871,7 @@ export function WebCallRoom({
   if (phase === "error") {
     const shell = isBiffle ? "bg-white text-gray-900" : "bg-[#162a44] text-white";
     return (
-      <div className={`flex min-h-dvh flex-col items-center justify-center px-6 text-center ${shell}`}>
+      <div className={`flex h-dvh max-h-dvh flex-col items-center justify-center overflow-hidden overscroll-none px-6 text-center ${shell}`}>
         <p className="text-sm opacity-70">Audio call</p>
         <h1 className="mt-3 text-2xl font-bold">{detail}</h1>
       </div>
@@ -880,7 +880,7 @@ export function WebCallRoom({
 
   if (!webCallIncomingAccepted() || !token) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-white">
+      <div className="flex h-dvh max-h-dvh items-center justify-center overflow-hidden overscroll-none bg-white">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-700" />
       </div>
     );

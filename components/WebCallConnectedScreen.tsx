@@ -80,7 +80,7 @@ export function WebCallConnectedScreen({
   const showPhoto = Boolean(photoUrl) && !photoFailed;
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-[#4a1c18] text-white">
+    <div className="relative flex h-dvh max-h-dvh flex-col overflow-hidden overscroll-none bg-[#4a1c18] text-white">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         {showPhoto ? (
           <img

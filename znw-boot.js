@@ -62,6 +62,7 @@
     var coins = path === "/coins";
     var welcome = path === "/welcome-back-offer";
     var subscriptions = path === "/subscriptions";
+    var campaign = path === "/campaign" || path.indexOf("/campaign/") === 0;
     var params = new URLSearchParams(window.location.search);
     var rawOrg = (params.get("organisation_id") || "").trim();
     var org =
@@ -79,6 +80,7 @@
         (params.get("quick_recharge") || "").toLowerCase() === "true",
       welcome: welcome,
       subscriptions: subscriptions,
+      campaign: campaign,
       webview: coins || welcome || subscriptions,
       hasAuth: !!token,
       isCampaign: parseIsCampaign(params.get("is_campaign")),
@@ -122,12 +124,15 @@
     style.id = "znw-boot-css";
     style.textContent =
       "@keyframes znw-skel{0%{background-position:100% 0}100%{background-position:-100% 0}}" +
+      "@keyframes znw-spin{to{transform:rotate(360deg)}}" +
       ".znw-skel-bone{background-image:linear-gradient(90deg,var(--znw-skel-a,rgba(255,255,255,.1)) 0%,var(--znw-skel-b,rgba(255,255,255,.22)) 50%,var(--znw-skel-a,rgba(255,255,255,.1)) 100%);background-size:200% 100%;animation:znw-skel 1.15s ease-in-out infinite}" +
       "html.znw-coins-webview,html.znw-coins-webview body,html.znw-coins-webview body.font-sans{background:#000d26;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif!important}" +
       'html.znw-coins-webview[data-org="biffle"],html.znw-coins-webview[data-org="biffle"] body{background:#f5f5f5;--znw-skel-a:rgba(0,0,0,.06);--znw-skel-b:rgba(0,0,0,.12)}' +
       "html.znw-welcome-webview,html.znw-welcome-webview body,html.znw-welcome-webview body.font-sans{background:#fff;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif!important;--znw-skel-a:rgba(0,0,0,.06);--znw-skel-b:rgba(0,0,0,.12)}" +
       "html.znw-subs-webview,html.znw-subs-webview body,html.znw-subs-webview body.font-sans{background:#000;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif!important}" +
-      "html.znw-coins-webview #znw-bg,html.znw-welcome-webview #znw-bg,html.znw-subs-webview #znw-bg{display:none}";
+      "html.znw-campaign-lock,html.znw-campaign-lock body,html.znw-campaign-lock body.font-sans{height:100%;max-height:100dvh;overflow:hidden;overscroll-behavior:none;background:#fff}" +
+      "html.znw-campaign-lock #root{min-height:0!important;height:100%!important;max-height:100dvh!important;overflow:hidden}" +
+      "html.znw-coins-webview #znw-bg,html.znw-welcome-webview #znw-bg,html.znw-subs-webview #znw-bg,html.znw-campaign-lock #znw-bg{display:none}";
     document.head.appendChild(style);
   }
 
@@ -151,14 +156,18 @@
       document.documentElement.classList.add("znw-welcome-webview");
     if (boot.subscriptions)
       document.documentElement.classList.add("znw-subs-webview");
+    if (boot.campaign)
+      document.documentElement.classList.add("znw-campaign-lock");
 
-    if (!boot.webview) {
+    /* Marketing CSS paints the navy #znw-bg. Campaign/call must not load it or
+       a stalled React chunk leaves a blank dark gradient. */
+    if (!boot.webview && !boot.campaign) {
       addStylesheet(
         "https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;700&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&display=swap",
       );
       ensureFontAwesome();
       addStylesheet("/index.css");
-    } else if (!boot.coins) {
+    } else if (!boot.coins && !boot.campaign) {
       ensureFontAwesome({ defer: true });
     }
 
@@ -580,7 +589,60 @@
     );
   }
 
+  function campaignSkeletonHtml() {
+    return (
+      '<div role="status" aria-live="polite" aria-label="Loading" style="height:100%;min-height:100dvh;background:#fff;display:flex;align-items:center;justify-content:center">' +
+      '<div style="width:32px;height:32px;border:2px solid #e5e5e5;border-top-color:#404040;border-radius:99px;animation:znw-spin .8s linear infinite"></div></div>'
+    );
+  }
+
+  function reloadOnceForStaleAsset() {
+    try {
+      if (sessionStorage.getItem("znw_chunk_reload") === "1") return;
+      sessionStorage.setItem("znw_chunk_reload", "1");
+    } catch (e) {
+      return;
+    }
+    window.location.reload();
+  }
+
+  function isHashedAssetUrl(url) {
+    return typeof url === "string" && url.indexOf("/assets/") !== -1;
+  }
+
+  function installStaleAssetRecovery() {
+    if (window.__ZNW_ASSET_RECOVERY) return;
+    window.__ZNW_ASSET_RECOVERY = true;
+    window.addEventListener(
+      "error",
+      function (ev) {
+        var t = ev && ev.target;
+        if (!t || !t.tagName) return;
+        var url = t.src || t.href || "";
+        if (
+          (t.tagName === "SCRIPT" || t.tagName === "LINK") &&
+          isHashedAssetUrl(url)
+        ) {
+          reloadOnceForStaleAsset();
+        }
+      },
+      true,
+    );
+    window.addEventListener("unhandledrejection", function (ev) {
+      var reason = ev && ev.reason;
+      var msg = String((reason && reason.message) || reason || "");
+      if (
+        /dynamically imported module|Unable to preload CSS|Importing a module script failed/i.test(
+          msg,
+        )
+      ) {
+        reloadOnceForStaleAsset();
+      }
+    });
+  }
+
   function bootHead() {
+    installStaleAssetRecovery();
     var ctx = detectBoot();
     window.__ZNW_BOOT = ctx.boot;
     applyDocumentBoot(ctx);
@@ -589,7 +651,12 @@
   function bootPaint() {
     var boot = window.__ZNW_BOOT;
     var root = document.getElementById("root");
-    if (!root || !boot || !boot.webview) return;
+    if (!root || !boot) return;
+    if (boot.campaign) {
+      root.innerHTML = campaignSkeletonHtml();
+      return;
+    }
+    if (!boot.webview) return;
     if (boot.welcome) {
       root.innerHTML = welcomeSkeletonHtml();
       return;
@@ -617,6 +684,7 @@
     ensureFontAwesome: function () {
       ensureFontAwesome();
     },
+    campaignSkeletonHtml: campaignSkeletonHtml,
     coinsSkeletonHtml: coinsSkeletonHtml,
     welcomeSkeletonHtml: welcomeSkeletonHtml,
     subscriptionsSkeletonHtml: subscriptionsSkeletonHtml,

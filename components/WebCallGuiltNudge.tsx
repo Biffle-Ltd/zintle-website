@@ -26,6 +26,7 @@ export function WebCallGuiltNudge({
 
     el.setAttribute("playsinline", "true");
     el.setAttribute("webkit-playsinline", "true");
+    el.disablePictureInPicture = true;
 
     const stopAtClipEnd = () => {
       if (el.currentTime >= CLIP_SECONDS) {
@@ -64,7 +65,7 @@ export function WebCallGuiltNudge({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex w-full min-w-0 flex-col overflow-hidden bg-black">
+    <div className="fixed inset-0 z-50 flex h-dvh max-h-dvh w-full min-w-0 flex-col overflow-hidden overscroll-none bg-black">
       <div
         className="relative min-h-0 min-w-0 w-full flex-1"
         onClick={playWithSound}
@@ -84,6 +85,7 @@ export function WebCallGuiltNudge({
           poster={posterUrl}
           className="h-full w-full object-cover"
           playsInline
+          disablePictureInPicture
           autoPlay
           preload="auto"
         />

@@ -31,7 +31,7 @@ export function WebCallRingingScreen({
 
   return (
     <div
-      className="relative flex min-h-dvh flex-col overflow-hidden text-white"
+      className="relative flex h-dvh max-h-dvh flex-col overflow-hidden overscroll-none text-white"
       style={{ background: SCREEN_GRADIENT }}
     >
       <div className="flex min-h-0 flex-1 flex-col items-center px-6 pt-[18vh]">

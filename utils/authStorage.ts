@@ -5,13 +5,37 @@ import { clearAllLoginContactStorage } from "./loginContactStorage.ts";
 export const ZINTLE_JWT_STORAGE_KEY = "zintle_jwt";
 export const BIFFLE_JWT_STORAGE_KEY = "biffle_jwt";
 
+function readLocal(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocal(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+function removeLocal(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* private mode */
+  }
+}
+
 export function getJwtFromStorage(
   organisationId: string | undefined,
 ): string | null {
   if (isBiffleOrganisationId(organisationId)) {
-    return localStorage.getItem(BIFFLE_JWT_STORAGE_KEY);
+    return readLocal(BIFFLE_JWT_STORAGE_KEY);
   }
-  return localStorage.getItem(ZINTLE_JWT_STORAGE_KEY);
+  return readLocal(ZINTLE_JWT_STORAGE_KEY);
 }
 
 export function setJwtForOrganisation(
@@ -19,9 +43,9 @@ export function setJwtForOrganisation(
   token: string,
 ): void {
   if (isBiffleOrganisationId(organisationId)) {
-    localStorage.setItem(BIFFLE_JWT_STORAGE_KEY, token);
+    writeLocal(BIFFLE_JWT_STORAGE_KEY, token);
   } else {
-    localStorage.setItem(ZINTLE_JWT_STORAGE_KEY, token);
+    writeLocal(ZINTLE_JWT_STORAGE_KEY, token);
   }
 }
 
@@ -29,23 +53,20 @@ export function clearJwtForOrganisation(
   organisationId: string | undefined,
 ): void {
   if (isBiffleOrganisationId(organisationId)) {
-    localStorage.removeItem(BIFFLE_JWT_STORAGE_KEY);
+    removeLocal(BIFFLE_JWT_STORAGE_KEY);
   } else {
-    localStorage.removeItem(ZINTLE_JWT_STORAGE_KEY);
+    removeLocal(ZINTLE_JWT_STORAGE_KEY);
   }
 }
 
 export function clearAllJwtStorage(): void {
-  localStorage.removeItem(ZINTLE_JWT_STORAGE_KEY);
-  localStorage.removeItem(BIFFLE_JWT_STORAGE_KEY);
+  removeLocal(ZINTLE_JWT_STORAGE_KEY);
+  removeLocal(BIFFLE_JWT_STORAGE_KEY);
   clearAllLoginContactStorage();
 }
 
 export function hasAnyJwtInStorage(): boolean {
-  return !!(
-    localStorage.getItem(ZINTLE_JWT_STORAGE_KEY) ||
-    localStorage.getItem(BIFFLE_JWT_STORAGE_KEY)
-  );
+  return !!(readLocal(ZINTLE_JWT_STORAGE_KEY) || readLocal(BIFFLE_JWT_STORAGE_KEY));
 }
 
 /** Query `id` wins when it is header-safe; otherwise fall back to org storage. */

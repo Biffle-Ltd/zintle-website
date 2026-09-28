@@ -7,7 +7,7 @@ import {
   userNeedsIdentityGender,
   userNeedsLanguageSelection,
 } from "./userProfileApi";
-import { readPackIdFromSearch } from "./webCampaign";
+import { persistWebCallLoginOption, readPackIdFromSearch } from "./webCampaign";
 import { formatIncomingDisplayName } from "./webCallPreviewCreators";
 
 export type WebCallOffer = {
@@ -261,6 +261,7 @@ export function requireWebCallLogin(
   setShowLogin: (open: boolean) => void,
 ): void {
   markWebCallLeftPreview();
+  persistWebCallLoginOption(search);
   sessionStorage.setItem(
     ZINTLE_POST_LOGIN_REDIRECT_KEY,
     `${pathname}${search}`,
@@ -528,8 +529,11 @@ export async function waitForWebCallOfferClaimed(opts: {
   return false;
 }
 
-/** Keep the current URL in history so Android/iOS back can be intercepted. */
-export function trapBrowserBack(onBack: () => void): () => void {
+/** Keep the current URL in history so Android/iOS back can be intercepted.
+ * Return `false` from onBack to leave (no extra history push). */
+export function trapBrowserBack(
+  onBack: () => boolean | void,
+): () => void {
   const pushTrap = () => {
     window.history.pushState(
       { webCallBackTrap: Date.now() },
@@ -539,8 +543,8 @@ export function trapBrowserBack(onBack: () => void): () => void {
   };
   pushTrap();
   const onPop = () => {
-    onBack();
-    pushTrap();
+    const keep = onBack();
+    if (keep !== false) pushTrap();
   };
   window.addEventListener("popstate", onPop);
   return () => window.removeEventListener("popstate", onPop);

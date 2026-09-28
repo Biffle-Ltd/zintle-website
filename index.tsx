@@ -65,6 +65,10 @@ import {
   ZINTLE_POST_LOGIN_REDIRECT_KEY,
   withJwtInQuery,
 } from "./utils/postLoginRedirect";
+import {
+  canonicalizeWebCallPostLoginPath,
+  webCallPathAfterLogin,
+} from "./utils/webCall";
 import { navigateAfterCampaignLoginGate } from "./utils/campaignLanguageGate";
 import {
   isCampaignPostLoginRedirect,
@@ -177,6 +181,31 @@ const Campaign = React.lazy(() =>
 const CampaignLanguage = React.lazy(() =>
   import("./pages/CampaignLanguage").then((m) => ({
     default: m.CampaignLanguage,
+  })),
+);
+const WebCallCampaign = React.lazy(() =>
+  import("./pages/WebCallCampaign").then((m) => ({
+    default: m.WebCallCampaign,
+  })),
+);
+const WebCallRoom = React.lazy(() =>
+  import("./pages/WebCallRoom").then((m) => ({
+    default: m.WebCallRoom,
+  })),
+);
+const WebCallLanguage = React.lazy(() =>
+  import("./pages/WebCallMatch").then((m) => ({
+    default: m.WebCallLanguage,
+  })),
+);
+const WebCallGender = React.lazy(() =>
+  import("./pages/WebCallMatch").then((m) => ({
+    default: m.WebCallGender,
+  })),
+);
+const WebCallIncoming = React.lazy(() =>
+  import("./pages/WebCallIncoming").then((m) => ({
+    default: m.WebCallIncoming,
   })),
 );
 const WelcomeBackOffer = React.lazy(() =>
@@ -302,6 +331,7 @@ type CoinOrderPayload = {
 
 type CoinOrderApiResponse = {
   detail?: string;
+  error_message?: string;
   data?: CoinOrderPayload;
 };
 
@@ -311,6 +341,7 @@ type InitiatePaymentPayload = {
 
 type InitiatePaymentApiResponse = {
   detail?: string;
+  error_message?: string;
   data?: InitiatePaymentPayload;
 };
 
@@ -390,7 +421,7 @@ const createCoinOrder = async (
   });
   const data = (await r.json()) as CoinOrderApiResponse;
   if (!r.ok) {
-    throw new Error(data.detail || "Failed to create order");
+    throw new Error(data.error_message || data.detail || "Failed to create order");
   }
 
   return data;
@@ -422,7 +453,9 @@ const initiatePayment = async (
   );
   const data = (await r.json()) as InitiatePaymentApiResponse;
   if (!r.ok) {
-    throw new Error(data.detail || "Failed to initiate payment");
+    throw new Error(
+      data.error_message || data.detail || "Failed to initiate payment",
+    );
   }
   return data;
 };
@@ -725,7 +758,11 @@ export const createOrderAndInitiatePayment = async (
     );
   }
 
-  const orderData = await createCoinOrder(coinPackId, token, organisationId);
+  const orderData = await createCoinOrder(
+    coinPackId,
+    token,
+    organisationId,
+  );
   const order = orderData.data;
   if (!order?.order_uuid) {
     return { checkoutLaunched: false };
@@ -750,16 +787,6 @@ export const createOrderAndInitiatePayment = async (
     organisationId,
   );
   const payment = paymentData.data;
-  if (PAYMENT_GATEWAY === "Easebuzz") {
-    await launchEasebuzzCheckout(
-      payment?.access_token,
-      order.order_uuid,
-      organisationId,
-      token,
-      onCheckoutClosed,
-    );
-    return { order, payment, checkoutLaunched: true };
-  }
   if (PAYMENT_GATEWAY === "PhonePe") {
     const tokenUrl = payment?.access_token;
     if (!tokenUrl) {
@@ -767,6 +794,16 @@ export const createOrderAndInitiatePayment = async (
     }
     await launchPhonePeIframeCheckout(
       appendPhonePeChromeWVParam(tokenUrl),
+      order.order_uuid,
+      organisationId,
+      token,
+      onCheckoutClosed,
+    );
+    return { order, payment, checkoutLaunched: true };
+  }
+  if (PAYMENT_GATEWAY === "Easebuzz") {
+    await launchEasebuzzCheckout(
+      payment?.access_token,
       order.order_uuid,
       organisationId,
       token,
@@ -1636,23 +1673,51 @@ const CoinStore = ({
         onClose={abandonCampaignRedirectAndClose}
         onSuccess={() => {
           void (async () => {
-            const pending = sessionStorage.getItem(
+            const pendingRaw = sessionStorage.getItem(
               ZINTLE_POST_LOGIN_REDIRECT_KEY,
             );
             sessionStorage.removeItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
+            const pending = pendingRaw
+              ? canonicalizeWebCallPostLoginPath(pendingRaw)
+              : null;
             if (!pending?.startsWith("/")) {
               onClose();
               return;
             }
 
             const jwt = getJwtFromStorage(organisationId);
+
+            if (pending.startsWith("/campaign/call") && jwt) {
+              const authToken = headerSafeToken(jwt);
+              if (authToken) {
+                try {
+                  const dest = await webCallPathAfterLogin({
+                    pendingPath: pending,
+                    organisationId,
+                    authToken,
+                  });
+                  navigate(dest, { replace: true });
+                  onClose();
+                  return;
+                } catch {
+                  /* fall through to pending path */
+                }
+              }
+              navigate(pending, { replace: true });
+              onClose();
+              return;
+            }
+
             const dest =
-              jwt && isBiffle ? withJwtInQuery(pending, jwt) : pending;
+              jwt && isBiffle && !pending.startsWith("/campaign/call")
+                ? withJwtInQuery(pending, jwt)
+                : pending;
+            const replace = dest.startsWith("/campaign/call");
 
             if (isCampaignLoginFlow && jwt) {
               const authToken = headerSafeToken(jwt);
               if (!authToken) {
-                navigate(dest);
+                navigate(dest, { replace });
                 onClose();
                 return;
               }
@@ -1669,7 +1734,7 @@ const CoinStore = ({
               return;
             }
 
-            navigate(dest);
+            navigate(dest, { replace });
             onClose();
           })();
         }}
@@ -2317,7 +2382,9 @@ const CoinsPage = ({
     }
     if (visibleAnalyticsPacks.length === 0) return;
     storeViewedSentRef.current = true;
-    const packs = visibleAnalyticsPacks.map(toCoinPackForAnalytics);
+    const packs = visibleAnalyticsPacks.map((pack) =>
+      toCoinPackForAnalytics(pack),
+    );
     if (quickRecharge) {
       sendQuickRechargePopupViewed(pixelContext, packs);
     } else {
@@ -3241,7 +3308,7 @@ const Layout = () => {
     new URLSearchParams(location.search).get("is_campaign"),
   );
   const isCampaignPage =
-    appPath === "/campaign" || appPath === "/campaign/language";
+    appPath === "/campaign" || appPath.startsWith("/campaign/");
   const isWelcomeBackOfferPage = appPath === "/welcome-back-offer";
   const isFbRedirectPage = appPath === "/fb-redirect";
   const isPaymentStatusPage = appPath === "/payment-status";
@@ -3496,6 +3563,53 @@ const Layout = () => {
             <CampaignLanguage
               organisationId={organisationId}
               setShowLogin={setShowLogin}
+            />
+          }
+        />
+        <Route
+          path="/campaign/call"
+          element={
+            <WebCallCampaign
+              organisationId={organisationId}
+              setShowLogin={setShowLogin}
+              createOrderAndInitiatePayment={createOrderAndInitiatePayment}
+            />
+          }
+        />
+        <Route
+          path="/campaign/call/language"
+          element={
+            <WebCallLanguage
+              organisationId={organisationId}
+              setShowLogin={setShowLogin}
+            />
+          }
+        />
+        <Route
+          path="/campaign/call/gender"
+          element={
+            <WebCallGender
+              organisationId={organisationId}
+              setShowLogin={setShowLogin}
+            />
+          }
+        />
+        <Route
+          path="/campaign/call/incoming"
+          element={
+            <WebCallIncoming
+              organisationId={organisationId}
+              setShowLogin={setShowLogin}
+            />
+          }
+        />
+        <Route
+          path="/campaign/call/room"
+          element={
+            <WebCallRoom
+              organisationId={organisationId}
+              setShowLogin={setShowLogin}
+              createOrderAndInitiatePayment={createOrderAndInitiatePayment}
             />
           }
         />

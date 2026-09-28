@@ -219,3 +219,30 @@ export function linkCampaignFacebookAttributionSafe(params: {
     console.warn("Campaign FB attribution link failed", err);
   });
 }
+
+/**
+ * Whale /campaign/call: store the click when fbclid is on the URL, then
+ * associate it with the logged-in user. Same APIs as the older /campaign flow.
+ */
+export function syncWebCallFacebookAttribution(opts: {
+  organisationId: string;
+  search: string;
+  authToken?: string | null;
+}): void {
+  const params = new URLSearchParams(
+    opts.search.startsWith("?") ? opts.search.slice(1) : opts.search,
+  );
+  const fromUrl = params.get("fbclid");
+  const fbclid = resolveCampaignFbclid(opts.organisationId, fromUrl);
+  if (!fbclid) return;
+  const token = headerSafeToken(opts.authToken || "");
+  if (!token) {
+    captureCampaignFbclidOnLandingSafe(opts.organisationId, fbclid);
+    return;
+  }
+  linkCampaignFacebookAttributionSafe({
+    fbclid,
+    organisationId: opts.organisationId,
+    authToken: token,
+  });
+}

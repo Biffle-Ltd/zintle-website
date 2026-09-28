@@ -9,6 +9,7 @@ import { getLoginPhoneForOrganisation } from "./loginContactStorage";
 import { sendUserCenterAnalyticsEvent } from "./coinAnalyticsApi";
 import { getOrganisationIdFromSearch } from "./organisationIdFromUrl";
 import { headerSafeToken } from "./headerSafeToken";
+import { isWhaleLoginPath } from "./webCampaign";
 
 export type CampaignPixelEventName =
   | "campaign_free_trial_viewed"
@@ -286,6 +287,7 @@ export function sendCampaignLoginSuccessful(
     ...buildBaseEventParams(ctx),
     event_info: {
       phone_number: ctx.phone_number,
+      login_ab: isWhaleLoginPath() ? "both" : "phone",
     },
   };
   sendCampaignEvent(ctx, "campaign_login_successful", eventParams);

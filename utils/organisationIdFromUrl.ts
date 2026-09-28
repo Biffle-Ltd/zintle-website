@@ -15,6 +15,11 @@ export function getOrganisationIdFromSearch(
   search: string,
   pathname?: string,
 ): string {
+  const path = normalizePathBasename(pathname || "");
+  // Calls exist only on Biffle. This flow does not run for Zintle.
+  if (path === "/campaign/call" || path.startsWith("/campaign/call/")) {
+    return BIFFLE_ORGANISATION_ID;
+  }
   const raw = new URLSearchParams(search).get("organisation_id")?.trim();
   // Keep CAMPAIGN_B / CAMPAIGN_Z mapping in sync with znw-boot.js.
   if (raw == "ZINTEL1234" || raw == "CAMPAIGN_Z") return "ZINTEL1234";

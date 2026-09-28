@@ -10,7 +10,18 @@ import {
   sendCampaignLoginSuccessful,
   sendCampaignOtpRequested,
 } from "../utils/campaignPixelEvents";
-import { linkCampaignFacebookAttributionSafe, resolveCampaignFbclid } from "../utils/fbAttribution";
+import {
+  linkCampaignFacebookAttributionSafe,
+  resolveCampaignFbclid,
+  syncWebCallFacebookAttribution,
+} from "../utils/fbAttribution";
+import {
+  isWhaleLoginPath,
+  persistWebCampaignContextFromSearch,
+  saveWebCampaignLink,
+  whaleLoginMode,
+  type WebLoginMode,
+} from "../utils/webCampaign";
 import {
   ChevronRightIcon,
   CloseIcon,
@@ -21,6 +32,7 @@ import {
 const OTP_LENGTH = 6;
 const PHONE_LENGTH = 10;
 const COUNTRY_CODE = "91";
+const GOOGLE_GSI_SCRIPT_ID = "google-gsi-client";
 
 const BIFFLE_GRADIENT_H = "linear-gradient(90deg, #7c3aed, #ec4899)";
 
@@ -156,6 +168,37 @@ export function PhoneOtpLoginScreen({
   const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loginMode, setLoginMode] = useState<WebLoginMode>(() =>
+    typeof window === "undefined" ? "both" : whaleLoginMode(),
+  );
+  const [googleHost, setGoogleHost] = useState<HTMLDivElement | null>(null);
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || "";
+
+  useEffect(() => {
+    setLoginMode(whaleLoginMode());
+  }, []);
+
+  const finishWhaleLink = useCallback(
+    (jwt: string | undefined) => {
+      if (!jwt || !isWhaleLoginPath()) return;
+      syncWebCallFacebookAttribution({
+        organisationId,
+        search: window.location.search,
+        authToken: jwt,
+      });
+      const context = persistWebCampaignContextFromSearch(
+        organisationId,
+        window.location.search,
+      );
+      if (!context.campaignId && !context.coinPackId && !context.fbclid) return;
+      void saveWebCampaignLink({
+        organisationId,
+        authToken: jwt,
+        context,
+      });
+    },
+    [organisationId],
+  );
 
   const shellClass = isBiffle
     ? "bg-white text-gray-900"
@@ -197,8 +240,10 @@ export function PhoneOtpLoginScreen({
           phone_number: phone,
         }),
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || "Failed to send OTP");
+      const data = (await r.json().catch(() => null)) as {
+        detail?: string;
+      } | null;
+      if (!r.ok) throw new Error(data?.detail || "Failed to send OTP");
       setOtpSent(true);
       setOtp("");
     } catch (e: unknown) {
@@ -229,10 +274,14 @@ export function PhoneOtpLoginScreen({
             otp: otpValue,
           }),
         });
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.detail || "Failed to verify OTP");
-        const jwt = data.token as string | undefined;
-        if (jwt) setJwtForOrganisation(organisationId, jwt);
+        const data = (await r.json().catch(() => null)) as {
+          detail?: string;
+          token?: string;
+        } | null;
+        if (!r.ok) throw new Error(data?.detail || "Failed to verify OTP");
+        const jwt = data?.token;
+        if (!jwt) throw new Error("Failed to verify OTP");
+        setJwtForOrganisation(organisationId, jwt);
         setLoginPhoneForOrganisation(organisationId, COUNTRY_CODE, phone);
         if (isCampaignFlow) {
           const base = parseCampaignPixelContext(
@@ -241,21 +290,20 @@ export function PhoneOtpLoginScreen({
             { organisationId, phone_number: phone },
           );
           const ctx = enrichCampaignPixelContext(
-            { ...base, token: jwt ?? null },
+            { ...base, token: jwt },
             organisationId,
           );
           sendCampaignLoginSuccessful(ctx);
-          if (jwt) {
-            const fbclid = resolveCampaignFbclid(organisationId, base.fbclid);
-            if (fbclid) {
-              linkCampaignFacebookAttributionSafe({
-                fbclid,
-                organisationId,
-                authToken: jwt,
-              });
-            }
+          const fbclid = resolveCampaignFbclid(organisationId, base.fbclid);
+          if (fbclid) {
+            linkCampaignFacebookAttributionSafe({
+              fbclid,
+              organisationId,
+              authToken: jwt,
+            });
           }
         }
+        finishWhaleLink(jwt);
         onSuccess();
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Failed to verify OTP";
@@ -264,8 +312,136 @@ export function PhoneOtpLoginScreen({
         setLoading(false);
       }
     },
-    [otp, phone, organisationId, onSuccess, isCampaignFlow],
+    [otp, phone, organisationId, onSuccess, isCampaignFlow, finishWhaleLink],
   );
+
+  const handleGoogleCredential = useCallback(
+    async (idToken: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const r = await fetch(`${HOST}/api/v1/auth/login/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Organisation-ID": organisationId,
+          },
+          body: JSON.stringify({
+            provider: "google",
+            id_token: idToken,
+          }),
+        });
+        const data = (await r.json().catch(() => null)) as {
+          error_message?: string;
+          detail?: string;
+          token?: string;
+          data?: { token?: string };
+        } | null;
+        if (!r.ok) {
+          throw new Error(
+            data?.error_message || data?.detail || "Google sign-in failed",
+          );
+        }
+        const jwt = data?.token || data?.data?.token;
+        if (!jwt) throw new Error("Google sign-in failed");
+        setJwtForOrganisation(organisationId, jwt);
+        finishWhaleLink(jwt);
+        if (isCampaignFlow) {
+          const base = parseCampaignPixelContext(
+            window.location.search,
+            window.location.pathname,
+            { organisationId },
+          );
+          sendCampaignLoginSuccessful(
+            enrichCampaignPixelContext(
+              { ...base, token: jwt },
+              organisationId,
+            ),
+          );
+        }
+        onSuccess();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Google sign-in failed";
+        setError(msg);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [organisationId, onSuccess, finishWhaleLink, isCampaignFlow],
+  );
+
+  useEffect(() => {
+    const showGoogle =
+      loginMode !== "phone" && (!otpSent || loginMode === "google");
+    if (!showGoogle || !googleClientId || !googleHost) return;
+    let cancelled = false;
+    const parent = googleHost;
+
+    const render = () => {
+      if (cancelled || !window.google?.accounts?.id || !parent) return;
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: (response) => {
+          if (response.credential) void handleGoogleCredential(response.credential);
+        },
+      });
+      const width = Math.max(
+        240,
+        Math.floor(parent.getBoundingClientRect().width) || 320,
+      );
+      parent.replaceChildren();
+      window.google.accounts.id.renderButton(parent, {
+        type: "standard",
+        theme: isBiffle ? "outline" : "filled_black",
+        size: "large",
+        text: "continue_with",
+        shape: "pill",
+        logo_alignment: "center",
+        width,
+      });
+    };
+
+    if (window.google?.accounts?.id) {
+      render();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const onError = () => {
+      if (!cancelled) setError("Google sign-in failed to load");
+    };
+    const existing = document.getElementById(
+      GOOGLE_GSI_SCRIPT_ID,
+    ) as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener("load", render);
+      existing.addEventListener("error", onError);
+      const readyState = (
+        existing as HTMLScriptElement & { readyState?: string }
+      ).readyState;
+      if (readyState === "complete" || readyState === "loaded") {
+        if (window.google?.accounts?.id) render();
+        else onError();
+      }
+      return () => {
+        cancelled = true;
+        existing.removeEventListener("load", render);
+        existing.removeEventListener("error", onError);
+      };
+    }
+
+    const script = document.createElement("script");
+    script.id = GOOGLE_GSI_SCRIPT_ID;
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.onload = render;
+    script.onerror = onError;
+    document.head.appendChild(script);
+    return () => {
+      cancelled = true;
+    };
+  }, [loginMode, otpSent, googleClientId, googleHost, isBiffle, handleGoogleCredential]);
 
   const handleEditPhone = () => {
     setOtpSent(false);
@@ -324,13 +500,17 @@ export function PhoneOtpLoginScreen({
             {isBiffle ? "Log in to Biffle" : "Log in to Zintle"}
           </h1>
           <p className={`mt-2 text-sm ${mutedClass}`}>
-            {otpSent
-              ? "Enter the code we sent to your number"
-              : "Enter your mobile number to continue"}
+            {loginMode === "google"
+              ? "Continue with Google"
+              : otpSent
+                ? "Enter the code we sent to your number"
+                : "Enter your mobile number to continue"}
           </p>
         </div>
 
         <div className="w-full space-y-4 shrink-0">
+          {loginMode !== "google" && (
+          <>
           <div className="flex items-center gap-2">
             <div
               className={`flex flex-1 min-w-0 items-center gap-2 rounded-full px-4 py-2 ${pillClass}`}
@@ -427,6 +607,40 @@ export function PhoneOtpLoginScreen({
                   Resend
                 </button>
               </div>
+            </div>
+          )}
+          </>
+          )}
+
+          {loginMode !== "phone" && !otpSent && (
+            <div className="flex flex-col items-stretch gap-3">
+              {loginMode === "both" && (
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`h-px flex-1 ${
+                      isBiffle ? "bg-gray-200" : "bg-white/15"
+                    }`}
+                  />
+                  <p className={`text-xs shrink-0 ${mutedClass}`}>or</p>
+                  <div
+                    className={`h-px flex-1 ${
+                      isBiffle ? "bg-gray-200" : "bg-white/15"
+                    }`}
+                  />
+                </div>
+              )}
+              {googleClientId ? (
+                <div
+                  ref={(node) => {
+                    setGoogleHost((prev) => (prev === node ? prev : node));
+                  }}
+                  className="web-login-google flex min-h-10 w-full justify-center overflow-hidden rounded-full [&>div]:m-0 [&>div]:flex [&>div]:w-full [&>div]:justify-center [&_iframe]:rounded-full"
+                />
+              ) : (
+                <p className={`text-xs text-center ${mutedClass}`}>
+                  Google sign-in needs VITE_GOOGLE_CLIENT_ID on this site.
+                </p>
+              )}
             </div>
           )}
 

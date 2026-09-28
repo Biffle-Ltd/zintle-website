@@ -16,9 +16,12 @@ export type LanguageOption = {
   is_active: boolean;
 };
 
+export type UserIdentityGender = "Male" | "Female" | "Other";
+
 export type UserDetailsData = {
   is_member?: boolean;
   languages?: LanguageOption[];
+  gender?: string | null;
   [key: string]: unknown;
 };
 
@@ -58,6 +61,21 @@ function parseLanguageList(payload: unknown): LanguageOption[] {
   return [];
 }
 
+export function parseIdentityGender(
+  value: unknown,
+): UserIdentityGender | null {
+  const gender = String(value ?? "").trim();
+  return gender === "Male" || gender === "Female" || gender === "Other"
+    ? gender
+    : null;
+}
+
+export function userNeedsIdentityGender(
+  details: Pick<UserDetailsData, "gender">,
+): boolean {
+  return parseIdentityGender(details.gender) == null;
+}
+
 export function userNeedsLanguageSelection(
   details: Pick<UserDetailsData, "languages">,
 ): boolean {
@@ -66,6 +84,37 @@ export function userNeedsLanguageSelection(
   return !langs.some(
     (l) => l.is_active !== false && String(l.code ?? "").trim(),
   );
+}
+
+let webCallProfileRequest: {
+  token: string;
+  organisationId: string;
+  promise: Promise<UserDetailsData>;
+} | null = null;
+
+/** Drop a profile fetched before gender and language were saved together. */
+export function resetWebCallProfileRequest(): void {
+  webCallProfileRequest = null;
+}
+
+/** One get-user-details for the call. A remount reuses the same request. */
+export function fetchWebCallProfileOnce(
+  token: string,
+  organisationId: string,
+): Promise<UserDetailsData> {
+  if (
+    webCallProfileRequest?.token === token &&
+    webCallProfileRequest.organisationId === organisationId
+  ) {
+    return webCallProfileRequest.promise;
+  }
+  let promise: Promise<UserDetailsData>;
+  promise = fetchUserDetails(token, organisationId).catch((err) => {
+    if (webCallProfileRequest?.promise === promise) webCallProfileRequest = null;
+    throw err;
+  });
+  webCallProfileRequest = { token, organisationId, promise };
+  return promise;
 }
 
 type UserDetailsApiResponse = {
@@ -230,12 +279,48 @@ export async function updateUserLanguages(
   }
 }
 
+/** One profile write after both web-call preferences are chosen. */
+export async function updateWebCallPreferences(
+  token: string,
+  organisationId: string,
+  prefs: { identityGender: UserIdentityGender; languageCode: string },
+  signal?: AbortSignal,
+): Promise<void> {
+  const jwtToken = headerSafeToken(token);
+  const code = prefs.languageCode.trim();
+  if (!code) throw new Error("Language code is required");
+  const response = await fetch(
+    `${HOST}/api/v1/user_center/details/update-user-profile-details/`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}),
+        "X-Organisation-ID": organisationId,
+      },
+      body: JSON.stringify({
+        gender: prefs.identityGender,
+        languages: [code],
+      }),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    const err = new Error(`HTTP ${response.status}`) as Error & {
+      status?: number;
+    };
+    err.status = response.status;
+    throw err;
+  }
+}
+
 export function languageScriptGlyph(code: string): string {
   const map: Record<string, string> = {
     hi: "हि",
     ta: "த",
-    te: "త",
-    bn: "ব",
+    te: "తె",
+    bn: "বা",
+    ml: "മ",
     kn: "ಕ",
   };
   return map[code.trim().toLowerCase()] ?? code.slice(0, 2).toUpperCase();

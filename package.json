@@ -11,7 +11,9 @@
     "test": "node --experimental-strip-types --test utils/*.test.ts"
   },
   "dependencies": {
+    "agora-rtc-sdk-ng": "^4.24.8",
     "dashjs": "^5.2.0",
+    "firebase": "^12.19.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.6"

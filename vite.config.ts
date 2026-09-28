@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "path";
 import { fileURLToPath } from "node:url";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -9,13 +9,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ZNW_BOOT_FILE = path.join(__dirname, "znw-boot.js");
 const ZNW_BOOT_PLACEHOLDER = "/*__ZNW_BOOT_JS__*/";
 
-function inlineWebviewBoot(): Plugin {
+function inlineWebviewBoot(apiHost: string): Plugin {
   const readBoot = () => {
     const source = fs.readFileSync(ZNW_BOOT_FILE, "utf8");
     if (source.includes("</script")) {
       throw new Error("znw-boot.js must not contain </script");
     }
-    return source;
+    const next = source.replace(
+      /var HOST = "[^"]*";/,
+      `var HOST = ${JSON.stringify(apiHost)};`,
+    );
+    if (next === source) {
+      throw new Error('znw-boot.js missing `var HOST = "..."` to inject');
+    }
+    return next;
   };
 
   return {
@@ -41,19 +48,29 @@ function inlineWebviewBoot(): Plugin {
   };
 }
 
-export default defineConfig({
-  plugins: [inlineWebviewBoot(), tailwindcss(), react()],
-  server: {
-    port: 3000,
-    host: "127.0.0.1",
-  },
-  preview: {
-    port: 3000,
-    host: "127.0.0.1",
-  },
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "."),
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const apiHost =
+    mode === "production"
+      ? "https://prod.biffle.ai"
+      : env.VITE_API_HOST?.trim() || "https://prod.biffle.ai";
+  return {
+    plugins: [inlineWebviewBoot(apiHost), tailwindcss(), react()],
+    server: {
+      port: 3000,
+      host: true,
+      strictPort: true,
+      allowedHosts: true,
     },
-  },
+    preview: {
+      port: 3000,
+      host: "localhost",
+      strictPort: true,
+    },
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "."),
+      },
+    },
+  };
 });

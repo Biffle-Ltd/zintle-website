@@ -3,6 +3,15 @@
 interface ImportMetaEnv {
   readonly VITE_EASEBUZZ_KEY?: string;
   readonly VITE_EASEBUZZ_ENV?: string;
+  readonly VITE_GOOGLE_CLIENT_ID?: string;
+  readonly VITE_API_HOST?: string;
+  readonly VITE_AGORA_APP_ID?: string;
+  readonly VITE_FIREBASE_API_KEY?: string;
+  readonly VITE_FIREBASE_AUTH_DOMAIN?: string;
+  readonly VITE_FIREBASE_PROJECT_ID?: string;
+  readonly VITE_FIREBASE_APP_ID?: string;
+  readonly VITE_FIREBASE_MESSAGING_SENDER_ID?: string;
+  readonly VITE_FIREBASE_STORAGE_BUCKET?: string;
 }
 
 interface ImportMeta {
@@ -39,7 +48,25 @@ interface ReactNativeWebViewBridge {
   postMessage: (message: string) => void;
 }
 
+interface GoogleCredentialResponse {
+  credential?: string;
+}
+
 interface Window {
+  google?: {
+    accounts: {
+      id: {
+        initialize: (config: {
+          client_id: string;
+          callback: (response: GoogleCredentialResponse) => void;
+        }) => void;
+        renderButton: (
+          parent: HTMLElement,
+          options: Record<string, string | number>,
+        ) => void;
+      };
+    };
+  };
   EasebuzzCheckout?: EasebuzzCheckoutConstructor;
   PhonePeCheckout?: PhonePeCheckoutApi;
   ReactNativeWebView?: ReactNativeWebViewBridge;

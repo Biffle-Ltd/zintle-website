@@ -2,7 +2,8 @@
  * WebView first paint + prefetch. Vite inlines this into index.html (blocking).
  * React skeletons call window.__ZNW.*SkeletonHtml so markup cannot drift.
  *
- * Keep HOST in sync with utils/host.ts.
+ * Vite replaces `var HOST` with VITE_API_HOST (see vite.config.ts).
+ * The string below is the production fallback when that env is unset.
  * Keep org mapping in sync with utils/organisationIdFromUrl.ts.
  * Keep token sanitizing in sync with utils/headerSafeToken.ts.
  * Keep JWT storage keys in sync with utils/authStorage.ts.
@@ -63,7 +64,10 @@
     var subscriptions = path === "/subscriptions";
     var params = new URLSearchParams(window.location.search);
     var rawOrg = (params.get("organisation_id") || "").trim();
-    var org = organisationIdFromRaw(rawOrg);
+    var org =
+      path === "/campaign/call" || path.indexOf("/campaign/call/") === 0
+        ? "BIFFLE1234"
+        : organisationIdFromRaw(rawOrg);
     var biffle = org === "BIFFLE1234";
     var token =
       headerSafeToken(params.get("id")) || jwtFromStorage(org);
@@ -150,7 +154,7 @@
 
     if (!boot.webview) {
       addStylesheet(
-        "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;700&family=Playfair+Display:wght@700;900&display=swap",
+        "https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&family=IBM+Plex+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;700&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&display=swap",
       );
       ensureFontAwesome();
       addStylesheet("/index.css");

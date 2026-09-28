@@ -16,6 +16,7 @@ import {
   nextLoggedInWebCallStep,
   resolveWebCallToken,
   trapBrowserBack,
+  seedBrowserBackTrap,
   webCallInstallPath,
   webCallLeftPreview,
   webCallOfferPaid,
@@ -200,23 +201,44 @@ export function WebCallCampaign({
   guiltRef.current = guilt;
   const searchRef = React.useRef(location.search);
   searchRef.current = location.search;
+  const payingRef = React.useRef(paying);
+  payingRef.current = paying;
+  const wasPayingRef = React.useRef(false);
 
   useEffect(() => {
-    if (step !== "paywall") return;
-    if (paying || !token) return;
+    if (step !== "paywall" || !token) return;
+    return trapBrowserBack(
+      () => {
+        if (payingRef.current) return;
+        if (guiltRef.current) {
+          setGuilt(false);
+          navigate(webCallInstallPath(searchRef.current), { replace: true });
+          return;
+        }
+        guiltRef.current = true;
+        setGuilt(true);
+      },
+      { isPaused: () => payingRef.current },
+    );
+  }, [step, token, navigate]);
+
+  useEffect(() => {
+    if (step !== "paywall" || !token) return;
+    if (paying) {
+      wasPayingRef.current = true;
+      return;
+    }
+    if (!wasPayingRef.current) return;
+    wasPayingRef.current = false;
+    seedBrowserBackTrap();
+  }, [step, token, paying]);
+
+  useEffect(() => {
+    if (step !== "install" || !token) return;
     return trapBrowserBack(() => {
-      if (guiltRef.current) {
-        const dest = webCallInstallPath(searchRef.current);
-        setGuilt(false);
-        window.setTimeout(() => {
-          navigate(dest, { replace: true });
-        }, 0);
-        return false;
-      }
-      guiltRef.current = true;
-      setGuilt(true);
+      /* Stay on install — do not fall off the ad-landed history stack. */
     });
-  }, [step, paying, token, navigate]);
+  }, [step, token]);
 
   useEffect(() => {
     if (step !== "paywall") return;

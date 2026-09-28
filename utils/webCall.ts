@@ -529,22 +529,39 @@ export async function waitForWebCallOfferClaimed(opts: {
   return false;
 }
 
-/** Keep the current URL in history so Android/iOS back can be intercepted.
- * Return `false` from onBack to leave (no extra history push). */
-export function trapBrowserBack(
-  onBack: () => boolean | void,
-): () => void {
-  const pushTrap = () => {
+/**
+ * Extra same-URL history entries so Android/iOS back stays in the SPA.
+ * Chrome closes the tab when this document is the last history entry (typical
+ * for an ad landing). PhonePe's iframe also pops our entries while checkout
+ * is open — replenish after it closes.
+ */
+function pushBackTrap(): void {
+  try {
     window.history.pushState(
       { webCallBackTrap: Date.now() },
       "",
       window.location.href,
     );
-  };
-  pushTrap();
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+export function seedBrowserBackTrap(): void {
+  pushBackTrap();
+  pushBackTrap();
+}
+
+/** Intercept back without letting the pop leave the site. Always re-arms. */
+export function trapBrowserBack(
+  onBack: () => void,
+  options?: { isPaused?: () => boolean },
+): () => void {
+  seedBrowserBackTrap();
   const onPop = () => {
-    const keep = onBack();
-    if (keep !== false) pushTrap();
+    if (options?.isPaused?.()) return;
+    pushBackTrap();
+    onBack();
   };
   window.addEventListener("popstate", onPop);
   return () => window.removeEventListener("popstate", onPop);

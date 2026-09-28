@@ -74,7 +74,8 @@ export function WebCallInstallNudge({
           ? "Call ended"
           : "Call didn't connect";
 
-  const playStoreUrl = isBiffleOrganisationId(organisationId)
+  const isBiffle = isBiffleOrganisationId(organisationId);
+  const playStoreUrl = isBiffle
     ? BIFFLE_PLAY_STORE_URL
     : ZINTLE_PLAY_STORE_URL;
 
@@ -96,10 +97,32 @@ export function WebCallInstallNudge({
       />
 
       <div className="relative z-10 mx-auto flex h-full min-h-0 w-full min-w-0 max-w-md flex-col overflow-x-hidden">
-        <div className="relative mx-auto mt-[max(0.35rem,env(safe-area-inset-top))] min-h-0 w-full flex-1 overflow-hidden">
+        <div className="relative z-20 flex shrink-0 items-center justify-center gap-2 pt-[max(0.85rem,env(safe-area-inset-top))]">
+          {isBiffle ? (
+            <>
+              <Sparkle
+                size={16}
+                className="drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+              />
+              <img
+                src="/web-call/biffle-wordmark.png"
+                alt="Biffle"
+                width={102}
+                height={45}
+                className="h-10 w-auto object-contain object-center"
+              />
+              <Sparkle
+                size={14}
+                className="drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+              />
+            </>
+          ) : null}
+        </div>
+
+        <div className="relative mx-auto mt-2 flex aspect-square w-[min(62%,16rem)] shrink-0 items-end justify-center">
           <div
             aria-hidden
-            className="pointer-events-none absolute left-1/2 top-[6%] h-[92%] w-[88%] -translate-x-1/2 rounded-[50%] opacity-80"
+            className="pointer-events-none absolute inset-[6%] rounded-[50%] opacity-80"
             style={{
               background:
                 "radial-gradient(ellipse at center, rgba(255,220,255,0.5) 0%, rgba(196,91,255,0) 70%)",
@@ -107,44 +130,30 @@ export function WebCallInstallNudge({
           />
           <div
             aria-hidden
-            className="pointer-events-none absolute left-[4%] top-[10%] h-[78%] w-[92%] rotate-[-16deg] rounded-[50%] border border-white/35"
-          />
-          <Sparkle
-            size={22}
-            className="absolute left-[11%] top-[6%] drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+            className="pointer-events-none absolute inset-[4%] rotate-[-16deg] rounded-[50%] border border-white/35"
           />
           <Sparkle
             size={16}
-            className="absolute right-[14%] top-[4%] drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
-          />
-          <Sparkle
-            size={14}
-            className="absolute right-[7%] top-[42%] drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+            className="absolute right-[8%] top-[6%] drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
           />
           <img
             src="/web-call/install-hero.png"
             alt=""
             width={242}
             height={328}
-            className="absolute inset-x-0 bottom-0 z-1 mx-auto h-[108%] w-auto origin-bottom object-contain object-bottom"
-            style={{
-              WebkitMaskImage:
-                "linear-gradient(to bottom, #000 68%, transparent 100%)",
-              maskImage:
-                "linear-gradient(to bottom, #000 68%, transparent 100%)",
-            }}
+            className="relative z-1 h-[72%] w-auto object-contain object-bottom"
+          />
+          <Sparkle
+            size={14}
+            className="absolute bottom-[14%] left-[6%] z-2 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
           />
           <Sparkle
             size={18}
-            className="absolute bottom-[22%] left-[9%] z-2 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
-          />
-          <Sparkle
-            size={22}
-            className="absolute bottom-[10%] right-[10%] z-2 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+            className="absolute bottom-[4%] right-[8%] z-2 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
           />
         </div>
 
-        <div className="relative z-10 -mt-20 flex shrink-0 flex-col items-center px-6 text-center">
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center overflow-hidden px-6 text-center">
           <p className="text-[clamp(28px,9vw,36px)] font-extrabold leading-none tracking-tight">
             Explore
           </p>

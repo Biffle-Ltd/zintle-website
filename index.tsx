@@ -2843,8 +2843,11 @@ const CoinsPage = ({
           // Native bridge unavailable — still open UPI below
         }
       }
-      // Intent/UPI via hidden anchor keeps this document alive so polling can finish.
-      openMandateRedirectUrl(redirectUrl, targetApp);
+      // Keep this document alive for mandate polling (hidden anchor, not
+      // location.href). Do not pass targetApp — wrapping upi:// with
+      // package=com.phonepe.app makes Chrome open Play Store instead of the
+      // UPI app chooser.
+      openMandateRedirectUrl(redirectUrl);
       if (Number.isFinite(mandateId)) {
         void pollMandateStatus(mandateId);
       }

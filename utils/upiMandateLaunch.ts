@@ -86,7 +86,11 @@ function injectPackageIntoIntent(intentUrl: string, packageName: string): string
 }
 
 /**
- * Opens mandate / UPI redirect. When `packageName` is set on Android, targets that UPI app.
+ * Opens mandate / UPI redirect.
+ * Pass `packageName` only when the user picked a specific UPI app (campaign).
+ * Omitting it leaves `upi://` as a chooser; pinning `com.phonepe.app` sends
+ * Chrome Android to the PhonePe Play Store listing when that app is not the
+ * resolved handler.
  */
 export function openMandateRedirectUrl(
   redirectUrl: string,
@@ -95,7 +99,11 @@ export function openMandateRedirectUrl(
   if (typeof window === "undefined" || !redirectUrl.trim()) return;
 
   if (!packageName || !isAndroid()) {
-    navigateToUrl(redirectUrl);
+    const url =
+      isAndroid() && redirectUrl.startsWith("intent:")
+        ? stripIntentPlayStoreFallback(redirectUrl)
+        : redirectUrl;
+    navigateToUrl(url);
     return;
   }
 

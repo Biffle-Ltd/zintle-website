@@ -185,6 +185,8 @@ export function isWebCallOfferPreview(search: string): boolean {
 /** Show in-call quick recharge when wallet cannot cover this many minutes. */
 export const WEB_CALL_LOW_BALANCE_MINUTES = 2;
 export const WEB_CALL_WALLET_POLL_MS = 60_000;
+/** Backup only: Agora/Firestore should end the room. 15s caps stuck-UI lag. */
+export const WEB_CALL_STATE_POLL_MS = 15_000;
 
 export function isWebCallLowBalance(
   balance: number,

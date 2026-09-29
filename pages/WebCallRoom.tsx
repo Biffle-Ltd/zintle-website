@@ -37,6 +37,7 @@ import {
   fetchWalletBalance,
   isWebCallLowBalance,
   WEB_CALL_WALLET_POLL_MS,
+  WEB_CALL_STATE_POLL_MS,
   type CallInitiateResult,
   type WebCallCreatorCard,
   type WebCallCreatorPair,
@@ -429,6 +430,13 @@ export function WebCallRoom({
           void finishCallRef.current?.();
         }, 1200);
       });
+      client.on("connection-state-change", (cur) => {
+        if (cancelled || clientRef.current !== client) return;
+        if (!connectedRef.current) return;
+        if (cur === "DISCONNECTED" || cur === "DISCONNECTING") {
+          void finishCallRef.current?.();
+        }
+      });
       try {
         await client.join(appId, session.channel_name, session.token, uid);
         // Gateway config can turn event reporting back on during join.
@@ -538,9 +546,11 @@ export function WebCallRoom({
           return "stop" as const;
         }
         if (joined) {
+          // Backup only. Live hangup is Agora connection-state-change /
+          // user-left and Firestore. This catches coins_exhausted if those miss.
           statePoll = setInterval(() => {
             const session = sessionRef.current;
-            if (!session || cancelled || connectedRef.current) {
+            if (!session || cancelled) {
               if (statePoll != null) {
                 clearInterval(statePoll);
                 statePoll = null;
@@ -550,13 +560,16 @@ export function WebCallRoom({
             void fetchCallState({ ...auth, sessionId: session.session_id }).then(
               (status) => {
                 if (cancelled) return;
-                if (isLiveCallSignal(status)) markLive();
-                else if (isEndedCallSignal(status)) {
+                if (isLiveCallSignal(status)) {
+                  if (!connectedRef.current) markLive();
+                  return;
+                }
+                if (isEndedCallSignal(status)) {
                   void finishCallRef.current?.();
                 }
               },
             );
-          }, 1500);
+          }, WEB_CALL_STATE_POLL_MS);
           return "joined" as const;
         }
         finished = true;

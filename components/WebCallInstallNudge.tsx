@@ -97,7 +97,7 @@ export function WebCallInstallNudge({
       />
 
       <div className="relative z-10 mx-auto flex h-full min-h-0 w-full min-w-0 max-w-md flex-col overflow-x-hidden">
-        <div className="relative z-20 flex shrink-0 items-center justify-center gap-2 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
+        <div className="relative z-20 flex shrink-0 items-center justify-center gap-2 pt-[max(2.25rem,calc(env(safe-area-inset-top)+1.5rem))]">
           {isBiffle ? (
             <>
               <Sparkle

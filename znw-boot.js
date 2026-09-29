@@ -159,6 +159,22 @@
     if (boot.campaign)
       document.documentElement.classList.add("znw-campaign-lock");
 
+    var callPath = (window.location.pathname || "/").replace(/\/+$/, "") || "/";
+    if (callPath === "/campaign/call" || callPath.indexOf("/campaign/call/") === 0) {
+      var callStep = (params.get("step") || "").trim();
+      var callHero = "";
+      if (callStep === "install") callHero = "/web-call/install-hero.webp";
+      else if (callStep === "paywall" || params.get("preview") === "offer")
+        callHero = "/web-call/welcome-offer-hero.webp";
+      if (callHero) {
+        var callPreload = document.createElement("link");
+        callPreload.rel = "preload";
+        callPreload.as = "image";
+        callPreload.href = callHero;
+        document.head.appendChild(callPreload);
+      }
+    }
+
     /* Marketing CSS paints the navy #znw-bg. Campaign/call must not load it or
        a stalled React chunk leaves a blank dark gradient. */
     if (!boot.webview && !boot.campaign) {

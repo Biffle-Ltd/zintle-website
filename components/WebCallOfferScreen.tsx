@@ -15,10 +15,12 @@ function formatOfferDigits(amount: number): string {
 function OfferHero() {
   return (
     <img
-      src="/web-call/welcome-offer-hero.png"
+      src="/web-call/welcome-offer-hero.webp"
       alt="Welcome offer pack"
-      width={456}
-      height={456}
+      width={782}
+      height={888}
+      fetchPriority="high"
+      decoding="async"
       className="block h-auto w-full"
     />
   );

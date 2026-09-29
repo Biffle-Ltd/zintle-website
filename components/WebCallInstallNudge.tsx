@@ -80,7 +80,7 @@ export function WebCallInstallNudge({
     : ZINTLE_PLAY_STORE_URL;
 
   return (
-    <div className="relative flex h-dvh max-h-dvh flex-col overflow-hidden overscroll-none font-figtree text-white">
+    <div className="fixed inset-0 flex h-dvh max-h-dvh w-full min-w-0 flex-col overflow-hidden overscroll-none font-figtree text-white">
       <h1 className="sr-only">{title}</h1>
       <div
         className="absolute inset-0"
@@ -97,7 +97,7 @@ export function WebCallInstallNudge({
       />
 
       <div className="relative z-10 mx-auto flex h-full min-h-0 w-full min-w-0 max-w-md flex-col overflow-x-hidden">
-        <div className="relative z-20 flex shrink-0 items-center justify-center gap-2 pt-[max(0.85rem,env(safe-area-inset-top))]">
+        <div className="relative z-20 flex shrink-0 items-center justify-center gap-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
           {isBiffle ? (
             <>
               <Sparkle
@@ -119,65 +119,70 @@ export function WebCallInstallNudge({
           ) : null}
         </div>
 
-        <div className="relative mx-auto mt-2 flex aspect-square w-[min(62%,16rem)] shrink-0 items-end justify-center">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-[6%] rounded-[50%] opacity-80"
-            style={{
-              background:
-                "radial-gradient(ellipse at center, rgba(255,220,255,0.5) 0%, rgba(196,91,255,0) 70%)",
-            }}
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-[4%] rotate-[-16deg] rounded-[50%] border border-white/35"
-          />
-          <Sparkle
-            size={16}
-            className="absolute right-[8%] top-[6%] drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
-          />
-          <img
-            src="/web-call/install-hero.png"
-            alt=""
-            width={242}
-            height={328}
-            className="relative z-1 h-[72%] w-auto object-contain object-bottom"
-          />
-          <Sparkle
-            size={14}
-            className="absolute bottom-[14%] left-[6%] z-2 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
-          />
-          <Sparkle
-            size={18}
-            className="absolute bottom-[4%] right-[8%] z-2 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
-          />
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden">
+          <div className="relative mx-auto flex h-[clamp(6.5rem,26svh,16rem)] w-[clamp(6.5rem,26svh,16rem)] shrink items-end justify-center">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-[6%] rounded-[50%] opacity-80"
+              style={{
+                background:
+                  "radial-gradient(ellipse at center, rgba(255,220,255,0.5) 0%, rgba(196,91,255,0) 70%)",
+              }}
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-[4%] rotate-[-16deg] rounded-[50%] border border-white/35"
+            />
+            <Sparkle
+              size={16}
+              className="absolute right-[8%] top-[6%] drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+            />
+            <img
+              src="/web-call/install-hero.webp"
+              alt=""
+              width={242}
+              height={328}
+              fetchPriority="high"
+              decoding="async"
+              className="relative z-1 h-[72%] w-auto object-contain object-bottom"
+            />
+            <Sparkle
+              size={14}
+              className="absolute bottom-[14%] left-[6%] z-2 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+            />
+            <Sparkle
+              size={18}
+              className="absolute bottom-[4%] right-[8%] z-2 drop-shadow-[0_0_8px_rgba(255,255,255,0.75)]"
+            />
+          </div>
+
+          <div className="relative z-10 flex w-full min-w-0 shrink-0 flex-col items-center px-5 text-center">
+            <p className="text-[clamp(22px,7vw,36px)] font-extrabold leading-none tracking-tight">
+              Explore
+            </p>
+            <p
+              className="bg-clip-text text-[clamp(40px,13vw,68px)] font-extrabold leading-[0.92] tracking-tight text-transparent"
+              style={{ backgroundImage: COUNT_GRADIENT }}
+            >
+              1000+
+            </p>
+            <p className="text-[clamp(20px,6.5vw,32px)] font-extrabold leading-none tracking-tight">
+              more creators
+            </p>
+            <p className="mt-[clamp(0.5rem,1.6svh,1rem)] w-full max-w-72 rounded-full bg-white/18 px-4 py-2.5 text-[13px] font-medium leading-snug text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.16)] backdrop-blur-[2px]">
+              {INSTALL_NUDGE_COPY}
+            </p>
+          </div>
         </div>
 
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center overflow-hidden px-6 text-center">
-          <p className="text-[clamp(28px,9vw,36px)] font-extrabold leading-none tracking-tight">
-            Explore
-          </p>
-          <p
-            className="bg-clip-text text-[clamp(52px,17vw,68px)] font-extrabold leading-[0.92] tracking-tight text-transparent"
-            style={{ backgroundImage: COUNT_GRADIENT }}
-          >
-            1000+
-          </p>
-          <p className="text-[clamp(26px,8vw,32px)] font-extrabold leading-none tracking-tight">
-            more creators
-          </p>
-
-          <p className="mt-4 w-full max-w-72 rounded-full bg-white/18 px-5 py-3 text-[14px] font-medium leading-snug text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.16)] backdrop-blur-[2px]">
-            {INSTALL_NUDGE_COPY}
-          </p>
-
-          <div className="mt-6 flex w-full max-w-80 items-start justify-between gap-2 px-1">
+        <div className="flex w-full min-w-0 shrink-0 items-start justify-between gap-2 px-4 pt-3">
+          <div className="mx-auto flex w-full min-w-0 max-w-80 items-start justify-between gap-2">
             {STATS.map((stat) => (
               <div
                 key={stat.alt}
-                className="flex min-w-0 flex-1 flex-col items-center gap-2.5"
+                className="flex min-w-0 flex-1 flex-col items-center gap-2"
               >
-                <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/75 bg-white/10">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/75 bg-white/10 sm:h-14 sm:w-14">
                   <img
                     src={stat.src}
                     alt=""
@@ -194,7 +199,7 @@ export function WebCallInstallNudge({
           </div>
         </div>
 
-        <div className="mt-auto w-full shrink-0 px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-5">
+        <div className="w-full shrink-0 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
           <a
             href={playStoreUrl}
             target="_blank"

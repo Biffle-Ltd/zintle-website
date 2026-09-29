@@ -14,6 +14,19 @@ function formatCallClock(totalSeconds: number): string {
   return `${mm}:${ss}`;
 }
 
+function EarpieceIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+      className={className}
+    >
+      <path d="M8.2 3.2h7.6A2.2 2.2 0 0 1 18 5.4v13.2a2.2 2.2 0 0 1-2.2 2.2H8.2A2.2 2.2 0 0 1 6 18.6V5.4a2.2 2.2 0 0 1 2.2-2.2Zm2.1 2.1h3.4a.85.85 0 0 1 0 1.7h-3.4a.85.85 0 1 1 0-1.7ZM12 17.2a1.15 1.15 0 1 0 0 2.3 1.15 1.15 0 0 0 0-2.3Z" />
+    </svg>
+  );
+}
+
 function SpeakerIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -135,7 +148,7 @@ export function WebCallConnectedScreen({
             <button
               type="button"
               onClick={onToggleSpeaker}
-              aria-label={speakerOn ? "Turn speaker off" : "Turn speaker on"}
+              aria-label={speakerOn ? "Switch to earpiece" : "Switch to speaker"}
               aria-pressed={speakerOn}
               className="flex h-[60px] w-[60px] items-center justify-center rounded-full"
               style={{
@@ -143,7 +156,11 @@ export function WebCallConnectedScreen({
                 color: speakerOn ? CONTROL_OFF : "#FFFFFF",
               }}
             >
-              <SpeakerIcon className="h-7 w-7" />
+              {speakerOn ? (
+                <SpeakerIcon className="h-7 w-7" />
+              ) : (
+                <EarpieceIcon className="h-7 w-7" />
+              )}
             </button>
             <button
               type="button"

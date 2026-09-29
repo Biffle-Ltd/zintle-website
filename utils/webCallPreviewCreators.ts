@@ -1,40 +1,101 @@
 /**
- * Pre-login auto-call overlay only: names + profile photos from prod
- * BIFFLE1234 priority_creators. No creator ids — Accept never rings these.
+ * Pre-login auto-call overlay only: names + profile photos snapshotted from
+ * prod BIFFLE1234 Variable `priority_creators`. No creator ids — Accept never
+ * rings these. Refresh the snapshot when Ops changes that list.
  */
-
-const CDN = "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm";
 
 export type WebCallPreviewCreator = {
   name: string;
   profilePicUrl: string;
 };
 
-/** Prod priority list, display names formatted like the incoming card (First L.). */
-export const WEB_CALL_PREVIEW_CREATORS: WebCallPreviewCreator[] = [
-  { name: "Kayra", profilePicUrl: `${CDN}/profile+33.webp` },
-  { name: "Maaya", profilePicUrl: `${CDN}/profile+49.webp` },
-  { name: "Amayra", profilePicUrl: `${CDN}/profile+34.webp` },
-  { name: "Radha K.", profilePicUrl: `${CDN}/profile+11.webp` },
-  { name: "Payal K.", profilePicUrl: `${CDN}/profile+36.webp` },
-  { name: "Soumya Y.", profilePicUrl: `${CDN}/profile+39.webp` },
-  { name: "Sweeti S.", profilePicUrl: `${CDN}/profile+21.webp` },
-  { name: "Aarohi M.", profilePicUrl: `${CDN}/profile+51.webp` },
-  { name: "Nicky", profilePicUrl: `${CDN}/profile+35.webp` },
-  { name: "Riya M.", profilePicUrl: `${CDN}/profile+35.webp` },
-  { name: "Aarya", profilePicUrl: `${CDN}/profile+59.webp` },
-  { name: "Avantika", profilePicUrl: `${CDN}/profile+7.webp` },
-  { name: "Kalyani K.", profilePicUrl: `${CDN}/profile+40.webp` },
-  { name: "Nikita S.", profilePicUrl: `${CDN}/profile+31.webp` },
-  { name: "Aayesha K.", profilePicUrl: `${CDN}/profile+27.webp` },
-  { name: "Sonu C.", profilePicUrl: `${CDN}/profile+47.webp` },
-  { name: "Prachi S.", profilePicUrl: `${CDN}/profile+17.webp` },
-  { name: "Koko C.", profilePicUrl: `${CDN}/profile+19.webp` },
-  { name: "Anjali S.", profilePicUrl: `${CDN}/profile+42.webp` },
-  { name: "Vijaya S.", profilePicUrl: `${CDN}/profile+43.webp` },
-  { name: "Nivi", profilePicUrl: `${CDN}/profile+19.webp` },
-  { name: "Aiswariya H.", profilePicUrl: `${CDN}/profile+8.webp` },
-  { name: "Lakshmi", profilePicUrl: `${CDN}/profile+40.webp` },
+/** Raw prod names. Display formatting happens in `WEB_CALL_PREVIEW_CREATORS`. */
+const PRIORITY_CREATOR_SNAPSHOT: WebCallPreviewCreator[] = [
+  {
+    name: "Maaya👸😘 🌸",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+49.webp",
+  },
+  {
+    name: "Anjali Singh",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+42.webp",
+  },
+  {
+    name: "Ishani Ji",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+10.webp",
+  },
+  {
+    name: "Anjali ❤️",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+55.webp",
+  },
+  {
+    name: "Radha Kumari",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+11.webp",
+  },
+  {
+    name: "Kayra",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+33.webp",
+  },
+  {
+    name: "Anisha",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+17.webp",
+  },
+  {
+    name: "Nicky",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+35.webp",
+  },
+  {
+    name: "Amayra❣️",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+34.webp",
+  },
+  {
+    name: "Sweeti Sharma",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+21.webp",
+  },
+  {
+    name: "Prachi Singh",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+17.webp",
+  },
+  {
+    name: "vijaya shanthi",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+43.webp",
+  },
+  {
+    name: "Nivi Nivi",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+19.webp",
+  },
+  {
+    name: "Aiswariya H",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+8.webp",
+  },
+  {
+    name: "Lakshmi Lakshmi",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+40.webp",
+  },
+  {
+    name: "Renu Anu",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+61.webp",
+  },
+  {
+    name: "Roopashree Roopashree",
+    profilePicUrl:
+      "https://d3gao7f0o4i01l.cloudfront.net/avatar_images_cm/profile+13.webp",
+  },
 ];
 
 const PREVIEW_INDEX_KEY = "zintle_web_call_preview_index";
@@ -59,9 +120,27 @@ export function formatIncomingDisplayName(raw: string): string {
   return `${parts[0]} ${parts[1][0].toUpperCase()}.`;
 }
 
+/** Drive `uc?export=view` 403s in <img>; thumbnails load. CDN URLs pass through. */
+function usablePreviewPhotoUrl(raw: string): string {
+  const url = raw.trim();
+  if (!url.includes("drive.google.com")) return url;
+  const fromQuery = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  const fromPath = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  const fileId = fromQuery?.[1] || fromPath?.[1];
+  if (!fileId) return url;
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`;
+}
+
+export const WEB_CALL_PREVIEW_CREATORS: WebCallPreviewCreator[] =
+  PRIORITY_CREATOR_SNAPSHOT.map((row) => ({
+    name: formatIncomingDisplayName(row.name),
+    profilePicUrl: usablePreviewPhotoUrl(row.profilePicUrl),
+  })).filter((row) => row.profilePicUrl);
+
 /** Sticky for the tab so the landing face does not flicker on re-render. */
 export function pickWebCallPreviewCreator(): WebCallPreviewCreator {
   const pool = WEB_CALL_PREVIEW_CREATORS;
+  const fallback = pool[0] ?? { name: "Creator", profilePicUrl: "" };
   try {
     const stored = Number(sessionStorage.getItem(PREVIEW_INDEX_KEY));
     if (Number.isInteger(stored) && stored >= 0 && stored < pool.length) {
@@ -69,8 +148,8 @@ export function pickWebCallPreviewCreator(): WebCallPreviewCreator {
     }
     const index = Math.floor(Math.random() * pool.length);
     sessionStorage.setItem(PREVIEW_INDEX_KEY, String(index));
-    return pool[index];
+    return pool[index] ?? fallback;
   } catch {
-    return pool[0];
+    return fallback;
   }
 }

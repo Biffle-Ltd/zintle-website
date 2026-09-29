@@ -75,21 +75,68 @@ function configureAgoraOnce() {
   }
 }
 
-function applyRemoteSpeaker(
+type PlaybackKind = "speaker" | "earpiece";
+
+function playbackKind(label: string): PlaybackKind | null {
+  const value = label.toLowerCase();
+  if (!value) return null;
+  if (/bluetooth|headset|headphone|usb|airpod/.test(value)) return null;
+  if (/earpiece|receiver|handset/.test(value)) return "earpiece";
+  if (/\bphone\b/.test(value) && !/speaker/.test(value)) return "earpiece";
+  if (/speaker|loud/.test(value)) return "speaker";
+  return null;
+}
+
+async function routeAudioElements(deviceId: string) {
+  const nodes = document.querySelectorAll("audio");
+  await Promise.all(
+    [...nodes].map(async (node) => {
+      const audio = node as HTMLMediaElement & {
+        setSinkId?: (id: string) => Promise<void>;
+      };
+      if (typeof audio.setSinkId !== "function") return;
+      try {
+        await audio.setSinkId(deviceId);
+      } catch {
+        /* iOS and some WebViews cannot choose an output */
+      }
+    }),
+  );
+}
+
+/** Route remote audio to speaker or earpiece. Never mute via volume. */
+async function applyRemoteSpeaker(
   track: IRemoteAudioTrack | null,
-  on: boolean,
+  speaker: boolean,
 ) {
   if (!track) return;
   try {
-    // Remote volume is 0 (mute) to 100 (max). https://api-ref.agora.io/en/video-sdk/web/4.x/interfaces/iremoteaudiotrack.html
-    track.setVolume(on ? 100 : 0);
+    track.setVolume(100);
   } catch {
     /* older SDK builds */
   }
   try {
-    if (on) track.play();
+    track.play();
   } catch {
     /* autoplay / already playing */
+  }
+  let devices: MediaDeviceInfo[] = [];
+  try {
+    devices = await AgoraRTC.getPlaybackDevices();
+  } catch {
+    devices = [];
+  }
+  const want: PlaybackKind = speaker ? "speaker" : "earpiece";
+  const match = devices.find((device) => playbackKind(device.label) === want);
+  const fallback = speaker
+    ? devices.find((device) => device.deviceId === "default") || devices[0]
+    : undefined;
+  const deviceId = match?.deviceId || fallback?.deviceId;
+  if (!deviceId) return;
+  try {
+    await track.setPlaybackDevice(deviceId);
+  } catch {
+    await routeAudioElements(deviceId);
   }
 }
 
@@ -356,7 +403,7 @@ export function WebCallRoom({
         clearRemoteLeaveTimer();
         if (mediaType === "audio" && user.audioTrack) {
           remoteAudioRef.current = user.audioTrack;
-          applyRemoteSpeaker(user.audioTrack, speakerOnRef.current);
+          void applyRemoteSpeaker(user.audioTrack, speakerOnRef.current);
           markLive();
         }
         if (mediaType === "video" && remoteVideoRef.current) {
@@ -742,7 +789,7 @@ export function WebCallRoom({
     const next = !speakerOnRef.current;
     speakerOnRef.current = next;
     setSpeakerOn(next);
-    applyRemoteSpeaker(remoteAudioRef.current, next);
+    void applyRemoteSpeaker(remoteAudioRef.current, next);
   };
 
   const connectedScreen = (photoUrl: string | undefined, personName: string) => (

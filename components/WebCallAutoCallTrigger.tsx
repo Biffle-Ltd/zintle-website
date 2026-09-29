@@ -25,7 +25,7 @@ export function WebCallAutoCallTrigger({
   const showPhoto = Boolean(photoUrl) && !photoFailed;
 
   return (
-    <div className="relative flex h-dvh max-h-dvh items-center justify-center overflow-hidden overscroll-none bg-white px-4 py-10">
+    <div className="relative flex h-dvh max-h-dvh flex-col items-center justify-center overflow-hidden overscroll-none bg-white px-4 py-6">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-[-45%] rotate-[-18deg]"
@@ -35,7 +35,26 @@ export function WebCallAutoCallTrigger({
           backgroundSize: "110px 122px",
         }}
       />
-      <div className="relative z-10 w-full max-w-[340px] overflow-hidden rounded-[28px] bg-white shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
+      <div className="relative z-10 flex w-full max-w-[340px] flex-col items-center">
+        <div
+          role="img"
+          aria-label="Biffle"
+          className="mb-[clamp(0.75rem,2.4svh,1.25rem)] shrink-0"
+          style={{
+            width: "clamp(78px, 22vw, 104px)",
+            height: "clamp(32px, 8vw, 44px)",
+            backgroundColor: "#6D28D9",
+            WebkitMaskImage: "url(/web-call/biffle-wordmark.png)",
+            maskImage: "url(/web-call/biffle-wordmark.png)",
+            WebkitMaskRepeat: "no-repeat",
+            maskRepeat: "no-repeat",
+            WebkitMaskPosition: "center",
+            maskPosition: "center",
+            WebkitMaskSize: "contain",
+            maskSize: "contain",
+          }}
+        />
+      <div className="w-full overflow-hidden rounded-[28px] bg-white shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
         <div className="relative aspect-square w-full overflow-hidden bg-neutral-100">
           {loading ? (
             <div className="flex h-full w-full items-center justify-center">
@@ -96,6 +115,7 @@ export function WebCallAutoCallTrigger({
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

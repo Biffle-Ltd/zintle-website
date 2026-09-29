@@ -19,7 +19,7 @@ function OfferHero() {
       alt="Welcome offer pack"
       width={456}
       height={456}
-      className="block h-auto max-h-[min(42svh,280px)] w-full object-contain"
+      className="block h-auto w-full"
     />
   );
 }

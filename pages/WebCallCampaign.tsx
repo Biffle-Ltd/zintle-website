@@ -15,11 +15,13 @@ import {
   markWebCallLeftPreview,
   nextLoggedInWebCallStep,
   resolveWebCallToken,
-  trapBrowserBack,
-  seedBrowserBackTrap,
+  armBrowserBackTrap,
+  listenBrowserBack,
   webCallInstallPath,
   webCallLeftPreview,
   webCallOfferPaid,
+  webCallCallFinished,
+  readWebCallInstallVariant,
   webCallPathForStep,
   webCallStepPath,
   maybeStripWebCallSecrets,
@@ -44,6 +46,22 @@ function nextPaywallExitSheet(sheet: PaywallExitSheet): PaywallExitSheet {
       return "install";
     case "install":
       return "install";
+    default: {
+      const exhaustive: never = sheet;
+      return exhaustive;
+    }
+  }
+}
+
+/** Dummy history entries to push during a tap so later backs can show these sheets. */
+function paywallBackTrapDepth(sheet: PaywallExitSheet): number {
+  switch (sheet) {
+    case "none":
+      return 2;
+    case "guilt":
+      return 1;
+    case "install":
+      return 1;
     default: {
       const exhaustive: never = sheet;
       return exhaustive;
@@ -180,8 +198,7 @@ export function WebCallCampaign({
   ]);
 
   useEffect(() => {
-    if (step !== "paywall" || previewOffer || !token || exitSheet !== "none")
-      return;
+    if (step !== "paywall" || !token || exitSheet !== "none") return;
     let cancelled = false;
     void nextLoggedInWebCallStep({
       organisationId,
@@ -190,6 +207,7 @@ export function WebCallCampaign({
       search: location.search,
     }).then((next) => {
       if (cancelled || next === "paywall") return;
+      if (previewOffer && next !== "install") return;
       navigate(webCallPathForStep(next, location.search), { replace: true });
     });
     return () => {
@@ -209,21 +227,23 @@ export function WebCallCampaign({
   useEffect(() => {
     if (step !== "incoming") return;
     if (hideFakeTrigger) return;
-    window.history.pushState({ webCallGuilt: true }, "");
-    const onPop = () => setExitSheet("guilt");
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
+    const unlisten = listenBrowserBack(() => setExitSheet("guilt"));
+    const onPointerDown = () => armBrowserBackTrap(1);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      unlisten();
+      window.removeEventListener("pointerdown", onPointerDown, true);
+    };
   }, [step, hideFakeTrigger]);
 
   const exitSheetRef = React.useRef(exitSheet);
   exitSheetRef.current = exitSheet;
   const payingRef = React.useRef(paying);
   payingRef.current = paying;
-  const wasPayingRef = React.useRef(false);
 
   useEffect(() => {
     if (step !== "paywall" || !token) return;
-    return trapBrowserBack(
+    const unlisten = listenBrowserBack(
       () => {
         if (payingRef.current) return;
         const next = nextPaywallExitSheet(exitSheetRef.current);
@@ -232,24 +252,28 @@ export function WebCallCampaign({
       },
       { isPaused: () => payingRef.current },
     );
+    const onPointerDown = () => {
+      if (payingRef.current) return;
+      armBrowserBackTrap(paywallBackTrapDepth(exitSheetRef.current));
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      unlisten();
+      window.removeEventListener("pointerdown", onPointerDown, true);
+    };
   }, [step, token]);
 
   useEffect(() => {
-    if (step !== "paywall" || !token) return;
-    if (paying) {
-      wasPayingRef.current = true;
-      return;
-    }
-    if (!wasPayingRef.current) return;
-    wasPayingRef.current = false;
-    seedBrowserBackTrap();
-  }, [step, token, paying]);
-
-  useEffect(() => {
     if (step !== "install" || !token) return;
-    return trapBrowserBack(() => {
-      /* Stay on install — do not fall off the ad-landed history stack. */
+    const unlisten = listenBrowserBack(() => {
+      /* Stay on install — Chrome will leave once these tap-armed entries are gone. */
     });
+    const onPointerDown = () => armBrowserBackTrap(1);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      unlisten();
+      window.removeEventListener("pointerdown", onPointerDown, true);
+    };
   }, [step, token]);
 
   useEffect(() => {
@@ -286,11 +310,11 @@ export function WebCallCampaign({
   }, [step, organisationId, location.search, token]);
 
   useEffect(() => {
-    if (step !== "paywall" || previewOffer || !token) return;
+    if (step !== "paywall" || !token) return;
     if (!offer?.already_claimed) return;
     if (webCallOfferPaid()) return;
-    setExitSheet("install");
-  }, [offer, step, previewOffer, token, location.search, navigate]);
+    navigate(webCallInstallPath(location.search), { replace: true });
+  }, [offer, step, token, location.search, navigate]);
 
   const startLogin = () => {
     markWebCallLeftPreview();
@@ -317,6 +341,7 @@ export function WebCallCampaign({
       return;
     }
     if (step === "paywall") {
+      armBrowserBackTrap(paywallBackTrapDepth("install"));
       setExitSheet("install");
       return;
     }
@@ -327,6 +352,7 @@ export function WebCallCampaign({
     const token = resolveWebCallToken(organisationId, location.search);
     const packId = offer?.coin_pack_id ?? context.coinPackId;
     if (!token || !packId) return;
+    armBrowserBackTrap(paywallBackTrapDepth(exitSheetRef.current));
     setPaying(true);
     try {
       const result = await createOrderAndInitiatePayment(
@@ -433,7 +459,9 @@ export function WebCallCampaign({
     return (
       <WebCallInstallNudge
         organisationId={organisationId}
-        variant="purchased"
+        variant={
+          webCallCallFinished() ? readWebCallInstallVariant() : "purchased"
+        }
       />
     );
   }
@@ -473,6 +501,7 @@ export function WebCallCampaign({
           stayLabel={offer?.already_claimed ? "Install the app" : "Recharge Now"}
           onStay={() => {
             if (offer?.already_claimed) {
+              armBrowserBackTrap(paywallBackTrapDepth("install"));
               setExitSheet("install");
               return;
             }

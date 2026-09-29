@@ -28,6 +28,9 @@ import {
   readPendingIdentityGender,
   resolveWebCallToken,
   webCallIncomingAccepted,
+  markWebCallCallFinished,
+  markWebCallInstallVariant,
+  webCallInstallPath,
   webCallStepPath,
   maybeStripWebCallSecrets,
   requireWebCallLogin,
@@ -206,6 +209,16 @@ export function WebCallRoom({
   const [prejoinRecharge, setPrejoinRecharge] = useState(false);
   const [prejoinRetry, setPrejoinRetry] = useState(0);
   const callPrice = shownCreator?.audioPricePerMinute ?? null;
+
+  const goToPostCallInstall = (variant: "ended" | "unconnected") => {
+    markWebCallCallFinished();
+    markWebCallInstallVariant(variant);
+    setInstallVariant(variant);
+    setPhase("ended");
+    navigate(webCallInstallPath(location.search), { replace: true });
+  };
+  const goToPostCallInstallRef = useRef(goToPostCallInstall);
+  goToPostCallInstallRef.current = goToPostCallInstall;
 
   useEffect(() => {
     if (isPreview || phase !== "live" || !token || callPrice == null) {
@@ -629,8 +642,7 @@ export function WebCallRoom({
               });
         if (cancelled) return;
         if (!pair?.creator) {
-          setInstallVariant("unconnected");
-          setPhase("ended");
+          goToPostCallInstallRef.current("unconnected");
           return;
         }
         ordered = [pair.creator, pair.fallback].filter(
@@ -639,8 +651,7 @@ export function WebCallRoom({
       }
       if (cancelled) return;
       if (!ordered.length) {
-        setInstallVariant("unconnected");
-        setPhase("ended");
+        goToPostCallInstallRef.current("unconnected");
         return;
       }
       for (const creator of ordered) {
@@ -649,8 +660,7 @@ export function WebCallRoom({
         const outcome = await tryCreator(creator.id, details);
         if (outcome === "unconnected") {
           if (!cancelled) {
-            setInstallVariant("unconnected");
-            setPhase("ended");
+            goToPostCallInstallRef.current("unconnected");
           }
           return;
         }
@@ -659,8 +669,7 @@ export function WebCallRoom({
         if (outcome === "stop") return;
       }
       if (!cancelled) {
-        setInstallVariant("unconnected");
-        setPhase("ended");
+        goToPostCallInstallRef.current("unconnected");
       }
     };
 
@@ -699,8 +708,7 @@ export function WebCallRoom({
         : null;
       if (cancelled) return;
       const connected = connectedRef.current || status === "ended";
-      setInstallVariant(connected ? "ended" : "unconnected");
-      setPhase("ended");
+      goToPostCallInstallRef.current(connected ? "ended" : "unconnected");
       clearWebCallIncomingAccepted();
       await leave();
     };
@@ -795,8 +803,7 @@ export function WebCallRoom({
   ) {
     const dismissPrejoin = () => {
       setPrejoinRecharge(false);
-      setInstallVariant("unconnected");
-      setPhase("ended");
+      goToPostCallInstall("unconnected");
     };
     return (
       <div className="relative h-dvh max-h-dvh overflow-hidden overscroll-none">

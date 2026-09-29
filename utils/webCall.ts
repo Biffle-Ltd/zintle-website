@@ -215,8 +215,8 @@ export function resolveWebCallToken(
 /**
  * Next screen after login / onboarding, from the live profile.
  * Gender → language → welcome offer if unclaimed → incoming/room after this
- * session's purchase. Returning users who already claimed the pack (and are
- * not in a just-paid session) go to install — web has no pre-call coin store.
+ * session's purchase. After the call ends, and for returning users who already
+ * claimed the pack, go to install — web has no pre-call coin store.
  */
 export async function nextLoggedInWebCallStep(opts: {
   organisationId: string;
@@ -234,6 +234,7 @@ export async function nextLoggedInWebCallStep(opts: {
   if (userNeedsIdentityGender(details) && !pendingGender) return "gender";
   if (userNeedsLanguageSelection(details)) return "language";
   markWebCallPrefsReady();
+  if (webCallCallFinished()) return "install";
   if (webCallOfferPaid()) return "incoming";
   const offer = await fetchWebCallOffer({
     organisationId: opts.organisationId,
@@ -290,10 +291,7 @@ export async function webCallPathAfterLogin(opts: {
     coinPackId: pack,
     search,
   });
-  if (
-    isWebCallOfferPreview(search) &&
-    (next === "install" || next === "paywall" || next === "incoming")
-  ) {
+  if (isWebCallOfferPreview(search) && next === "paywall") {
     return webCallOfferPath(search);
   }
   return webCallPathForStep(next, search);
@@ -490,6 +488,7 @@ function cardFromAutoCall(raw: unknown): WebCallCreatorCard | null {
 }
 
 const OFFER_PAID_KEY = "zintle_web_call_offer_paid";
+const CALL_FINISHED_KEY = "zintle_web_call_call_finished";
 
 /** Payment poll said SUCCESS; fulfil / already_claimed may still be a few hundred ms behind. */
 export function markWebCallOfferPaid(): void {
@@ -502,6 +501,42 @@ export function webCallOfferPaid(): boolean {
 
 export function clearWebCallOfferPaid(): void {
   sessionStorage.removeItem(OFFER_PAID_KEY);
+}
+
+/** Hang-up / no-connect after this session's call — later routing goes to install. */
+export function markWebCallCallFinished(): void {
+  sessionStorage.setItem(CALL_FINISHED_KEY, "1");
+}
+
+export function webCallCallFinished(): boolean {
+  return sessionStorage.getItem(CALL_FINISHED_KEY) === "1";
+}
+
+const INSTALL_VARIANT_KEY = "zintle_web_call_install_variant";
+
+export type WebCallInstallScreenVariant =
+  | "pending"
+  | "ended"
+  | "unconnected"
+  | "purchased";
+
+export function markWebCallInstallVariant(
+  variant: WebCallInstallScreenVariant,
+): void {
+  sessionStorage.setItem(INSTALL_VARIANT_KEY, variant);
+}
+
+export function readWebCallInstallVariant(): WebCallInstallScreenVariant {
+  const value = sessionStorage.getItem(INSTALL_VARIANT_KEY);
+  switch (value) {
+    case "pending":
+    case "ended":
+    case "unconnected":
+    case "purchased":
+      return value;
+    default:
+      return "purchased";
+  }
 }
 
 export async function waitForWebCallOfferClaimed(opts: {
@@ -530,10 +565,10 @@ export async function waitForWebCallOfferClaimed(opts: {
 }
 
 /**
- * Extra same-URL history entries so Android/iOS back stays in the SPA.
- * Chrome closes the tab when this document is the last history entry (typical
- * for an ad landing). PhonePe's iframe also pops our entries while checkout
- * is open — replenish after it closes.
+ * Chrome's History Manipulation Intervention skips pushState that was not
+ * armed during a user tap. Dummy entries from useEffect never fire popstate
+ * on Android — the tab closes instead. Re-pushing inside popstate is also
+ * skipped (crbug 1248529). Push only from a pointer/click handler.
  */
 function pushBackTrap(): void {
   try {
@@ -547,20 +582,21 @@ function pushBackTrap(): void {
   }
 }
 
-export function seedBrowserBackTrap(): void {
-  pushBackTrap();
-  pushBackTrap();
+/** Call synchronously from a tap handler. Do not call from useEffect or popstate. */
+export function armBrowserBackTrap(depth = 2): void {
+  const n = Math.max(0, Math.min(8, Math.floor(depth)));
+  for (let i = 0; i < n; i++) {
+    pushBackTrap();
+  }
 }
 
-/** Intercept back without letting the pop leave the site. Always re-arms. */
-export function trapBrowserBack(
+/** Listen only. Never re-arms — that would be skippable after a back. */
+export function listenBrowserBack(
   onBack: () => void,
   options?: { isPaused?: () => boolean },
 ): () => void {
-  seedBrowserBackTrap();
   const onPop = () => {
     if (options?.isPaused?.()) return;
-    pushBackTrap();
     onBack();
   };
   window.addEventListener("popstate", onPop);

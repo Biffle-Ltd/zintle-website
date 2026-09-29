@@ -97,7 +97,7 @@ export function WebCallInstallNudge({
       />
 
       <div className="relative z-10 mx-auto flex h-full min-h-0 w-full min-w-0 max-w-md flex-col overflow-x-hidden">
-        <div className="relative z-20 flex shrink-0 items-center justify-center gap-2 pt-[max(0.35rem,env(safe-area-inset-top))]">
+        <div className="relative z-20 flex shrink-0 items-center justify-center gap-2 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.75rem))]">
           {isBiffle ? (
             <>
               <Sparkle
@@ -120,7 +120,7 @@ export function WebCallInstallNudge({
         </div>
 
         <div className="relative mx-auto flex min-h-0 w-full flex-1 items-center justify-center px-4">
-          <div className="relative aspect-square h-[clamp(10rem,30svh,12.5rem)] w-auto max-w-full">
+          <div className="relative mx-auto flex aspect-square h-[clamp(12rem,36svh,15rem)] w-auto max-w-full items-center justify-center">
             <div
               aria-hidden
               className="pointer-events-none absolute inset-[4%] rounded-[50%] opacity-80"
@@ -144,7 +144,7 @@ export function WebCallInstallNudge({
               height={328}
               fetchPriority="high"
               decoding="async"
-              className="relative z-1 h-full w-auto max-h-full object-contain object-bottom"
+              className="relative z-1 h-full w-auto max-h-full object-contain object-center"
             />
             <Sparkle
               size={14}

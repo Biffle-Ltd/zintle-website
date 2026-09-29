@@ -175,12 +175,12 @@ export function WebCallInstallNudge({
           </p>
         </div>
 
-        <div className="flex w-full min-w-0 shrink-0 items-start justify-between gap-2 px-4 pt-2">
+        <div className="flex w-full min-w-0 shrink-0 items-start justify-between gap-2 px-4 py-4">
           <div className="mx-auto flex w-full min-w-0 max-w-80 items-start justify-between gap-2">
             {STATS.map((stat) => (
               <div
                 key={stat.alt}
-                className="flex min-w-0 flex-1 flex-col items-center gap-1.5"
+                className="flex min-w-0 flex-1 flex-col items-center gap-2.5"
               >
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/75 bg-white/10 sm:h-14 sm:w-14">
                   <img

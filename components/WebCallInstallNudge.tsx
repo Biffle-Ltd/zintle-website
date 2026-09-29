@@ -120,7 +120,7 @@ export function WebCallInstallNudge({
         </div>
 
         <div className="relative mx-auto flex min-h-0 w-full flex-1 items-center justify-center px-4">
-          <div className="relative mx-auto flex aspect-square h-[clamp(12rem,36svh,15rem)] w-auto max-w-full items-center justify-center">
+          <div className="relative mx-auto flex aspect-square h-[clamp(14.4rem,43.2svh,18rem)] w-auto max-w-full items-center justify-center">
             <div
               aria-hidden
               className="pointer-events-none absolute inset-[4%] rounded-[50%] opacity-80"

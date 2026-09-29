@@ -15,7 +15,7 @@ export function campaignCtaGradientStyle(
 }
 
 export const campaignPrimaryCtaClassName =
-  "w-full flex items-center justify-center gap-2 rounded-full py-4 text-lg font-bold text-white shadow-lg shadow-black/20 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity active:opacity-90";
+  "w-full flex items-center justify-center gap-2 rounded-full py-4 text-lg font-bold text-white shadow-lg shadow-black/20 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity duration-150 active:opacity-60";
 
 type CampaignPrimaryCtaProps = {
   isBiffle: boolean;

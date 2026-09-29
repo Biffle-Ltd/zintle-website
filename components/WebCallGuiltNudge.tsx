@@ -109,7 +109,7 @@ export function WebCallGuiltNudge({
         <button
           type="button"
           onClick={onStay}
-          className="mt-5 flex h-12 w-full items-center justify-center rounded-full text-[16px] font-semibold text-white"
+          className="mt-5 flex h-12 w-full items-center justify-center rounded-full text-[16px] font-semibold text-white transition-opacity duration-150 active:opacity-60"
           style={{ background: CTA_GRADIENT }}
         >
           {stayLabel}

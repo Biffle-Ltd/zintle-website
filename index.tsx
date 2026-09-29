@@ -67,9 +67,12 @@ import {
 } from "./utils/postLoginRedirect";
 import {
   canonicalizeWebCallPostLoginPath,
+  destinationKeepsPaywallBackStops,
+  settlePaywallBackStops,
   webCallPathAfterLogin,
 } from "./utils/webCall";
 import { persistWebCallLoginOption } from "./utils/webCampaign";
+import { installTapFadeFeedback } from "./utils/tapFade";
 import { clearChunkReloadFlag, lazyWithRetry } from "./utils/lazyWithRetry";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { WebCallCampaign } from "./pages/WebCallCampaign";
@@ -1652,7 +1655,7 @@ const CoinStore = ({
   const isBiffle = isBiffleOrganisationId(organisationId);
   const abandonCampaignRedirectAndClose = () => {
     sessionStorage.removeItem(ZINTLE_POST_LOGIN_REDIRECT_KEY);
-    onClose();
+    void settlePaywallBackStops(false).finally(onClose);
   };
   const [step, setStep] = useState<"store" | "login" | "success">(initialStep);
   const [selectedPack, setSelectedPack] = useState<CoinStorePack | null>(null);
@@ -1680,6 +1683,7 @@ const CoinStore = ({
               ? canonicalizeWebCallPostLoginPath(pendingRaw)
               : null;
             if (!pending?.startsWith("/")) {
+              await settlePaywallBackStops(false);
               onClose();
               return;
             }
@@ -1695,6 +1699,9 @@ const CoinStore = ({
                     organisationId,
                     authToken,
                   });
+                  await settlePaywallBackStops(
+                    destinationKeepsPaywallBackStops(dest),
+                  );
                   navigate(dest, { replace: true });
                   onClose();
                   return;
@@ -1702,6 +1709,9 @@ const CoinStore = ({
                   /* fall through to pending path */
                 }
               }
+              await settlePaywallBackStops(
+                destinationKeepsPaywallBackStops(pending),
+              );
               navigate(pending, { replace: true });
               onClose();
               return;
@@ -3707,5 +3717,6 @@ const appRootEl = document.getElementById("root");
 if (!appRootEl) {
   throw new Error("Root element #root not found");
 }
+installTapFadeFeedback();
 const appRoot = createRoot(appRootEl);
 appRoot.render(<App />);

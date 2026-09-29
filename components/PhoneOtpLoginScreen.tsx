@@ -23,6 +23,7 @@ import {
   whaleLoginMode,
   type WebLoginMode,
 } from "../utils/webCampaign";
+import { notePaywallBackGesture } from "../utils/webCall";
 import {
   ChevronRightIcon,
   CloseIcon,
@@ -58,7 +59,7 @@ function AuthRoundButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel}
-      className={`${AUTH_ACTION_BTN_CLASS} rounded-full flex items-center justify-center text-white disabled:opacity-40 transition-opacity active:opacity-90`}
+      className={`${AUTH_ACTION_BTN_CLASS} rounded-full flex items-center justify-center text-white disabled:opacity-40 transition-opacity duration-150 active:opacity-60`}
       style={campaignCtaGradientStyle(isBiffle)}
     >
       {children}
@@ -258,6 +259,7 @@ export function PhoneOtpLoginScreen({
 
   const handleVerifyOtp = useCallback(
     async (code?: string) => {
+      if (isWhaleLoginPath()) notePaywallBackGesture();
       const otpValue = (code ?? otp).trim();
       if (otpValue.length !== OTP_LENGTH) return;
       setLoading(true);
@@ -571,7 +573,12 @@ export function PhoneOtpLoginScreen({
           </div>
 
           {otpSent && (
-            <div className="space-y-3 animate-fade-in">
+            <div
+              className="space-y-3 animate-fade-in"
+              onPointerDownCapture={() => {
+                if (isWhaleLoginPath()) notePaywallBackGesture();
+              }}
+            >
               <div className="flex items-center gap-2">
                 <OtpDigitBoxes
                   value={otp}
@@ -603,7 +610,7 @@ export function PhoneOtpLoginScreen({
                   type="button"
                   onClick={() => void handleSendOtp()}
                   disabled={loading}
-                  className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                  className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 transition-opacity duration-150 active:opacity-60"
                   style={campaignCtaGradientStyle(isBiffle)}
                 >
                   Resend

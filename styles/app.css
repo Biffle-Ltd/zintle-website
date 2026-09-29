@@ -80,6 +80,23 @@ html.znw-campaign-lock #znw-bg {
   display: none;
 }
 
+html.znw-campaign-lock button,
+html.znw-campaign-lock a {
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 140ms ease-out;
+}
+html.znw-campaign-lock button:disabled {
+  cursor: default;
+}
+html.znw-campaign-lock button:not(:disabled):active,
+html.znw-campaign-lock button:not(:disabled).is-pressed,
+html.znw-campaign-lock a:active,
+html.znw-campaign-lock a.is-pressed {
+  opacity: 0.6;
+}
+
 .glass {
   background: rgba(11, 17, 33, 0.7);
   backdrop-filter: blur(12px);

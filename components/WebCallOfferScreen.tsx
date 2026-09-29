@@ -107,7 +107,7 @@ export function WebCallOfferScreen({
             <button
               type="button"
               onClick={onStartCall}
-              className="flex h-12 w-full items-center justify-center rounded-full text-[16px] font-semibold text-white"
+              className="flex h-12 w-full items-center justify-center rounded-full text-[16px] font-semibold text-white transition-opacity duration-150 active:opacity-60"
               style={{ background: CTA_GRADIENT }}
             >
               Install the app
@@ -117,7 +117,7 @@ export function WebCallOfferScreen({
               type="button"
               onClick={onPay}
               disabled={!canPay}
-              className="flex h-12 w-full items-center justify-center rounded-full text-[16px] font-semibold text-white disabled:opacity-80"
+              className="flex h-12 w-full items-center justify-center rounded-full text-[16px] font-semibold text-white transition-opacity duration-150 active:opacity-60 disabled:opacity-80"
               style={{ background: CTA_GRADIENT }}
             >
               {loading ? "Loading…" : "Recharge Now"}

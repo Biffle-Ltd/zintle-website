@@ -204,7 +204,7 @@ export function WebCallInstallNudge({
             href={playStoreUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex h-14 w-full items-center justify-center rounded-full text-[16px] font-semibold text-white shadow-[0_12px_28px_rgba(126,34,206,0.38)]"
+            className="flex h-14 w-full items-center justify-center rounded-full text-[16px] font-semibold text-white shadow-[0_12px_28px_rgba(126,34,206,0.38)] transition-opacity duration-150 active:opacity-60"
             style={{ background: CTA_GRADIENT }}
           >
             Install App Now

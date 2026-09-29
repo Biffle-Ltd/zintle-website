@@ -567,15 +567,127 @@ export async function waitForWebCallOfferClaimed(opts: {
 }
 
 /**
- * Chrome's History Manipulation Intervention skips pushState that was not
- * armed during a user tap. Dummy entries from useEffect never fire popstate
- * on Android — the tab closes instead. Re-pushing inside popstate is also
- * skipped (crbug 1248529). Push only from a pointer/click handler.
+ * Android Chrome skips history entries that were not created during a user
+ * tap, and one `pushState` without a tap marks every same-document entry
+ * skippable — the next back then leaves the tab. Push once per event, from
+ * the event itself. Never from useEffect, after an await, or inside popstate.
  */
+const PAYWALL_BACK_STOPS = 2;
+
+type PaywallBackSeed = {
+  pushed: number;
+  href: string;
+  state: unknown;
+};
+
+let paywallBackSeed: PaywallBackSeed | null = null;
+let paywallBackStopsKept = false;
+let suppressHistoryPop = false;
+
+function clonedHistoryState(idx: number, trap: string): Record<string, unknown> {
+  const current = window.history.state as Record<string, unknown> | null;
+  const base = current && typeof current === "object" ? { ...current } : {};
+  return { ...base, idx, webCallBackTrap: trap };
+}
+
+/**
+ * Call synchronously from pointerdown and from click — two events, so Chrome
+ * keeps two paywall entries. The current entry is rewritten to the offer URL
+ * and two more are pushed, so back stays on the welcome offer twice
+ * (guilt, then install) even when the offer itself was never tapped.
+ */
+export function notePaywallBackGesture(): void {
+  if (paywallBackStopsKept) return;
+  if (paywallBackSeed && paywallBackSeed.pushed >= PAYWALL_BACK_STOPS) return;
+  const url = webCallOfferPath(window.location.search);
+  try {
+    if (!paywallBackSeed) {
+      const current = window.history.state as { idx?: number } | null;
+      const baseIdx = typeof current?.idx === "number" ? current.idx : 0;
+      paywallBackSeed = {
+        pushed: 0,
+        href: window.location.href,
+        state: window.history.state,
+      };
+      window.history.replaceState(
+        clonedHistoryState(baseIdx, "paywall-base"),
+        "",
+        url,
+      );
+    }
+    const current = window.history.state as { idx?: number } | null;
+    const nextIdx = (typeof current?.idx === "number" ? current.idx : 0) + 1;
+    window.history.pushState(
+      clonedHistoryState(nextIdx, `paywall-stop-${paywallBackSeed.pushed}`),
+      "",
+      url,
+    );
+    paywallBackSeed.pushed += 1;
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+export function paywallBackStopsPlanted(): boolean {
+  return paywallBackSeed !== null && paywallBackSeed.pushed > 0;
+}
+
+export function destinationKeepsPaywallBackStops(path: string): boolean {
+  try {
+    const url = new URL(path, "http://local.invalid");
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return pathname === "/campaign/call" && url.searchParams.get("step") === "paywall";
+  } catch {
+    return false;
+  }
+}
+
+function historyGo(delta: number): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener("popstate", onPop);
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const onPop = () => finish();
+    window.addEventListener("popstate", onPop);
+    const timer = window.setTimeout(finish, 400);
+    window.history.go(delta);
+  });
+}
+
+/** Keep the planted offer entries, or walk them back off when login goes elsewhere. */
+export async function settlePaywallBackStops(keep: boolean): Promise<void> {
+  const seed = paywallBackSeed;
+  if (!seed) return;
+  paywallBackSeed = null;
+  if (keep) {
+    paywallBackStopsKept = true;
+    return;
+  }
+  paywallBackStopsKept = false;
+  suppressHistoryPop = true;
+  try {
+    if (seed.pushed > 0) {
+      await historyGo(-seed.pushed);
+    }
+    window.history.replaceState(seed.state, "", seed.href);
+  } catch {
+    /* history unavailable */
+  } finally {
+    suppressHistoryPop = false;
+  }
+}
+
 function pushBackTrap(): void {
   try {
+    const current = window.history.state as { idx?: number } | null;
+    const idx = (typeof current?.idx === "number" ? current.idx : 0) + 1;
     window.history.pushState(
-      { webCallBackTrap: Date.now() },
+      clonedHistoryState(idx, "back"),
       "",
       window.location.href,
     );
@@ -584,9 +696,9 @@ function pushBackTrap(): void {
   }
 }
 
-/** Call synchronously from a tap handler. Do not call from useEffect or popstate. */
-export function armBrowserBackTrap(depth = 2): void {
-  const n = Math.max(0, Math.min(8, Math.floor(depth)));
+/** One entry per call. A second push in the same turn is what makes Android skip the rest. */
+export function armBrowserBackTrap(depth = 1): void {
+  const n = Math.max(0, Math.min(1, Math.floor(depth)));
   for (let i = 0; i < n; i++) {
     pushBackTrap();
   }
@@ -598,6 +710,7 @@ export function listenBrowserBack(
   options?: { isPaused?: () => boolean },
 ): () => void {
   const onPop = () => {
+    if (suppressHistoryPop) return;
     if (options?.isPaused?.()) return;
     onBack();
   };

@@ -17,6 +17,8 @@ import {
   resolveWebCallToken,
   armBrowserBackTrap,
   listenBrowserBack,
+  notePaywallBackGesture,
+  paywallBackStopsPlanted,
   webCallInstallPath,
   webCallLeftPreview,
   webCallOfferPaid,
@@ -46,22 +48,6 @@ function nextPaywallExitSheet(sheet: PaywallExitSheet): PaywallExitSheet {
       return "install";
     case "install":
       return "install";
-    default: {
-      const exhaustive: never = sheet;
-      return exhaustive;
-    }
-  }
-}
-
-/** Dummy history entries to push during a tap so later backs can show these sheets. */
-function paywallBackTrapDepth(sheet: PaywallExitSheet): number {
-  switch (sheet) {
-    case "none":
-      return 2;
-    case "guilt":
-      return 1;
-    case "install":
-      return 1;
     default: {
       const exhaustive: never = sheet;
       return exhaustive;
@@ -228,7 +214,17 @@ export function WebCallCampaign({
     if (step !== "incoming") return;
     if (hideFakeTrigger) return;
     const unlisten = listenBrowserBack(() => setExitSheet("guilt"));
-    const onPointerDown = () => armBrowserBackTrap(1);
+    const onPointerDown = (event: Event) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("[data-web-call-accept]")
+      ) {
+        return;
+      }
+      if (paywallBackStopsPlanted()) return;
+      armBrowserBackTrap(1);
+    };
     window.addEventListener("pointerdown", onPointerDown, true);
     return () => {
       unlisten();
@@ -254,12 +250,24 @@ export function WebCallCampaign({
     );
     const onPointerDown = () => {
       if (payingRef.current) return;
-      armBrowserBackTrap(paywallBackTrapDepth(exitSheetRef.current));
+      if (exitSheetRef.current === "install") return;
+      // Cold open has no earlier tap. Two stops in this press match the
+      // reopen path that already works. After login the stops are already
+      // planted, and notePaywallBackGesture no-ops so this cannot wipe them.
+      notePaywallBackGesture();
+      notePaywallBackGesture();
+    };
+    const onClick = () => {
+      if (payingRef.current) return;
+      if (exitSheetRef.current === "install") return;
+      notePaywallBackGesture();
     };
     window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("click", onClick, true);
     return () => {
       unlisten();
       window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("click", onClick, true);
     };
   }, [step, token]);
 
@@ -330,7 +338,7 @@ export function WebCallCampaign({
       requireWebCallLogin(location.pathname, location.search, setShowLogin);
       return;
     }
-    navigate(webCallStepPath("incoming", location.search));
+    navigate(webCallStepPath("incoming", location.search), { replace: true });
   };
 
   const goToInstall = () => {
@@ -341,7 +349,6 @@ export function WebCallCampaign({
       return;
     }
     if (step === "paywall") {
-      armBrowserBackTrap(paywallBackTrapDepth("install"));
       setExitSheet("install");
       return;
     }
@@ -352,7 +359,6 @@ export function WebCallCampaign({
     const token = resolveWebCallToken(organisationId, location.search);
     const packId = offer?.coin_pack_id ?? context.coinPackId;
     if (!token || !packId) return;
-    armBrowserBackTrap(paywallBackTrapDepth(exitSheetRef.current));
     setPaying(true);
     try {
       const result = await createOrderAndInitiatePayment(
@@ -413,11 +419,26 @@ export function WebCallCampaign({
     }
     return (
       <>
-        <WebCallAutoCallTrigger
-          name={preview.name}
-          photoUrl={preview.profilePicUrl}
-          onAccept={startLogin}
-        />
+        <div
+          onPointerDownCapture={(event) => {
+            const target = event.target;
+            if (
+              target instanceof Element &&
+              target.closest("[data-web-call-accept]")
+            ) {
+              notePaywallBackGesture();
+            }
+          }}
+        >
+          <WebCallAutoCallTrigger
+            name={preview.name}
+            photoUrl={preview.profilePicUrl}
+            onAccept={() => {
+              notePaywallBackGesture();
+              startLogin();
+            }}
+          />
+        </div>
         {exitSheet === "guilt" ? (
           <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-4">
             <div className="w-full max-w-md rounded-2xl bg-white p-5 text-left">
@@ -433,7 +454,7 @@ export function WebCallCampaign({
                   setExitSheet("none");
                   startLogin();
                 }}
-                className="mt-4 w-full rounded-full py-3 text-sm font-semibold text-white"
+                className="mt-4 w-full rounded-full py-3 text-sm font-semibold text-white transition-opacity duration-150 active:opacity-60"
                 style={{ background: BIFFLE_GRADIENT }}
               >
                 Accept
@@ -501,7 +522,6 @@ export function WebCallCampaign({
           stayLabel={offer?.already_claimed ? "Install the app" : "Recharge Now"}
           onStay={() => {
             if (offer?.already_claimed) {
-              armBrowserBackTrap(paywallBackTrapDepth("install"));
               setExitSheet("install");
               return;
             }

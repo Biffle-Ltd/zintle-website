@@ -31,7 +31,9 @@ import {
   webCallPathForStep,
   webCallStepPath,
   maybeStripWebCallSecrets,
+  notePaywallBackGesture,
   requireWebCallLogin,
+  settlePaywallBackStops,
 } from "../utils/webCall";
 import { useWebCallFacebookAttribution, readPackIdFromSearch } from "../utils/webCampaign";
 
@@ -158,6 +160,7 @@ export function WebCallGender({
         "language",
         searchWithIdentityGender(location.search, selected),
       ),
+      { replace: true },
     );
   };
 
@@ -334,6 +337,7 @@ export function WebCallLanguage({
 
   const save = async () => {
     if (!authToken || !selectedCode || saving) return;
+    notePaywallBackGesture();
     setSaving(true);
     setError(null);
     try {
@@ -342,6 +346,7 @@ export function WebCallLanguage({
         pendingIdentity || parseIdentityGender(details.gender);
       if (!identity) {
         setSaving(false);
+        await settlePaywallBackStops(false);
         navigate(genderPath, { replace: true });
         return;
       }
@@ -357,8 +362,10 @@ export function WebCallLanguage({
         coinPackId,
         search: location.search,
       });
+      await settlePaywallBackStops(next === "paywall");
       navigate(webCallPathForStep(next, location.search), { replace: true });
     } catch {
+      await settlePaywallBackStops(false);
       setError("Could not save your preferences. Please try again.");
       setSaving(false);
     }
@@ -406,7 +413,7 @@ export function WebCallLanguage({
     <OnboardingPage>
       <CampaignOnboardingBackButton
         label="Back"
-        onClick={() => navigate(genderPath)}
+        onClick={() => navigate(genderPath, { replace: true })}
       />
       <CampaignOnboardingTitle>Languages You Speak</CampaignOnboardingTitle>
       <CampaignLanguageList
@@ -415,13 +422,15 @@ export function WebCallLanguage({
         name="web-call-language"
         onChange={setSelectedCode}
       />
-      <CampaignOnboardingContinue
-        isBiffle={isBiffle}
-        disabled={!selectedCode || saving}
-        saving={saving}
-        error={error}
-        onContinue={() => void save()}
-      />
+      <div onPointerDownCapture={() => notePaywallBackGesture()}>
+        <CampaignOnboardingContinue
+          isBiffle={isBiffle}
+          disabled={!selectedCode || saving}
+          saving={saving}
+          error={error}
+          onContinue={() => void save()}
+        />
+      </div>
     </OnboardingPage>
   );
 }

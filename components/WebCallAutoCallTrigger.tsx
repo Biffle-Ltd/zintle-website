@@ -101,9 +101,10 @@ export function WebCallAutoCallTrigger({
             </button>
             <button
               type="button"
+              data-web-call-accept=""
               disabled={busy || loading}
               onClick={onAccept}
-              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full text-[16px] font-semibold text-white disabled:opacity-60"
+              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full text-[16px] font-semibold text-white transition-opacity duration-150 active:opacity-60 disabled:opacity-60"
               style={{ backgroundColor: ACCEPT_GREEN }}
             >
               <img

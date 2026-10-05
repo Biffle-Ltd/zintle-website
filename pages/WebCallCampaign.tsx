@@ -246,7 +246,10 @@ export function WebCallCampaign({
         exitSheetRef.current = next;
         setExitSheet(next);
       },
-      { isPaused: () => payingRef.current },
+      {
+        isPaused: () => payingRef.current,
+        rewriteOnboardingToOffer: true,
+      },
     );
     const onPointerDown = () => {
       if (payingRef.current) return;

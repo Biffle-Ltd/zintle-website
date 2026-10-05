@@ -569,8 +569,9 @@ export async function waitForWebCallOfferClaimed(opts: {
 /**
  * Android Chrome skips history entries that were not created during a user
  * tap, and one `pushState` without a tap marks every same-document entry
- * skippable — the next back then leaves the tab. Push once per event, from
- * the event itself. Never from useEffect, after an await, or inside popstate.
+ * skippable — the next back then leaves the tab. It also screenshots the
+ * pixels on screen when an entry is created, and shows that shot for a frame
+ * on the way back. Never push while gender or language is still visible.
  */
 const PAYWALL_BACK_STOPS = 2;
 
@@ -583,6 +584,22 @@ type PaywallBackSeed = {
 let paywallBackSeed: PaywallBackSeed | null = null;
 let paywallBackStopsKept = false;
 let suppressHistoryPop = false;
+let backNavigationEpoch = 0;
+let backNavigationEpochInstalled = false;
+
+function watchBackNavigationEpoch(): void {
+  if (backNavigationEpochInstalled || typeof window === "undefined") return;
+  backNavigationEpochInstalled = true;
+  window.addEventListener("popstate", () => {
+    backNavigationEpoch += 1;
+  });
+}
+
+/** Epoch of the last browser back. A back clears Chrome's permission to push more stops. */
+export function readBackNavigationEpoch(): number {
+  watchBackNavigationEpoch();
+  return backNavigationEpoch;
+}
 
 function clonedHistoryState(idx: number, trap: string): Record<string, unknown> {
   const current = window.history.state as Record<string, unknown> | null;
@@ -630,6 +647,72 @@ export function notePaywallBackGesture(): void {
 
 export function paywallBackStopsPlanted(): boolean {
   return paywallBackSeed !== null && paywallBackSeed.pushed > 0;
+}
+
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+function documentHasUserActivation(): boolean {
+  return navigator.userActivation?.hasBeenActive === true;
+}
+
+function isPaywallOfferLocation(): boolean {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path !== "/campaign/call") return false;
+  return new URLSearchParams(window.location.search).get("step") === "paywall";
+}
+
+/**
+ * Create the guilt/install back entries only after the welcome offer has
+ * painted. `epochAtGesture` is the back-navigation epoch from the Continue
+ * tap. Chrome keeps these entries from that tap's sticky activation until a
+ * browser back; a push after that back would mark every stop skippable.
+ * Entries created while language is still visible flash that screen on the
+ * way back, so this waits for the offer to paint instead.
+ */
+export async function plantPaywallBackStopsAfterPaint(
+  epochAtGesture: number,
+): Promise<void> {
+  watchBackNavigationEpoch();
+  if (paywallBackStopsKept) return;
+  if (paywallBackSeed && paywallBackSeed.pushed >= PAYWALL_BACK_STOPS) {
+    await settlePaywallBackStops(true);
+    return;
+  }
+  await nextPaint();
+  if (backNavigationEpoch !== epochAtGesture) return;
+  if (paywallBackStopsKept || !isPaywallOfferLocation()) return;
+  if (!documentHasUserActivation()) return;
+  notePaywallBackGesture();
+  notePaywallBackGesture();
+  if (
+    backNavigationEpoch === epochAtGesture &&
+    paywallBackSeed &&
+    paywallBackSeed.pushed >= PAYWALL_BACK_STOPS
+  ) {
+    await settlePaywallBackStops(true);
+  }
+}
+
+function rewriteOnboardingHistoryToOffer(): void {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path !== "/campaign/call/language" && path !== "/campaign/call/gender") {
+    return;
+  }
+  const current = window.history.state as { idx?: number; masked?: unknown } | null;
+  const idx = typeof current?.idx === "number" ? current.idx : 0;
+  const state = clonedHistoryState(idx, "paywall-rewrite");
+  delete state.masked;
+  try {
+    window.history.replaceState(state, "", webCallOfferPath(window.location.search));
+  } catch {
+    /* history unavailable */
+  }
 }
 
 export function destinationKeepsPaywallBackStops(path: string): boolean {
@@ -707,15 +790,19 @@ export function armBrowserBackTrap(depth = 1): void {
 /** Listen only. Never re-arms — that would be skippable after a back. */
 export function listenBrowserBack(
   onBack: () => void,
-  options?: { isPaused?: () => boolean },
+  options?: { isPaused?: () => boolean; rewriteOnboardingToOffer?: boolean },
 ): () => void {
   const onPop = () => {
     if (suppressHistoryPop) return;
+    if (options?.rewriteOnboardingToOffer) {
+      rewriteOnboardingHistoryToOffer();
+    }
     if (options?.isPaused?.()) return;
     onBack();
   };
-  window.addEventListener("popstate", onPop);
-  return () => window.removeEventListener("popstate", onPop);
+  const capture = options?.rewriteOnboardingToOffer === true;
+  window.addEventListener("popstate", onPop, capture);
+  return () => window.removeEventListener("popstate", onPop, capture);
 }
 
 export async function fetchWebCallCreatorById(opts: {

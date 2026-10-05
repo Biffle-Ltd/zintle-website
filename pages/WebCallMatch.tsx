@@ -31,7 +31,8 @@ import {
   webCallPathForStep,
   webCallStepPath,
   maybeStripWebCallSecrets,
-  notePaywallBackGesture,
+  plantPaywallBackStopsAfterPaint,
+  readBackNavigationEpoch,
   requireWebCallLogin,
   settlePaywallBackStops,
 } from "../utils/webCall";
@@ -337,7 +338,7 @@ export function WebCallLanguage({
 
   const save = async () => {
     if (!authToken || !selectedCode || saving) return;
-    notePaywallBackGesture();
+    const backEpoch = readBackNavigationEpoch();
     setSaving(true);
     setError(null);
     try {
@@ -362,8 +363,12 @@ export function WebCallLanguage({
         coinPackId,
         search: location.search,
       });
-      await settlePaywallBackStops(next === "paywall");
-      navigate(webCallPathForStep(next, location.search), { replace: true });
+      await navigate(webCallPathForStep(next, location.search), {
+        replace: true,
+      });
+      if (next === "paywall") {
+        await plantPaywallBackStopsAfterPaint(backEpoch);
+      }
     } catch {
       await settlePaywallBackStops(false);
       setError("Could not save your preferences. Please try again.");
@@ -422,15 +427,13 @@ export function WebCallLanguage({
         name="web-call-language"
         onChange={setSelectedCode}
       />
-      <div onPointerDownCapture={() => notePaywallBackGesture()}>
-        <CampaignOnboardingContinue
-          isBiffle={isBiffle}
-          disabled={!selectedCode || saving}
-          saving={saving}
-          error={error}
-          onContinue={() => void save()}
-        />
-      </div>
+      <CampaignOnboardingContinue
+        isBiffle={isBiffle}
+        disabled={!selectedCode || saving}
+        saving={saving}
+        error={error}
+        onContinue={() => void save()}
+      />
     </OnboardingPage>
   );
 }

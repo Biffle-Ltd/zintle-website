@@ -15,6 +15,11 @@ import {
   resolveCampaignFbclid,
   syncWebCallFacebookAttribution,
 } from "../utils/fbAttribution";
+import { readCampaignAclidFromSearch } from "../utils/tjAclid";
+import {
+  resolveCampaignAclid,
+  waitForCampaignTjAttribution,
+} from "../utils/tjAttribution";
 import {
   isWhaleLoginPath,
   persistWebCampaignContextFromSearch,
@@ -193,11 +198,27 @@ export function PhoneOtpLoginScreen({
         organisationId,
         window.location.search,
       );
-      if (!context.campaignId && !context.coinPackId && !context.fbclid) return;
+      if (!context.campaignId && !context.coinPackId && !context.fbclid) {
+        return;
+      }
       void saveWebCampaignLink({
         organisationId,
         authToken: jwt,
         context,
+      });
+    },
+    [organisationId],
+  );
+
+  const associateTjClick = useCallback(
+    async (jwt: string) => {
+      await waitForCampaignTjAttribution({
+        aclid: resolveCampaignAclid(
+          organisationId,
+          readCampaignAclidFromSearch(window.location.search),
+        ),
+        organisationId,
+        authToken: jwt,
       });
     },
     [organisationId],
@@ -308,6 +329,7 @@ export function PhoneOtpLoginScreen({
           }
         }
         finishWhaleLink(jwt);
+        await associateTjClick(jwt);
         onSuccess();
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Failed to verify OTP";
@@ -316,7 +338,15 @@ export function PhoneOtpLoginScreen({
         setLoading(false);
       }
     },
-    [otp, phone, organisationId, onSuccess, isCampaignFlow, finishWhaleLink],
+    [
+      otp,
+      phone,
+      organisationId,
+      onSuccess,
+      isCampaignFlow,
+      finishWhaleLink,
+      associateTjClick,
+    ],
   );
 
   const handleGoogleCredential = useCallback(
@@ -350,6 +380,7 @@ export function PhoneOtpLoginScreen({
         if (!jwt) throw new Error("Google sign-in failed");
         setJwtForOrganisation(organisationId, jwt);
         finishWhaleLink(jwt);
+        await associateTjClick(jwt);
         if (isCampaignFlow) {
           const base = parseCampaignPixelContext(
             window.location.search,
@@ -371,7 +402,7 @@ export function PhoneOtpLoginScreen({
         setLoading(false);
       }
     },
-    [organisationId, onSuccess, finishWhaleLink, isCampaignFlow],
+    [organisationId, onSuccess, finishWhaleLink, associateTjClick, isCampaignFlow],
   );
 
   useEffect(() => {

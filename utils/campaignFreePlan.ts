@@ -1,5 +1,6 @@
 import { HOST } from "./host";
 import { headerSafeToken } from "./headerSafeToken";
+import { normalizeCampaignAclid } from "./tjAclid";
 
 type FreePlanApiPlan = {
   id: number;
@@ -151,6 +152,7 @@ export function buildCampaignCheckoutPath(opts: {
   plan: CampaignFreePlanDetails;
   organisationId: string;
   fbclid?: string | null;
+  aclid?: string | null;
 }): string | null {
   if (!hasUsablePlanId(opts.plan.id)) return null;
   const params = new URLSearchParams();
@@ -163,12 +165,14 @@ export function buildCampaignCheckoutPath(opts: {
   );
   const fbclid = opts.fbclid?.trim();
   if (fbclid) params.set("fbclid", fbclid);
+  const aclid = normalizeCampaignAclid(opts.aclid);
+  if (aclid) params.set("aclid", aclid);
   return `/subscriptions?${params.toString()}`;
 }
 
 /**
  * Swap `plan_id` + `plan_details` on a pending `/subscriptions` URL.
- * Keeps organisation_id, is_campaign, fbclid, JWT `id`, etc.
+ * Keeps organisation_id, is_campaign, fbclid, aclid, JWT `id`, etc.
  */
 export function withRefreshedCampaignCheckoutPlan(
   pendingPath: string,

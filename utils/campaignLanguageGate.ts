@@ -1,4 +1,5 @@
 import type { NavigateFunction } from "react-router-dom";
+import { readCampaignAclidFromParams } from "./tjAclid";
 import { refreshCampaignCheckoutPlanPath } from "./campaignFreePlan";
 import { isBiffleOrganisationId } from "./organisationIdFromUrl";
 import {
@@ -26,16 +27,19 @@ function searchFromRelativePath(path: string): string {
   return idx >= 0 ? path.slice(idx) : "";
 }
 
-/** Org/fbclid only — used when checkout must not open on a stale anonymous SKU. */
+/** Org and click ids — used when checkout must not open on a stale anonymous SKU. */
 function campaignLandingFromCheckoutPath(checkoutPath: string): string {
   const query = searchFromRelativePath(checkoutPath);
   const params = new URLSearchParams(
     query.startsWith("?") ? query.slice(1) : query,
   );
   const preserved = new URLSearchParams();
-  for (const key of ["organisation_id", "fbclid"] as const) {
-    const value = params.get(key);
-    if (value?.trim()) preserved.set(key, value.trim());
+  for (const key of ["organisation_id", "fbclid", "aclid"] as const) {
+    const value =
+      key === "aclid"
+        ? readCampaignAclidFromParams(params)
+        : (params.get(key)?.trim() ?? "");
+    if (value) preserved.set(key, value);
   }
   const q = preserved.toString();
   return q ? `/campaign?${q}` : "/campaign";

@@ -6,6 +6,16 @@ import {
   resolveCampaignFbclid,
   syncWebCallFacebookAttribution,
 } from "./fbAttribution";
+import {
+  normalizeCampaignAclid,
+  readCampaignAclidFromParams,
+} from "./tjAclid";
+import {
+  adLandingDroppedAclid,
+  noteAdLandingAclid,
+  resolveCampaignAclid,
+  syncWebCallTjAttribution,
+} from "./tjAttribution";
 
 export const WEB_CAMPAIGN_STORAGE_KEY = "zintle_web_campaign_context";
 
@@ -63,6 +73,7 @@ export type WebCampaignContext = {
   campaignId: string | null;
   coinPackId: number | null;
   fbclid: string | null;
+  aclid: string | null;
 };
 
 function positiveInt(raw: string | null): number | null {
@@ -89,6 +100,7 @@ export function parseWebCampaignContext(search: string): WebCampaignContext {
       null,
     coinPackId: readPackIdFromSearch(search),
     fbclid: params.get("fbclid")?.trim() || null,
+    aclid: readCampaignAclidFromParams(params) || null,
   };
 }
 
@@ -106,7 +118,10 @@ export function loadWebCampaignContext(): WebCampaignContext | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as WebCampaignContext;
     if (!parsed || typeof parsed !== "object") return null;
-    return parsed;
+    return {
+      ...parsed,
+      aclid: normalizeCampaignAclid(parsed.aclid) || null,
+    };
   } catch {
     return null;
   }
@@ -117,6 +132,7 @@ export function persistWebCampaignContextFromSearch(
   organisationId: string,
   search: string,
 ): WebCampaignContext {
+  noteAdLandingAclid(organisationId, search);
   const parsed = parseWebCampaignContext(search);
   const prev = loadWebCampaignContext();
   const fbclid =
@@ -127,10 +143,15 @@ export function persistWebCampaignContextFromSearch(
     parsed.fbclid ||
     prev?.fbclid ||
     null;
+  const inheritedAclid = adLandingDroppedAclid() ? null : prev?.aclid;
+  const aclid =
+    resolveCampaignAclid(organisationId, parsed.aclid || inheritedAclid) ||
+    null;
   const ctx: WebCampaignContext = {
     campaignId: parsed.campaignId || prev?.campaignId || null,
     coinPackId: parsed.coinPackId ?? prev?.coinPackId ?? null,
     fbclid,
+    aclid,
   };
   persistWebCampaignContext(ctx);
   persistWebCallLoginOption(search);
@@ -247,6 +268,11 @@ export function useWebCallFacebookAttribution(
       search,
       authToken,
     });
+    syncWebCallTjAttribution({
+      organisationId,
+      search,
+      authToken,
+    });
   }, [organisationId, search, authToken]);
 }
 
@@ -304,6 +330,7 @@ export type StoredWebCampaignLink = {
   campaign_id: string | null;
   coin_pack_id: number | null;
   fbclid: string | null;
+  aclid: string | null;
   login_option: string | null;
 };
 

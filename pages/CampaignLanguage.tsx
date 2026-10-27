@@ -23,6 +23,11 @@ import {
   sendCampaignLanguageSaved,
 } from "../utils/campaignPixelEvents";
 import { headerSafeToken } from "../utils/headerSafeToken";
+import { readCampaignAclidFromParams, readCampaignAclidFromSearch } from "../utils/tjAclid";
+import {
+  linkCampaignTjAttributionSafe,
+  resolveCampaignAclid,
+} from "../utils/tjAttribution";
 import { isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
 import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
 import {
@@ -42,9 +47,12 @@ function buildCampaignBackPath(search: string): string {
     search.startsWith("?") ? search.slice(1) : search,
   );
   const preserved = new URLSearchParams();
-  for (const key of ["organisation_id", "fbclid"] as const) {
-    const value = params.get(key);
-    if (value?.trim()) preserved.set(key, value.trim());
+  for (const key of ["organisation_id", "fbclid", "aclid"] as const) {
+    const value =
+      key === "aclid"
+        ? readCampaignAclidFromParams(params)
+        : (params.get(key)?.trim() ?? "");
+    if (value) preserved.set(key, value);
   }
   const query = preserved.toString();
   return query ? `/campaign?${query}` : "/campaign";
@@ -68,6 +76,20 @@ export function CampaignLanguage({
     [organisationId],
   );
   const authToken = headerSafeToken(token);
+
+  useEffect(() => {
+    if (!authToken) return;
+    const aclid = resolveCampaignAclid(
+      organisationId,
+      readCampaignAclidFromSearch(location.search),
+    );
+    if (!aclid) return;
+    linkCampaignTjAttributionSafe({
+      aclid,
+      organisationId,
+      authToken,
+    });
+  }, [authToken, location.search, organisationId]);
 
   const [phase, setPhase] = useState<PagePhase>("checking");
   const [loadError, setLoadError] = useState<string | null>(null);

@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { headerSafeToken } from "../utils/headerSafeToken";
 import {
@@ -15,6 +22,8 @@ import {
   CampaignPrimaryCta,
 } from "../components/CampaignCta";
 import { CampaignVideo } from "../components/CampaignVideo";
+import { CampaignGuiltNudge } from "../components/CampaignGuiltNudge";
+import { WebCallInstallNudge } from "../components/WebCallInstallNudge";
 import { isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
 import { handleCampaignUnauthorized } from "../utils/campaignAuth";
 import { getJwtFromStorage } from "../utils/authStorage";
@@ -28,7 +37,23 @@ import {
   linkCampaignFacebookAttributionSafe,
   resolveCampaignFbclid,
 } from "../utils/fbAttribution";
+import {
+  readCampaignAclidFromParams,
+  readCampaignAclidFromSearch,
+} from "../utils/tjAclid";
+import {
+  captureCampaignAclidOnLandingSafe,
+  linkCampaignTjAttributionSafe,
+  resolveCampaignAclid,
+  waitForCampaignTjAttribution,
+} from "../utils/tjAttribution";
 import { navigateAfterCampaignLoginGate } from "../utils/campaignLanguageGate";
+import {
+  listenCampaignBack,
+  plantCampaignBackStops,
+  readCampaignExitSheet,
+} from "../utils/campaignBackTrap";
+import { campaignPlayStoreUrl } from "../utils/campaignPlayStore";
 
 const PAGE_BG = "#162a44";
 const ACCENT_ORANGE = "#f58220";
@@ -91,6 +116,7 @@ export function Campaign({
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const fbclidFromUrl = searchParams.get("fbclid")?.trim() ?? "";
+  const aclidFromUrl = readCampaignAclidFromParams(searchParams);
   const freeTrialViewedSentRef = useRef(false);
 
   const [activePlan, setActivePlan] = useState<CampaignFreePlanDetails | null>(
@@ -98,6 +124,7 @@ export function Campaign({
   );
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [exitSheet, setExitSheet] = useState(readCampaignExitSheet);
 
   useEffect(() => {
     const abort = new AbortController();
@@ -163,16 +190,32 @@ export function Campaign({
       plan: activePlan,
       organisationId,
       fbclid: fbclidFromUrl,
+      aclid: resolveCampaignAclid(organisationId, aclidFromUrl),
     });
-  }, [activePlan, organisationId, fbclidFromUrl]);
+  }, [activePlan, organisationId, fbclidFromUrl, aclidFromUrl]);
 
   const canCheckout = checkoutPath != null && !fetchError && !loading;
   const isLoggedIn = !!getJwtFromStorage(organisationId);
+
+  useLayoutEffect(() => {
+    plantCampaignBackStops();
+    return listenCampaignBack(() => {
+      const sheet = readCampaignExitSheet();
+      setExitSheet(sheet);
+      if (sheet !== "none") setShowLogin(false);
+    });
+  }, [setShowLogin]);
 
   useEffect(() => {
     if (!fbclidFromUrl) return;
     captureCampaignFbclidOnLandingSafe(organisationId, fbclidFromUrl);
   }, [fbclidFromUrl, organisationId]);
+
+  useEffect(() => {
+    const aclid = resolveCampaignAclid(organisationId, aclidFromUrl);
+    if (!aclid) return;
+    captureCampaignAclidOnLandingSafe(organisationId, aclid);
+  }, [aclidFromUrl, organisationId]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -186,6 +229,19 @@ export function Campaign({
       authToken: jwt,
     });
   }, [isLoggedIn, fbclidFromUrl, organisationId]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const jwt = getJwtFromStorage(organisationId);
+    if (!jwt) return;
+    const aclid = resolveCampaignAclid(organisationId, aclidFromUrl);
+    if (!aclid) return;
+    linkCampaignTjAttributionSafe({
+      aclid,
+      organisationId,
+      authToken: jwt,
+    });
+  }, [isLoggedIn, aclidFromUrl, organisationId]);
 
   const videoUrl =
     activePlan?.extra_info &&
@@ -218,6 +274,14 @@ export function Campaign({
     if (!jwt) return;
     const authToken = headerSafeToken(jwt);
     if (!authToken) return;
+    await waitForCampaignTjAttribution({
+      aclid: resolveCampaignAclid(
+        organisationId,
+        readCampaignAclidFromSearch(window.location.search),
+      ),
+      organisationId,
+      authToken: jwt,
+    });
     await navigateAfterCampaignLoginGate({
       checkoutPath,
       token: authToken,
@@ -505,6 +569,29 @@ export function Campaign({
           </div>
         </div>
       </main>
+      {exitSheet === "guilt" ? (
+        <CampaignGuiltNudge
+          isBiffle={isBiffle}
+          disabled={!canCheckout}
+          onStay={() => {
+            if (!checkoutPath) return;
+            setExitSheet("none");
+            void handleStartFreeTrial();
+          }}
+        />
+      ) : null}
+      {exitSheet === "install" ? (
+        <div className="fixed inset-0 z-50">
+          <WebCallInstallNudge
+            organisationId={organisationId}
+            variant="download"
+            playStoreUrl={campaignPlayStoreUrl(
+              organisationId,
+              resolveCampaignAclid(organisationId, aclidFromUrl),
+            )}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

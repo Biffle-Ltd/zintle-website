@@ -58,26 +58,48 @@ function Sparkle({
   );
 }
 
+type InstallNudgeVariant =
+  | "pending"
+  | "ended"
+  | "unconnected"
+  | "purchased"
+  | "download";
+
+function installNudgeTitle(variant: InstallNudgeVariant): string {
+  switch (variant) {
+    case "purchased":
+      return "Install the app to start calling";
+    case "pending":
+      return "Payment pending";
+    case "ended":
+      return "Call ended";
+    case "unconnected":
+      return "Call didn't connect";
+    case "download":
+      return "Download the app";
+    default: {
+      const exhaustive: never = variant;
+      return exhaustive;
+    }
+  }
+}
+
 export function WebCallInstallNudge({
   organisationId,
   variant,
+  playStoreUrl: playStoreUrlOverride,
 }: {
   organisationId: string;
-  variant: "pending" | "ended" | "unconnected" | "purchased";
+  variant: InstallNudgeVariant;
+  /** When set, this click opens that listing in the current tab. */
+  playStoreUrl?: string;
 }) {
-  const title =
-    variant === "purchased"
-      ? "Install the app to start calling"
-      : variant === "pending"
-        ? "Payment pending"
-        : variant === "ended"
-          ? "Call ended"
-          : "Call didn't connect";
+  const title = installNudgeTitle(variant);
 
   const isBiffle = isBiffleOrganisationId(organisationId);
-  const playStoreUrl = isBiffle
-    ? BIFFLE_PLAY_STORE_URL
-    : ZINTLE_PLAY_STORE_URL;
+  const playStoreUrl =
+    playStoreUrlOverride ||
+    (isBiffle ? BIFFLE_PLAY_STORE_URL : ZINTLE_PLAY_STORE_URL);
 
   return (
     <div className="fixed inset-0 flex h-dvh max-h-dvh w-full min-w-0 flex-col overflow-hidden overscroll-none font-figtree text-white">
@@ -171,7 +193,9 @@ export function WebCallInstallNudge({
             more creators
           </p>
           <p className="mt-2 w-full max-w-72 rounded-full bg-white/18 px-4 py-2 text-[13px] font-medium leading-snug text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.16)] backdrop-blur-[2px]">
-            {INSTALL_NUDGE_COPY}
+            {variant === "download"
+              ? "Install the app and start your free trial."
+              : INSTALL_NUDGE_COPY}
           </p>
         </div>
 
@@ -190,9 +214,13 @@ export function WebCallInstallNudge({
                   />
                 </div>
                 <p className="text-[12px] font-semibold leading-tight text-white">
-                  {stat.lines[0]}
+                  {variant === "download" && stat.alt === "First call"
+                    ? "Free"
+                    : stat.lines[0]}
                   <br />
-                  {stat.lines[1]}
+                  {variant === "download" && stat.alt === "First call"
+                    ? "trial"
+                    : stat.lines[1]}
                 </p>
               </div>
             ))}
@@ -202,8 +230,9 @@ export function WebCallInstallNudge({
         <div className="w-full shrink-0 px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
           <a
             href={playStoreUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+            {...(playStoreUrlOverride
+              ? {}
+              : { target: "_blank", rel: "noopener noreferrer" })}
             className="flex h-14 w-full items-center justify-center rounded-full text-[16px] font-semibold text-white shadow-[0_12px_28px_rgba(126,34,206,0.38)] transition-opacity duration-150 active:opacity-60"
             style={{ background: CTA_GRADIENT }}
           >

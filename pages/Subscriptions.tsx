@@ -20,6 +20,12 @@ import {
   ZINTLE_POST_LOGIN_REDIRECT_KEY,
 } from "../utils/postLoginRedirect";
 import { resolveCampaignSubscriptionsLanguageGate } from "../utils/campaignLanguageGate";
+import { readCampaignAclidFromSearch } from "../utils/tjAclid";
+import {
+  linkCampaignTjAttributionSafe,
+  resolveCampaignAclid,
+  waitForCampaignTjAttribution,
+} from "../utils/tjAttribution";
 import { getLoginPhoneForOrganisation } from "../utils/loginContactStorage";
 import {
   fetchMandateStatus,
@@ -760,6 +766,22 @@ export const Subscriptions = ({
     };
   }, [isCampaign, isLoggedIn, location.pathname, location.search, navigate, organisationId, token]);
 
+  useEffect(() => {
+    if (!isCampaign || !isLoggedIn) return;
+    const authToken = headerSafeToken(token);
+    if (!authToken) return;
+    const aclid = resolveCampaignAclid(
+      organisationId,
+      readCampaignAclidFromSearch(location.search),
+    );
+    if (!aclid) return;
+    linkCampaignTjAttributionSafe({
+      aclid,
+      organisationId,
+      authToken,
+    });
+  }, [isCampaign, isLoggedIn, location.search, organisationId, token]);
+
   const buildCampaignEventContext = useCallback(() => {
     const base = parseCampaignPixelContext(location.search, location.pathname, {
       organisationId,
@@ -898,6 +920,17 @@ export const Subscriptions = ({
       setCampaignPaymentOutcome(null);
     }
     try {
+      if (isCampaign) {
+        const authToken = headerSafeToken(token);
+        if (authToken) {
+          await waitForCampaignTjAttribution({
+            aclid: readCampaignAclidFromSearch(location.search),
+            organisationId,
+            authToken,
+          });
+        }
+      }
+
       const body: Record<string, unknown> = {
         plan_id: planId,
         payment_instrument_type: "UPI_INTENT",
@@ -1161,6 +1194,11 @@ export const Subscriptions = ({
       const q = new URLSearchParams();
       q.set("organisation_id", organisationId);
       if (fbclidFromUrl) q.set("fbclid", fbclidFromUrl);
+      const aclid = resolveCampaignAclid(
+        organisationId,
+        readCampaignAclidFromSearch(location.search),
+      );
+      if (aclid) q.set("aclid", aclid);
       navigate(`/campaign?${q.toString()}`);
       return;
     }

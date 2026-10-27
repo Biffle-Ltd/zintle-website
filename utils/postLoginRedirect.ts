@@ -1,3 +1,5 @@
+import { readCampaignAclidFromParams } from "./tjAclid";
+
 /** Session key for `/subscriptions` path + query after OTP login (set by `/campaign`, consumed by CoinStore). */
 export const ZINTLE_POST_LOGIN_REDIRECT_KEY = "zintle_post_login_redirect";
 
@@ -7,6 +9,7 @@ export const CAMPAIGN_LANGUAGE_REDIRECT_KEY = "zintle_campaign_language_redirect
 const CAMPAIGN_LANGUAGE_QUERY_KEYS = [
   "organisation_id",
   "fbclid",
+  "aclid",
   "plan_id",
 ] as const;
 
@@ -17,8 +20,11 @@ export function buildCampaignLanguagePath(search: string): string {
   );
   const preserved = new URLSearchParams();
   for (const key of CAMPAIGN_LANGUAGE_QUERY_KEYS) {
-    const value = params.get(key);
-    if (value?.trim()) preserved.set(key, value.trim());
+    const value =
+      key === "aclid"
+        ? readCampaignAclidFromParams(params)
+        : (params.get(key)?.trim() ?? "");
+    if (value) preserved.set(key, value);
   }
   const query = preserved.toString();
   return query ? `/campaign/language?${query}` : "/campaign/language";

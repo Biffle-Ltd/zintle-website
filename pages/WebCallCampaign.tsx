@@ -35,6 +35,8 @@ import {
 } from "../utils/webCall";
 import type { AfterCheckoutPollResult } from "../utils/coinCheckoutOptions";
 import { pickWebCallPreviewCreator } from "../utils/webCallPreviewCreators";
+import { waitForCampaignTjAttribution } from "../utils/tjAttribution";
+import { readCampaignAclidFromSearch } from "../utils/tjAclid";
 
 const BIFFLE_GRADIENT = "linear-gradient(90deg, #7c3aed, #ec4899)";
 
@@ -364,6 +366,11 @@ export function WebCallCampaign({
     if (!token || !packId) return;
     setPaying(true);
     try {
+      await waitForCampaignTjAttribution({
+        aclid: readCampaignAclidFromSearch(location.search),
+        organisationId,
+        authToken: token,
+      });
       const result = await createOrderAndInitiatePayment(
         packId,
         token,

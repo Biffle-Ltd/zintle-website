@@ -57,6 +57,30 @@
         else setTimeout(injectPixel, 1800);
       })();
     </script>
+    <script>
+      (function (w, d, s, l, i) {
+        w["scSdkId"] = i;
+        w[l] = w[l] || [];
+        w.scq = function (eventName, eventType, p) {
+          var props = p || {};
+          w[l].push({
+            eventName: eventName,
+            eventType: eventType,
+            meta: props,
+            eventFireTs: Date.now(),
+          });
+        };
+        w.scq("PAGE_VIEW", "AUTO", {
+          pageUrl: w.location.href,
+        });
+        var scr = d.createElement(s);
+        scr.type = "text/javascript";
+        scr.async = true;
+        scr.src = "https://sc-events-sdk.sharechat.com/web-sdk.js";
+        var x = d.getElementsByTagName(s)[0];
+        x.parentNode.insertBefore(scr, x);
+      })(window, document, "script", "scLayer", "N-AFkL4gBk");
+    </script>
     <!-- Meta Pixel noscript fallback (invalid inside <head> per HTML5; must be in body) -->
     <noscript
       ><img

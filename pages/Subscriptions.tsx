@@ -47,6 +47,7 @@ import {
   sendCampaignStartTrial,
   sendCampaignTrialPurchaseInitiated,
 } from "../utils/campaignPixelEvents";
+import { sendShareChatStartTrial } from "../utils/shareChatPixel";
 
 // NOTE: Plan listing is disabled. Plan UI uses `plan_details` (URL JSON) when
 // present, else GET /plans/{plan_id}/details/.
@@ -1150,6 +1151,7 @@ export const Subscriptions = ({
               mandate_state: result.mandate_state,
             },
           );
+          sendShareChatStartTrial();
         }
       } catch {
         // Keep polling on transient errors while the user may still be paying.

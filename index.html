@@ -73,13 +73,6 @@
         w.scq("PAGE_VIEW", "AUTO", {
           pageUrl: w.location.href,
         });
-        // ShareChat's test link includes verify=true. Send the selected event
-        // from that link so setup can finish without a real payment.
-        if (new URLSearchParams(w.location.search).get("verify") === "true") {
-          w.setTimeout(function () {
-            w.scq("Start trial", "pre_defined");
-          }, 2000);
-        }
         var scr = d.createElement(s);
         scr.type = "text/javascript";
         scr.async = true;

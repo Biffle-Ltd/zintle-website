@@ -1,5 +1,6 @@
 import { HOST } from "./host";
 import { headerSafeToken } from "./headerSafeToken";
+import { copyShareChatVerifyParams } from "./shareChatPixel";
 import { normalizeCampaignAclid } from "./tjAclid";
 
 type FreePlanApiPlan = {
@@ -153,12 +154,19 @@ export function buildCampaignCheckoutPath(opts: {
   organisationId: string;
   fbclid?: string | null;
   aclid?: string | null;
+  search?: string;
 }): string | null {
   if (!hasUsablePlanId(opts.plan.id)) return null;
   const params = new URLSearchParams();
   params.set("plan_id", String(opts.plan.id));
   params.set("organisation_id", opts.organisationId);
   params.set("is_campaign", "true");
+  if (opts.search) {
+    const source = new URLSearchParams(
+      opts.search.startsWith("?") ? opts.search.slice(1) : opts.search,
+    );
+    copyShareChatVerifyParams(source, params);
+  }
   params.set(
     "plan_details",
     encodeURIComponent(JSON.stringify({ data: opts.plan })),

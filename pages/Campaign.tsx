@@ -54,7 +54,12 @@ import {
   readCampaignExitSheet,
 } from "../utils/campaignBackTrap";
 import { campaignPlayStoreUrl } from "../utils/campaignPlayStore";
-import { sendShareChatViewContent } from "../utils/shareChatPixel";
+import {
+  clearShareChatVerifySearch,
+  rememberShareChatVerifySearch,
+  sendShareChatViewContent,
+  shareChatVerifySearchHasParams,
+} from "../utils/shareChatPixel";
 
 const PAGE_BG = "#162a44";
 const ACCENT_ORANGE = "#f58220";
@@ -192,11 +197,20 @@ export function Campaign({
       organisationId,
       fbclid: fbclidFromUrl,
       aclid: resolveCampaignAclid(organisationId, aclidFromUrl),
+      search: location.search,
     });
-  }, [activePlan, organisationId, fbclidFromUrl, aclidFromUrl]);
+  }, [activePlan, organisationId, fbclidFromUrl, aclidFromUrl, location.search]);
 
   const canCheckout = checkoutPath != null && !fetchError && !loading;
   const isLoggedIn = !!getJwtFromStorage(organisationId);
+
+  useLayoutEffect(() => {
+    if (shareChatVerifySearchHasParams(location.search)) {
+      rememberShareChatVerifySearch(location.search);
+      return;
+    }
+    clearShareChatVerifySearch();
+  }, [location.search]);
 
   useLayoutEffect(() => {
     plantCampaignBackStops();

@@ -1,5 +1,6 @@
 import type { NavigateFunction } from "react-router-dom";
 import { readCampaignAclidFromParams } from "./tjAclid";
+import { copyShareChatVerifyParams } from "./shareChatPixel";
 import { refreshCampaignCheckoutPlanPath } from "./campaignFreePlan";
 import { isBiffleOrganisationId } from "./organisationIdFromUrl";
 import {
@@ -41,6 +42,7 @@ function campaignLandingFromCheckoutPath(checkoutPath: string): string {
         : (params.get(key)?.trim() ?? "");
     if (value) preserved.set(key, value);
   }
+  copyShareChatVerifyParams(params, preserved);
   const q = preserved.toString();
   return q ? `/campaign?${q}` : "/campaign";
 }

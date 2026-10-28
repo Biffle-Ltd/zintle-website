@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   CampaignLanguageList,
@@ -29,7 +29,13 @@ import {
   resolveCampaignAclid,
 } from "../utils/tjAttribution";
 import { isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
-import { sendShareChatSubmitApplication } from "../utils/shareChatPixel";
+import {
+  copyShareChatVerifyParams,
+  mergeRememberedShareChatVerifySearch,
+  rememberShareChatVerifySearch,
+  sendShareChatSubmitApplication,
+  shareChatVerifySearchHasParams,
+} from "../utils/shareChatPixel";
 import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
 import {
   campaignFreePlanErrorStatus,
@@ -55,6 +61,7 @@ function buildCampaignBackPath(search: string): string {
         : (params.get(key)?.trim() ?? "");
     if (value) preserved.set(key, value);
   }
+  copyShareChatVerifyParams(params, preserved);
   const query = preserved.toString();
   return query ? `/campaign?${query}` : "/campaign";
 }
@@ -104,6 +111,16 @@ export function CampaignLanguage({
     () => buildCampaignBackPath(location.search),
     [location.search],
   );
+
+  useLayoutEffect(() => {
+    if (shareChatVerifySearchHasParams(location.search)) {
+      rememberShareChatVerifySearch(location.search);
+      return;
+    }
+    const next = mergeRememberedShareChatVerifySearch(location.search);
+    if (!next || next === location.search) return;
+    navigate(`${location.pathname}${next}`, { replace: true });
+  }, [location.pathname, location.search, navigate]);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -235,7 +252,6 @@ export function CampaignLanguage({
 
   const handleContinue = async () => {
     if (!selectedCode || !authToken || saving) return;
-    sendShareChatSubmitApplication();
 
     setSaving(true);
     setSaveError(null);
@@ -243,8 +259,9 @@ export function CampaignLanguage({
     let languageSaved = false;
     try {
       await updateUserLanguages(authToken, organisationId, selectedCode);
-      sendCampaignLanguageSaved(pixelContext, { language_code: selectedCode });
       languageSaved = true;
+      sendShareChatSubmitApplication();
+      sendCampaignLanguageSaved(pixelContext, { language_code: selectedCode });
       await forwardToCheckout();
     } catch (err) {
       if (!aliveRef.current) return;

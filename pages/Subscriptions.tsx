@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { CampaignPaymentFailedModal } from "../components/CampaignPaymentFailedModal";
 import { CampaignPaymentSuccessModal } from "../components/CampaignPaymentSuccessModal";
@@ -47,7 +47,13 @@ import {
   sendCampaignStartTrial,
   sendCampaignTrialPurchaseInitiated,
 } from "../utils/campaignPixelEvents";
-import { sendShareChatStartTrial } from "../utils/shareChatPixel";
+import {
+  copyShareChatVerifyParams,
+  mergeRememberedShareChatVerifySearch,
+  rememberShareChatVerifySearch,
+  sendShareChatStartTrial,
+  shareChatVerifySearchHasParams,
+} from "../utils/shareChatPixel";
 
 // NOTE: Plan listing is disabled. Plan UI uses `plan_details` (URL JSON) when
 // present, else GET /plans/{plan_id}/details/.
@@ -741,7 +747,9 @@ export const Subscriptions = ({
     campaignLanguageGateCheckedRef.current = true;
 
     let cancelled = false;
-    const checkoutPath = `${location.pathname}${location.search}`;
+    const shareChatSearch =
+      mergeRememberedShareChatVerifySearch(location.search) ?? location.search;
+    const checkoutPath = `${location.pathname}${shareChatSearch}`;
 
     void (async () => {
       const authToken = headerSafeToken(token);
@@ -754,7 +762,7 @@ export const Subscriptions = ({
         token: authToken,
         organisationId,
         checkoutPath,
-        languageSearchQuery: location.search,
+        languageSearchQuery: shareChatSearch,
         navigate,
       });
 
@@ -766,6 +774,17 @@ export const Subscriptions = ({
       cancelled = true;
     };
   }, [isCampaign, isLoggedIn, location.pathname, location.search, navigate, organisationId, token]);
+
+  useLayoutEffect(() => {
+    if (!isCampaign) return;
+    if (shareChatVerifySearchHasParams(location.search)) {
+      rememberShareChatVerifySearch(location.search);
+      return;
+    }
+    const next = mergeRememberedShareChatVerifySearch(location.search);
+    if (!next || next === location.search) return;
+    navigate(`${location.pathname}${next}`, { replace: true });
+  }, [isCampaign, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (!isCampaign || !isLoggedIn) return;
@@ -1201,6 +1220,7 @@ export const Subscriptions = ({
         readCampaignAclidFromSearch(location.search),
       );
       if (aclid) q.set("aclid", aclid);
+      copyShareChatVerifyParams(searchParams, q);
       navigate(`/campaign?${q.toString()}`);
       return;
     }

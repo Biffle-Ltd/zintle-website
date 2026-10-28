@@ -1,3 +1,4 @@
+import { SHARE_CHAT_VERIFY_QUERY_KEYS } from "./shareChatPixel";
 import { readCampaignAclidFromParams } from "./tjAclid";
 
 /** Session key for `/subscriptions` path + query after OTP login (set by `/campaign`, consumed by CoinStore). */
@@ -11,6 +12,7 @@ const CAMPAIGN_LANGUAGE_QUERY_KEYS = [
   "fbclid",
   "aclid",
   "plan_id",
+  ...SHARE_CHAT_VERIFY_QUERY_KEYS,
 ] as const;
 
 /** Builds `/campaign/language?…` preserving campaign analytics query params. */

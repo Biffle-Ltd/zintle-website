@@ -29,6 +29,7 @@ import {
   resolveCampaignAclid,
 } from "../utils/tjAttribution";
 import { isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
+import { sendShareChatSubmitApplication } from "../utils/shareChatPixel";
 import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
 import {
   campaignFreePlanErrorStatus,
@@ -234,6 +235,7 @@ export function CampaignLanguage({
 
   const handleContinue = async () => {
     if (!selectedCode || !authToken || saving) return;
+    sendShareChatSubmitApplication();
 
     setSaving(true);
     setSaveError(null);

@@ -54,6 +54,7 @@ import {
   readCampaignExitSheet,
 } from "../utils/campaignBackTrap";
 import { campaignPlayStoreUrl } from "../utils/campaignPlayStore";
+import { sendShareChatViewContent } from "../utils/shareChatPixel";
 
 const PAGE_BG = "#162a44";
 const ACCENT_ORANGE = "#f58220";
@@ -265,6 +266,7 @@ export function Campaign({
 
   const handleStartFreeTrial = async () => {
     if (!checkoutPath) return;
+    sendShareChatViewContent();
     if (!isLoggedIn) {
       sessionStorage.setItem(ZINTLE_POST_LOGIN_REDIRECT_KEY, checkoutPath);
       setShowLogin(true);

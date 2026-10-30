@@ -34,7 +34,6 @@ import {
   CampaignPrimaryCta,
 } from "../components/CampaignCta";
 import { CampaignVideo } from "../components/CampaignVideo";
-import { CampaignGuiltNudge } from "../components/CampaignGuiltNudge";
 import { isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
 import {
   handleCampaignUnauthorized,
@@ -62,11 +61,6 @@ import {
   waitForCampaignTjAttribution,
 } from "../utils/tjAttribution";
 import { navigateAfterCampaignLoginGate } from "../utils/campaignLanguageGate";
-import {
-  listenCampaignBack,
-  plantCampaignBackStops,
-  readCampaignExitSheet,
-} from "../utils/campaignBackTrap";
 import {
   clearShareChatVerifySearch,
   rememberShareChatVerifySearch,
@@ -143,7 +137,6 @@ export function Campaign({
   );
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [exitSheet, setExitSheet] = useState(readCampaignExitSheet);
   const isBiffle = isBiffleOrganisationId(organisationId);
 
   useEffect(() => {
@@ -293,15 +286,6 @@ export function Campaign({
     }
     clearShareChatVerifySearch();
   }, [location.search]);
-
-  useLayoutEffect(() => {
-    plantCampaignBackStops();
-    return listenCampaignBack(() => {
-      const sheet = readCampaignExitSheet();
-      setExitSheet(sheet);
-      if (sheet !== "none") setShowLogin(false);
-    });
-  }, [setShowLogin]);
 
   useEffect(() => {
     if (!fbclidFromUrl) return;
@@ -665,17 +649,6 @@ export function Campaign({
           </div>
         </div>
       </main>
-      {exitSheet === "guilt" ? (
-        <CampaignGuiltNudge
-          isBiffle={isBiffle}
-          disabled={!canCheckout}
-          onStay={() => {
-            if (!checkoutPath) return;
-            setExitSheet("none");
-            void handleStartFreeTrial();
-          }}
-        />
-      ) : null}
     </div>
   );
 }

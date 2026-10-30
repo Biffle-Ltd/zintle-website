@@ -1,7 +1,10 @@
+import { campaignFreePlanInfoSearch } from "./campaignFreePlanQuery";
 import { HOST } from "./host";
 import { headerSafeToken } from "./headerSafeToken";
 import { copyShareChatVerifyParams } from "./shareChatPixel";
 import { normalizeCampaignAclid } from "./tjAclid";
+
+export { campaignFreePlanInfoSearch };
 
 type FreePlanApiPlan = {
   id: number;
@@ -110,10 +113,11 @@ export async function fetchCampaignActiveFreePlan(
   organisationId: string,
   token?: string | null,
   signal?: AbortSignal,
+  language?: string | null,
 ): Promise<CampaignFreePlanDetails> {
   const jwtToken = headerSafeToken(token);
   const response = await fetch(
-    `${HOST}/api/v1/monetization/plans/free-plan/info/?source=campaign`,
+    `${HOST}/api/v1/monetization/plans/free-plan/info/?${campaignFreePlanInfoSearch(language)}`,
     {
       method: "GET",
       headers: {
@@ -155,6 +159,7 @@ export function buildCampaignCheckoutPath(opts: {
   fbclid?: string | null;
   aclid?: string | null;
   search?: string;
+  tamilLanguage?: boolean;
 }): string | null {
   if (!hasUsablePlanId(opts.plan.id)) return null;
   const params = new URLSearchParams();
@@ -175,6 +180,7 @@ export function buildCampaignCheckoutPath(opts: {
   if (fbclid) params.set("fbclid", fbclid);
   const aclid = normalizeCampaignAclid(opts.aclid);
   if (aclid) params.set("aclid", aclid);
+  if (opts.tamilLanguage) params.set("tamil", "1");
   return `/subscriptions?${params.toString()}`;
 }
 

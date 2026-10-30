@@ -76,14 +76,23 @@ export function userNeedsIdentityGender(
   return parseIdentityGender(details.gender) == null;
 }
 
+export function firstActiveLanguageCode(
+  details: Pick<UserDetailsData, "languages">,
+): string | null {
+  const langs = details.languages;
+  if (!Array.isArray(langs)) return null;
+  for (const lang of langs) {
+    if (lang.is_active === false) continue;
+    const code = String(lang.code ?? "").trim();
+    if (code) return code;
+  }
+  return null;
+}
+
 export function userNeedsLanguageSelection(
   details: Pick<UserDetailsData, "languages">,
 ): boolean {
-  const langs = details.languages;
-  if (!Array.isArray(langs) || langs.length === 0) return true;
-  return !langs.some(
-    (l) => l.is_active !== false && String(l.code ?? "").trim(),
-  );
+  return firstActiveLanguageCode(details) == null;
 }
 
 let webCallProfileRequest: {

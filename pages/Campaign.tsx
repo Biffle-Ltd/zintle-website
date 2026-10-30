@@ -16,7 +16,19 @@ import {
   isNoActiveCampaignFreePlanError,
   type CampaignFreePlanDetails,
 } from "../utils/campaignFreePlan";
-import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
+import { ZINTLE_POST_LOGIN_REDIRECT_KEY, buildCampaignLanguagePath } from "../utils/postLoginRedirect";
+import {
+  readCampaignSelectedLanguage,
+  writeCampaignSelectedLanguage,
+} from "../utils/campaignSelectedLanguage";
+import {
+  CAMPAIGN_TAMIL_LANGUAGE_CODE,
+  isCampaignTamilLanguageFlag,
+} from "../utils/campaignTamilFlag";
+import {
+  fetchUserDetails,
+  firstActiveLanguageCode,
+} from "../utils/userProfileApi";
 import {
   CampaignCtaDisclaimer,
   CampaignPrimaryCta,
@@ -25,8 +37,11 @@ import { CampaignVideo } from "../components/CampaignVideo";
 import { CampaignGuiltNudge } from "../components/CampaignGuiltNudge";
 import { WebCallInstallNudge } from "../components/WebCallInstallNudge";
 import { isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
-import { handleCampaignUnauthorized } from "../utils/campaignAuth";
-import { getJwtFromStorage } from "../utils/authStorage";
+import {
+  handleCampaignUnauthorized,
+  isCampaignReAuthStatus,
+} from "../utils/campaignAuth";
+import { clearJwtForOrganisation, getJwtFromStorage } from "../utils/authStorage";
 import {
   enrichCampaignPixelContext,
   parseCampaignPixelContext,
@@ -131,27 +146,95 @@ export function Campaign({
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [exitSheet, setExitSheet] = useState(readCampaignExitSheet);
+  const isBiffle = isBiffleOrganisationId(organisationId);
 
   useEffect(() => {
     const abort = new AbortController();
+    let redirected = false;
     (async () => {
       setLoading(true);
       setFetchError(null);
+      let language: string | null = null;
       try {
         const rawJwt = getJwtFromStorage(organisationId);
-        const jwt = headerSafeToken(rawJwt);
+        let jwt = headerSafeToken(rawJwt);
+        const tamilVideo =
+          isBiffle && isCampaignTamilLanguageFlag(location.search);
+        language = tamilVideo
+          ? CAMPAIGN_TAMIL_LANGUAGE_CODE
+          : isBiffle
+            ? readCampaignSelectedLanguage(organisationId)
+            : null;
+        if (isBiffle && jwt && !tamilVideo) {
+          try {
+            const details = await fetchUserDetails(
+              jwt,
+              organisationId,
+              abort.signal,
+            );
+            if (abort.signal.aborted) return;
+            const code = firstActiveLanguageCode(details);
+            if (code) {
+              writeCampaignSelectedLanguage(organisationId, code);
+              language = code;
+            }
+          } catch (err) {
+            if (abort.signal.aborted || isCampaignFreePlanAbortError(err)) {
+              return;
+            }
+            // A bad session still gets the logged-out language picker.
+            if (isCampaignReAuthStatus(campaignFreePlanErrorStatus(err))) {
+              clearJwtForOrganisation(organisationId);
+              jwt = null;
+            }
+          }
+        }
+        if (isBiffle && !language) {
+          redirected = true;
+          navigate(buildCampaignLanguagePath(location.search), {
+            replace: true,
+          });
+          return;
+        }
         const plan = await fetchCampaignActiveFreePlan(
           organisationId,
           jwt,
           abort.signal,
+          isBiffle ? language : undefined,
         );
         if (abort.signal.aborted) return;
         setActivePlan(plan);
       } catch (err) {
-        if (abort.signal.aborted || isCampaignFreePlanAbortError(err)) return;
+        let failure = err;
+        if (abort.signal.aborted || isCampaignFreePlanAbortError(failure)) return;
+        if (
+          isBiffle &&
+          isCampaignReAuthStatus(campaignFreePlanErrorStatus(failure))
+        ) {
+          clearJwtForOrganisation(organisationId);
+          try {
+            const plan = await fetchCampaignActiveFreePlan(
+              organisationId,
+              null,
+              abort.signal,
+              language ?? undefined,
+            );
+            if (abort.signal.aborted) return;
+            setActivePlan(plan);
+            return;
+          } catch (retryErr) {
+            if (
+              abort.signal.aborted ||
+              isCampaignFreePlanAbortError(retryErr)
+            ) {
+              return;
+            }
+            failure = retryErr;
+          }
+        }
         if (
           handleCampaignUnauthorized(
-            campaignFreePlanErrorStatus(err),
+            campaignFreePlanErrorStatus(failure),
             organisationId,
             () => setShowLogin(true),
           )
@@ -160,18 +243,18 @@ export function Campaign({
         }
         setActivePlan(null);
         setFetchError(
-          isNoActiveCampaignFreePlanError(err)
+          isNoActiveCampaignFreePlanError(failure)
             ? "No active free plan is configured for this org."
             : "Could not load plan details. Try again later.",
         );
       } finally {
-        if (!abort.signal.aborted) setLoading(false);
+        if (!abort.signal.aborted && !redirected) setLoading(false);
       }
     })();
     return () => {
       abort.abort();
     };
-  }, [organisationId]);
+  }, [isBiffle, location.search, navigate, organisationId, setShowLogin]);
 
   const handleCampaignMediaReady = useCallback(() => {
     if (!activePlan?.id || freeTrialViewedSentRef.current) return;
@@ -198,6 +281,7 @@ export function Campaign({
       fbclid: fbclidFromUrl,
       aclid: resolveCampaignAclid(organisationId, aclidFromUrl),
       search: location.search,
+      tamilLanguage: isCampaignTamilLanguageFlag(location.search),
     });
   }, [activePlan, organisationId, fbclidFromUrl, aclidFromUrl, location.search]);
 
@@ -306,8 +390,6 @@ export function Campaign({
       languageSearchQuery: location.search,
     });
   };
-
-  const isBiffle = isBiffleOrganisationId(organisationId);
 
   const shellClass = `h-dvh max-h-dvh overflow-hidden flex flex-col font-sans antialiased ${
     isBiffle ? "text-gray-800" : "text-white"

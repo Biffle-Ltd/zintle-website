@@ -13,6 +13,7 @@ const CAMPAIGN_LANGUAGE_QUERY_KEYS = [
   "aclid",
   "plan_id",
   ...SHARE_CHAT_VERIFY_QUERY_KEYS,
+  "tamil",
 ] as const;
 
 /** Builds `/campaign/language?…` preserving campaign analytics query params. */

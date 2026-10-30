@@ -78,6 +78,14 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { WebCallCampaign } from "./pages/WebCallCampaign";
 import { navigateAfterCampaignLoginGate } from "./utils/campaignLanguageGate";
 import {
+  readCampaignSelectedLanguage,
+  writeCampaignSelectedLanguage,
+} from "./utils/campaignSelectedLanguage";
+import {
+  CAMPAIGN_TAMIL_LANGUAGE_CODE,
+  isCampaignTamilLanguageFlag,
+} from "./utils/campaignTamilFlag";
+import {
   isCampaignPostLoginRedirect,
   parseIsCampaignParam,
 } from "./utils/campaignPixelEvents";
@@ -99,6 +107,8 @@ import { HOST } from "./utils/host";
 import {
   clearCachedUserDetails,
   fetchUserDetails,
+  firstActiveLanguageCode,
+  updateUserLanguages,
 } from "./utils/userProfileApi";
 import { fetchSubscriptionPlans } from "./utils/subscriptionPlansApi";
 import {
@@ -1729,6 +1739,40 @@ const CoinStore = ({
                 navigate(dest, { replace });
                 onClose();
                 return;
+              }
+              if (organisationId && isBiffleOrganisationId(organisationId)) {
+                const selectedLanguage =
+                  readCampaignSelectedLanguage(organisationId);
+                try {
+                  const details = await fetchUserDetails(
+                    authToken,
+                    organisationId,
+                  );
+                  const profileLanguage = firstActiveLanguageCode(details);
+                  if (profileLanguage) {
+                    writeCampaignSelectedLanguage(
+                      organisationId,
+                      profileLanguage,
+                    );
+                  } else if (isCampaignTamilLanguageFlag(pending)) {
+                    await updateUserLanguages(
+                      authToken,
+                      organisationId,
+                      CAMPAIGN_TAMIL_LANGUAGE_CODE,
+                    );
+                  } else if (selectedLanguage) {
+                    await updateUserLanguages(
+                      authToken,
+                      organisationId,
+                      selectedLanguage,
+                    );
+                  }
+                } catch (err) {
+                  console.error(
+                    "[Campaign] Failed to save selected language",
+                    err,
+                  );
+                }
               }
               await navigateAfterCampaignLoginGate({
                 checkoutPath: dest,

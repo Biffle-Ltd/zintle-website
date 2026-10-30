@@ -160,6 +160,7 @@ export function buildCampaignCheckoutPath(opts: {
   aclid?: string | null;
   search?: string;
   tamilLanguage?: boolean;
+  allLanguages?: boolean;
 }): string | null {
   if (!hasUsablePlanId(opts.plan.id)) return null;
   const params = new URLSearchParams();
@@ -181,6 +182,7 @@ export function buildCampaignCheckoutPath(opts: {
   const aclid = normalizeCampaignAclid(opts.aclid);
   if (aclid) params.set("aclid", aclid);
   if (opts.tamilLanguage) params.set("tamil", "1");
+  if (opts.allLanguages) params.set("all", "1");
   return `/subscriptions?${params.toString()}`;
 }
 
@@ -223,11 +225,13 @@ export async function refreshCampaignCheckoutPlanPath(opts: {
   organisationId: string;
   token: string;
   signal?: AbortSignal;
+  language?: string | null;
 }): Promise<string> {
   const plan = await fetchCampaignActiveFreePlan(
     opts.organisationId,
     opts.token,
     opts.signal,
+    opts.language,
   );
   const next = withRefreshedCampaignCheckoutPlan(opts.checkoutPath, plan);
   try {

@@ -2,7 +2,12 @@ import type { NavigateFunction } from "react-router-dom";
 import { readCampaignAclidFromParams } from "./tjAclid";
 import { copyShareChatVerifyParams } from "./shareChatPixel";
 import { refreshCampaignCheckoutPlanPath } from "./campaignFreePlan";
-import { isCampaignTamilLanguageFlag } from "./campaignTamilFlag";
+import {
+  CAMPAIGN_HINDI_LANGUAGE_CODE,
+  CAMPAIGN_TAMIL_LANGUAGE_CODE,
+  isCampaignLanguagePickerFlow,
+  isCampaignTamilLanguageFlag,
+} from "./campaignTamilFlag";
 import { isBiffleOrganisationId } from "./organisationIdFromUrl";
 import {
   buildCampaignLanguagePath,
@@ -36,7 +41,7 @@ function campaignLandingFromCheckoutPath(checkoutPath: string): string {
     query.startsWith("?") ? query.slice(1) : query,
   );
   const preserved = new URLSearchParams();
-  for (const key of ["organisation_id", "fbclid", "aclid", "tamil"] as const) {
+  for (const key of ["organisation_id", "fbclid", "aclid", "tamil", "all"] as const) {
     const value =
       key === "aclid"
         ? readCampaignAclidFromParams(params)
@@ -99,14 +104,20 @@ export async function navigateAfterCampaignLoginGate(opts: {
   const languageSearch =
     opts.languageSearchQuery ?? searchFromRelativePath(opts.checkoutPath);
   if (
-    isCampaignTamilLanguageFlag(languageSearch) ||
-    isCampaignTamilLanguageFlag(opts.checkoutPath)
+    !isCampaignLanguagePickerFlow(languageSearch) &&
+    !isCampaignLanguagePickerFlow(opts.checkoutPath)
   ) {
+    const directLanguage =
+      isCampaignTamilLanguageFlag(languageSearch) ||
+      isCampaignTamilLanguageFlag(opts.checkoutPath)
+        ? CAMPAIGN_TAMIL_LANGUAGE_CODE
+        : CAMPAIGN_HINDI_LANGUAGE_CODE;
     try {
       const checkoutPath = await refreshCampaignCheckoutPlanPath({
         checkoutPath: opts.checkoutPath,
         organisationId: opts.organisationId,
         token: opts.token,
+        language: directLanguage,
       });
       markCampaignLanguageGatePassed(opts.organisationId);
       opts.navigate(checkoutPath);
@@ -169,8 +180,8 @@ export async function resolveCampaignSubscriptionsLanguageGate(opts: {
   }
 
   if (
-    isCampaignTamilLanguageFlag(opts.languageSearchQuery) ||
-    isCampaignTamilLanguageFlag(opts.checkoutPath)
+    !isCampaignLanguagePickerFlow(opts.languageSearchQuery) &&
+    !isCampaignLanguagePickerFlow(opts.checkoutPath)
   ) {
     return "allowed";
   }

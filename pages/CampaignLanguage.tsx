@@ -44,7 +44,7 @@ import {
   readCampaignSelectedLanguage,
   writeCampaignSelectedLanguage,
 } from "../utils/campaignSelectedLanguage";
-import { isCampaignTamilLanguageFlag } from "../utils/campaignTamilFlag";
+import { isCampaignLanguagePickerFlow } from "../utils/campaignTamilFlag";
 import {
   campaignFreePlanErrorStatus,
   refreshCampaignCheckoutPlanPath,
@@ -63,7 +63,7 @@ function buildCampaignBackPath(search: string): string {
     search.startsWith("?") ? search.slice(1) : search,
   );
   const preserved = new URLSearchParams();
-  for (const key of ["organisation_id", "fbclid", "aclid", "tamil"] as const) {
+  for (const key of ["organisation_id", "fbclid", "aclid", "tamil", "all"] as const) {
     const value =
       key === "aclid"
         ? readCampaignAclidFromParams(params)
@@ -199,7 +199,7 @@ export function CampaignLanguage({
   const loadLanguages = useCallback(async () => {
     if (
       isBiffleCampaignLanguageFlow(organisationId) &&
-      isCampaignTamilLanguageFlag(location.search)
+      !isCampaignLanguagePickerFlow(location.search)
     ) {
       navigate(buildCampaignBackPath(location.search), { replace: true });
       return;

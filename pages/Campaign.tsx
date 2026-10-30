@@ -22,7 +22,8 @@ import {
   writeCampaignSelectedLanguage,
 } from "../utils/campaignSelectedLanguage";
 import {
-  CAMPAIGN_TAMIL_LANGUAGE_CODE,
+  campaignDirectLanguageCode,
+  isCampaignLanguagePickerFlow,
   isCampaignTamilLanguageFlag,
 } from "../utils/campaignTamilFlag";
 import {
@@ -149,14 +150,14 @@ export function Campaign({
       try {
         const rawJwt = getJwtFromStorage(organisationId);
         let jwt = headerSafeToken(rawJwt);
-        const tamilVideo =
-          isBiffle && isCampaignTamilLanguageFlag(location.search);
-        language = tamilVideo
-          ? CAMPAIGN_TAMIL_LANGUAGE_CODE
-          : isBiffle
+        const languagePicker =
+          isBiffle && isCampaignLanguagePickerFlow(location.search);
+        language = !isBiffle
+          ? null
+          : languagePicker
             ? readCampaignSelectedLanguage(organisationId)
-            : null;
-        if (isBiffle && jwt && !tamilVideo) {
+            : campaignDirectLanguageCode(location.search);
+        if (isBiffle && jwt && languagePicker) {
           try {
             const details = await fetchUserDetails(
               jwt,
@@ -273,6 +274,7 @@ export function Campaign({
       aclid: resolveCampaignAclid(organisationId, aclidFromUrl),
       search: location.search,
       tamilLanguage: isCampaignTamilLanguageFlag(location.search),
+      allLanguages: isCampaignLanguagePickerFlow(location.search),
     });
   }, [activePlan, organisationId, fbclidFromUrl, aclidFromUrl, location.search]);
 

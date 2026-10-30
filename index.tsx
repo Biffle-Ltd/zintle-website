@@ -82,7 +82,9 @@ import {
   writeCampaignSelectedLanguage,
 } from "./utils/campaignSelectedLanguage";
 import {
+  CAMPAIGN_HINDI_LANGUAGE_CODE,
   CAMPAIGN_TAMIL_LANGUAGE_CODE,
+  isCampaignLanguagePickerFlow,
   isCampaignTamilLanguageFlag,
 } from "./utils/campaignTamilFlag";
 import {
@@ -1760,11 +1762,20 @@ const CoinStore = ({
                       organisationId,
                       CAMPAIGN_TAMIL_LANGUAGE_CODE,
                     );
-                  } else if (selectedLanguage) {
+                  } else if (
+                    isCampaignLanguagePickerFlow(pending) &&
+                    selectedLanguage
+                  ) {
                     await updateUserLanguages(
                       authToken,
                       organisationId,
                       selectedLanguage,
+                    );
+                  } else if (!isCampaignLanguagePickerFlow(pending)) {
+                    await updateUserLanguages(
+                      authToken,
+                      organisationId,
+                      CAMPAIGN_HINDI_LANGUAGE_CODE,
                     );
                   }
                 } catch (err) {

@@ -2,7 +2,7 @@ const CAMPAIGN_PATH = "/campaign";
 
 let plantedHref = "";
 
-type CampaignExit = "none" | "guilt" | "install";
+type CampaignExit = "none" | "guilt";
 
 function campaignPathname(): string {
   return window.location.pathname.replace(/\/+$/, "") || "/";
@@ -14,8 +14,8 @@ function historyBase(): Record<string, unknown> {
 }
 
 /**
- * Two extra entries on this exact URL, planted once.
- * First back lands on the guilt entry. The next back lands on install.
+ * One extra entry on this exact URL, planted once.
+ * First back lands on the guilt entry. The next back leaves the page.
  */
 export function plantCampaignBackStops(): void {
   if (typeof window === "undefined") return;
@@ -26,14 +26,9 @@ export function plantCampaignBackStops(): void {
   try {
     const base = historyBase();
     const idx = typeof base.idx === "number" ? base.idx : 0;
-    window.history.replaceState({ ...base, campaignExit: "install" }, "", href);
+    window.history.replaceState({ ...base, campaignExit: "guilt" }, "", href);
     window.history.pushState(
-      { ...base, idx: idx + 1, campaignExit: "guilt" },
-      "",
-      href,
-    );
-    window.history.pushState(
-      { ...base, idx: idx + 2, campaignExit: "none" },
+      { ...base, idx: idx + 1, campaignExit: "none" },
       "",
       href,
     );
@@ -45,9 +40,7 @@ export function plantCampaignBackStops(): void {
 export function readCampaignExitSheet(): CampaignExit {
   if (typeof window === "undefined") return "none";
   const state = window.history.state as { campaignExit?: unknown } | null;
-  if (state?.campaignExit === "guilt" || state?.campaignExit === "install") {
-    return state.campaignExit;
-  }
+  if (state?.campaignExit === "guilt") return "guilt";
   return "none";
 }
 

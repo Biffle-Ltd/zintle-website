@@ -35,7 +35,6 @@ import {
 } from "../components/CampaignCta";
 import { CampaignVideo } from "../components/CampaignVideo";
 import { CampaignGuiltNudge } from "../components/CampaignGuiltNudge";
-import { WebCallInstallNudge } from "../components/WebCallInstallNudge";
 import { isBiffleOrganisationId } from "../utils/organisationIdFromUrl";
 import {
   handleCampaignUnauthorized,
@@ -68,7 +67,6 @@ import {
   plantCampaignBackStops,
   readCampaignExitSheet,
 } from "../utils/campaignBackTrap";
-import { campaignPlayStoreUrl } from "../utils/campaignPlayStore";
 import {
   clearShareChatVerifySearch,
   rememberShareChatVerifySearch,
@@ -677,18 +675,6 @@ export function Campaign({
             void handleStartFreeTrial();
           }}
         />
-      ) : null}
-      {exitSheet === "install" ? (
-        <div className="fixed inset-0 z-50">
-          <WebCallInstallNudge
-            organisationId={organisationId}
-            variant="download"
-            playStoreUrl={campaignPlayStoreUrl(
-              organisationId,
-              resolveCampaignAclid(organisationId, aclidFromUrl),
-            )}
-          />
-        </div>
       ) : null}
     </div>
   );

@@ -1736,16 +1736,17 @@ const CoinStore = ({
                 onClose();
                 return;
               }
-              if (organisationId && isBiffleOrganisationId(organisationId)) {
+              if (
+                organisationId &&
+                isBiffleOrganisationId(organisationId) &&
+                isCampaignTamilLanguageFlag(pending)
+              ) {
                 try {
                   const details = await fetchUserDetails(
                     authToken,
                     organisationId,
                   );
-                  if (
-                    !firstActiveLanguageCode(details) &&
-                    isCampaignTamilLanguageFlag(pending)
-                  ) {
+                  if (!firstActiveLanguageCode(details)) {
                     await updateUserLanguages(
                       authToken,
                       organisationId,

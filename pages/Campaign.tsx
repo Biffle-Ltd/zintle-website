@@ -21,6 +21,7 @@ import {
   CAMPAIGN_TAMIL_LANGUAGE_CODE,
   isCampaignTamilLanguageFlag,
 } from "../utils/campaignTamilFlag";
+import { withPublicTrialVideo } from "../utils/campaignTrialVideo";
 import {
   CampaignCtaDisclaimer,
   CampaignPrimaryCta,
@@ -144,6 +145,7 @@ export function Campaign({
         const rawJwt = getJwtFromStorage(organisationId);
         const jwt = headerSafeToken(rawJwt);
         let plan: CampaignFreePlanDetails;
+        let usedAuth = Boolean(jwt);
         try {
           plan = await fetchCampaignActiveFreePlan(
             organisationId,
@@ -158,6 +160,7 @@ export function Campaign({
             isCampaignReAuthStatus(campaignFreePlanErrorStatus(err))
           ) {
             clearJwtForOrganisation(organisationId);
+            usedAuth = false;
             plan = await fetchCampaignActiveFreePlan(
               organisationId,
               null,
@@ -166,6 +169,21 @@ export function Campaign({
             );
           } else {
             throw err;
+          }
+        }
+        if (abort.signal.aborted) return;
+        if (isBiffle && !language && usedAuth) {
+          try {
+            const publicPlan = await fetchCampaignActiveFreePlan(
+              organisationId,
+              null,
+              abort.signal,
+            );
+            if (abort.signal.aborted) return;
+            plan = withPublicTrialVideo(plan, publicPlan);
+          } catch (err) {
+            if (abort.signal.aborted || isCampaignFreePlanAbortError(err)) return;
+            console.error("[Campaign] Failed to load the public trial video", err);
           }
         }
         if (abort.signal.aborted) return;

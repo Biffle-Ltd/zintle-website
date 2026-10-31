@@ -9,11 +9,8 @@ import {
   CampaignOnboardingSpinner,
   CampaignOnboardingTitle,
 } from "../components/CampaignOnboardingUi";
-import { clearJwtForOrganisation, getJwtFromStorage } from "../utils/authStorage";
-import {
-  handleCampaignUnauthorized,
-  isCampaignReAuthStatus,
-} from "../utils/campaignAuth";
+import { getJwtFromStorage } from "../utils/authStorage";
+import { handleCampaignUnauthorized } from "../utils/campaignAuth";
 import {
   clearCampaignLanguageCheckoutRedirect,
   getCampaignLanguageCheckoutRedirect,
@@ -40,10 +37,6 @@ import {
   shareChatVerifySearchHasParams,
 } from "../utils/shareChatPixel";
 import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
-import {
-  readCampaignSelectedLanguage,
-  writeCampaignSelectedLanguage,
-} from "../utils/campaignSelectedLanguage";
 import { isCampaignTamilLanguageFlag } from "../utils/campaignTamilFlag";
 import {
   campaignFreePlanErrorStatus,
@@ -151,17 +144,13 @@ export function CampaignLanguage({
       getCampaignLanguageCheckoutRedirect() ??
       `${location.pathname}${location.search}`;
     sessionStorage.setItem(ZINTLE_POST_LOGIN_REDIRECT_KEY, checkout);
-    // /campaign sends a visitor with no stored language straight back here.
-    if (readCampaignSelectedLanguage(organisationId)) {
-      navigate(campaignBackPath);
-    }
+    navigate(campaignBackPath);
     setShowLogin(true);
   }, [
     campaignBackPath,
     location.pathname,
     location.search,
     navigate,
-    organisationId,
     setShowLogin,
   ]);
 
@@ -190,12 +179,6 @@ export function CampaignLanguage({
     navigate(dest);
   }, [authToken, campaignBackPath, navigate, organisationId, requireLogin]);
 
-  const pendingCheckout = getCampaignLanguageCheckoutRedirect();
-  const hasPendingCheckout = Boolean(pendingCheckout?.startsWith("/"));
-  const showLanguageBack =
-    hasPendingCheckout &&
-    Boolean(readCampaignSelectedLanguage(organisationId));
-
   const loadLanguages = useCallback(async () => {
     if (
       isBiffleCampaignLanguageFlow(organisationId) &&
@@ -216,57 +199,43 @@ export function CampaignLanguage({
       return;
     }
 
+    if (!authToken) {
+      requireLogin();
+      return;
+    }
+
     setPhase("checking");
     setLoadError(null);
 
-    let listToken = authToken;
     try {
-      if (listToken) {
-        try {
-          const details = await fetchUserDetails(listToken, organisationId);
-          if (!userNeedsLanguageSelection(details)) {
-            const code = firstActiveLanguageCode(details);
-            if (code) writeCampaignSelectedLanguage(organisationId, code);
-            const pending = getCampaignLanguageCheckoutRedirect();
-            if (pending?.startsWith("/")) {
-              try {
-                await forwardToCheckout();
-              } catch (err) {
-                if (
-                  handleCampaignUnauthorized(
-                    campaignFreePlanErrorStatus(err),
-                    organisationId,
-                    requireLogin,
-                  )
-                ) {
-                  return;
-                }
-                setLoadError("Could not load plan details. Please try again.");
-                setPhase("error");
-              }
+      const details = await fetchUserDetails(authToken, organisationId);
+      if (!userNeedsLanguageSelection(details)) {
+        const pending = getCampaignLanguageCheckoutRedirect();
+        if (pending?.startsWith("/")) {
+          try {
+            await forwardToCheckout();
+          } catch (err) {
+            if (
+              handleCampaignUnauthorized(
+                campaignFreePlanErrorStatus(err),
+                organisationId,
+                requireLogin,
+              )
+            ) {
               return;
             }
-            if (aliveRef.current) navigate(campaignBackPath, { replace: true });
-            return;
+            setLoadError("Could not load plan details. Please try again.");
+            setPhase("error");
           }
-        } catch (err) {
-          if (!aliveRef.current) return;
-          const pending = getCampaignLanguageCheckoutRedirect()?.startsWith("/");
-          if (
-            isCampaignReAuthStatus(campaignFreePlanErrorStatus(err)) &&
-            !pending
-          ) {
-            clearJwtForOrganisation(organisationId);
-            listToken = null;
-          } else {
-            throw err;
-          }
+          return;
         }
+        if (aliveRef.current) navigate(campaignBackPath, { replace: true });
+        return;
       }
 
       const options = await fetchAvailableLanguages(
         organisationId,
-        listToken,
+        authToken,
       );
       if (!aliveRef.current) return;
       if (options.length === 0) {
@@ -280,7 +249,6 @@ export function CampaignLanguage({
     } catch (err) {
       if (!aliveRef.current) return;
       if (
-        authToken &&
         handleCampaignUnauthorized(
           campaignFreePlanErrorStatus(err),
           organisationId,
@@ -307,44 +275,24 @@ export function CampaignLanguage({
   }, [loadLanguages]);
 
   const handleContinue = async () => {
-    if (!selectedCode || saving) return;
+    if (!selectedCode || !authToken || saving) return;
 
     setSaving(true);
     setSaveError(null);
 
-    writeCampaignSelectedLanguage(organisationId, selectedCode);
-    const tokenNow = headerSafeToken(getJwtFromStorage(organisationId));
-    let languageSaved = !tokenNow;
+    let languageSaved = false;
     try {
-      if (tokenNow) {
-        const details = await fetchUserDetails(tokenNow, organisationId);
-        const existing = firstActiveLanguageCode(details);
-        if (!existing) {
-          await updateUserLanguages(tokenNow, organisationId, selectedCode);
-        } else {
-          writeCampaignSelectedLanguage(organisationId, existing);
-        }
-        languageSaved = true;
+      const details = await fetchUserDetails(authToken, organisationId);
+      const existing = firstActiveLanguageCode(details);
+      if (!existing) {
+        await updateUserLanguages(authToken, organisationId, selectedCode);
       }
+      languageSaved = true;
       sendShareChatSubmitApplication();
       sendCampaignLanguageSaved(pixelContext, { language_code: selectedCode });
-      const pending = getCampaignLanguageCheckoutRedirect();
-      if (pending?.startsWith("/")) {
-        await forwardToCheckout();
-        return;
-      }
-      if (aliveRef.current) navigate(campaignBackPath, { replace: true });
+      await forwardToCheckout();
     } catch (err) {
       if (!aliveRef.current) return;
-      const pending = getCampaignLanguageCheckoutRedirect()?.startsWith("/");
-      if (
-        isCampaignReAuthStatus(campaignFreePlanErrorStatus(err)) &&
-        !pending
-      ) {
-        clearJwtForOrganisation(organisationId);
-        if (aliveRef.current) navigate(campaignBackPath, { replace: true });
-        return;
-      }
       if (
         handleCampaignUnauthorized(
           campaignFreePlanErrorStatus(err),
@@ -386,12 +334,10 @@ export function CampaignLanguage({
   return (
     <CampaignOnboardingShell>
       <div className="flex min-h-0 flex-1 flex-col px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]">
-        {showLanguageBack ? (
-          <CampaignOnboardingBackButton
-            onClick={() => navigate(campaignBackPath)}
-            label="Back to campaign"
-          />
-        ) : null}
+        <CampaignOnboardingBackButton
+          onClick={() => navigate(campaignBackPath)}
+          label="Back to campaign"
+        />
         <CampaignOnboardingTitle>Languages You Speak</CampaignOnboardingTitle>
         <CampaignLanguageList
           languages={languages}

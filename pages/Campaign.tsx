@@ -16,19 +16,11 @@ import {
   isNoActiveCampaignFreePlanError,
   type CampaignFreePlanDetails,
 } from "../utils/campaignFreePlan";
-import { ZINTLE_POST_LOGIN_REDIRECT_KEY, buildCampaignLanguagePath } from "../utils/postLoginRedirect";
-import {
-  readCampaignSelectedLanguage,
-  writeCampaignSelectedLanguage,
-} from "../utils/campaignSelectedLanguage";
+import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
 import {
   CAMPAIGN_TAMIL_LANGUAGE_CODE,
   isCampaignTamilLanguageFlag,
 } from "../utils/campaignTamilFlag";
-import {
-  fetchUserDetails,
-  firstActiveLanguageCode,
-} from "../utils/userProfileApi";
 import {
   CampaignCtaDisclaimer,
   CampaignPrimaryCta,
@@ -141,91 +133,48 @@ export function Campaign({
 
   useEffect(() => {
     const abort = new AbortController();
-    let redirected = false;
+    const language =
+      isBiffle && isCampaignTamilLanguageFlag(location.search)
+        ? CAMPAIGN_TAMIL_LANGUAGE_CODE
+        : undefined;
     (async () => {
       setLoading(true);
       setFetchError(null);
-      let language: string | null = null;
       try {
         const rawJwt = getJwtFromStorage(organisationId);
-        let jwt = headerSafeToken(rawJwt);
-        const tamilVideo =
-          isBiffle && isCampaignTamilLanguageFlag(location.search);
-        language = tamilVideo
-          ? CAMPAIGN_TAMIL_LANGUAGE_CODE
-          : isBiffle
-            ? readCampaignSelectedLanguage(organisationId)
-            : null;
-        if (isBiffle && jwt && !tamilVideo) {
-          try {
-            const details = await fetchUserDetails(
-              jwt,
-              organisationId,
-              abort.signal,
-            );
-            if (abort.signal.aborted) return;
-            const code = firstActiveLanguageCode(details);
-            if (code) {
-              writeCampaignSelectedLanguage(organisationId, code);
-              language = code;
-            }
-          } catch (err) {
-            if (abort.signal.aborted || isCampaignFreePlanAbortError(err)) {
-              return;
-            }
-            // A bad session still gets the logged-out language picker.
-            if (isCampaignReAuthStatus(campaignFreePlanErrorStatus(err))) {
-              clearJwtForOrganisation(organisationId);
-              jwt = null;
-            }
-          }
-        }
-        if (isBiffle && !language) {
-          redirected = true;
-          navigate(buildCampaignLanguagePath(location.search), {
-            replace: true,
-          });
-          return;
-        }
-        const plan = await fetchCampaignActiveFreePlan(
-          organisationId,
-          jwt,
-          abort.signal,
-          isBiffle ? language : undefined,
-        );
-        if (abort.signal.aborted) return;
-        setActivePlan(plan);
-      } catch (err) {
-        let failure = err;
-        if (abort.signal.aborted || isCampaignFreePlanAbortError(failure)) return;
-        if (
-          isBiffle &&
-          isCampaignReAuthStatus(campaignFreePlanErrorStatus(failure))
-        ) {
-          clearJwtForOrganisation(organisationId);
-          try {
-            const plan = await fetchCampaignActiveFreePlan(
+        const jwt = headerSafeToken(rawJwt);
+        let plan: CampaignFreePlanDetails;
+        try {
+          plan = await fetchCampaignActiveFreePlan(
+            organisationId,
+            jwt,
+            abort.signal,
+            language,
+          );
+        } catch (err) {
+          if (abort.signal.aborted || isCampaignFreePlanAbortError(err)) return;
+          if (
+            jwt &&
+            isCampaignReAuthStatus(campaignFreePlanErrorStatus(err))
+          ) {
+            clearJwtForOrganisation(organisationId);
+            plan = await fetchCampaignActiveFreePlan(
               organisationId,
               null,
               abort.signal,
-              language ?? undefined,
+              language,
             );
-            if (abort.signal.aborted) return;
-            setActivePlan(plan);
-            return;
-          } catch (retryErr) {
-            if (
-              abort.signal.aborted ||
-              isCampaignFreePlanAbortError(retryErr)
-            ) {
-              return;
-            }
-            failure = retryErr;
+          } else {
+            throw err;
           }
         }
+        if (abort.signal.aborted) return;
+        setActivePlan(plan);
+      } catch (err) {
+        if (abort.signal.aborted || isCampaignFreePlanAbortError(err)) return;
         if (
           handleCampaignUnauthorized(
-            campaignFreePlanErrorStatus(failure),
+            campaignFreePlanErrorStatus(err),
             organisationId,
             () => setShowLogin(true),
           )
@@ -234,18 +183,18 @@ export function Campaign({
         }
         setActivePlan(null);
         setFetchError(
-          isNoActiveCampaignFreePlanError(failure)
+          isNoActiveCampaignFreePlanError(err)
             ? "No active free plan is configured for this org."
             : "Could not load plan details. Try again later.",
         );
       } finally {
-        if (!abort.signal.aborted && !redirected) setLoading(false);
+        if (!abort.signal.aborted) setLoading(false);
       }
     })();
     return () => {
       abort.abort();
     };
-  }, [isBiffle, location.search, navigate, organisationId, setShowLogin]);
+  }, [isBiffle, location.search, organisationId, setShowLogin]);
 
   const handleCampaignMediaReady = useCallback(() => {
     if (!activePlan?.id || freeTrialViewedSentRef.current) return;

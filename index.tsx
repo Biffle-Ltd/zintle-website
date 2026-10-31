@@ -78,10 +78,6 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { WebCallCampaign } from "./pages/WebCallCampaign";
 import { navigateAfterCampaignLoginGate } from "./utils/campaignLanguageGate";
 import {
-  readCampaignSelectedLanguage,
-  writeCampaignSelectedLanguage,
-} from "./utils/campaignSelectedLanguage";
-import {
   CAMPAIGN_TAMIL_LANGUAGE_CODE,
   isCampaignTamilLanguageFlag,
 } from "./utils/campaignTamilFlag";
@@ -1741,35 +1737,24 @@ const CoinStore = ({
                 return;
               }
               if (organisationId && isBiffleOrganisationId(organisationId)) {
-                const selectedLanguage =
-                  readCampaignSelectedLanguage(organisationId);
                 try {
                   const details = await fetchUserDetails(
                     authToken,
                     organisationId,
                   );
-                  const profileLanguage = firstActiveLanguageCode(details);
-                  if (profileLanguage) {
-                    writeCampaignSelectedLanguage(
-                      organisationId,
-                      profileLanguage,
-                    );
-                  } else if (isCampaignTamilLanguageFlag(pending)) {
+                  if (
+                    !firstActiveLanguageCode(details) &&
+                    isCampaignTamilLanguageFlag(pending)
+                  ) {
                     await updateUserLanguages(
                       authToken,
                       organisationId,
                       CAMPAIGN_TAMIL_LANGUAGE_CODE,
                     );
-                  } else if (selectedLanguage) {
-                    await updateUserLanguages(
-                      authToken,
-                      organisationId,
-                      selectedLanguage,
-                    );
                   }
                 } catch (err) {
                   console.error(
-                    "[Campaign] Failed to save selected language",
+                    "[Campaign] Failed to save Tamil language",
                     err,
                   );
                 }

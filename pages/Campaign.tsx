@@ -114,9 +114,11 @@ function trialDaysLabel(days: number | undefined): string {
 export function Campaign({
   organisationId,
   setShowLogin,
+  loginOpen,
 }: {
   organisationId: string;
   setShowLogin: (v: boolean) => void;
+  loginOpen: boolean;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -528,6 +530,7 @@ export function Campaign({
                 loop
                 autoPlay
                 preload="auto"
+                suspended={loginOpen}
                 onMediaReady={handleCampaignMediaReady}
               />
             ) : (

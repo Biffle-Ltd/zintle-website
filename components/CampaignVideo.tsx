@@ -12,6 +12,8 @@ type Props = {
   preload?: "none" | "metadata" | "auto";
   /** Fires once when the video (or stream) has loaded enough to play. */
   onMediaReady?: () => void;
+  /** Pause and silence playback, for example while the login sheet is open. */
+  suspended?: boolean;
 };
 
 const PLAY_PAUSE_CONTROL_HIDE_MS = 2000;
@@ -29,12 +31,15 @@ export function CampaignVideo({
   autoPlay = true,
   preload = "metadata",
   onMediaReady,
+  suspended = false,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const onMediaReadyRef = useRef(onMediaReady);
   const mediaReadyNotifiedRef = useRef(false);
   const dashPlayerRef = useRef<MediaPlayerClass | null>(null);
   const hasUnmutedViaGesture = useRef(false);
+  const suspendedRef = useRef(suspended);
+  const wasPlayingRef = useRef(false);
   const hidePlayPauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -121,7 +126,7 @@ export function CampaignVideo({
 
   useEffect(() => {
     const el = videoRef.current;
-    if (!el) return;
+    if (!el || suspendedRef.current) return;
     el.muted = isMuted;
     try {
       dashPlayerRef.current?.setMute(isMuted);
@@ -129,6 +134,35 @@ export function CampaignVideo({
       /* ignore */
     }
   }, [isMuted]);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    const player = dashPlayerRef.current;
+    if (suspended) {
+      if (!suspendedRef.current) wasPlayingRef.current = !el.paused;
+      suspendedRef.current = true;
+      el.pause();
+      el.muted = true;
+      try {
+        player?.pause();
+        player?.setMute(true);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    const wasSuspended = suspendedRef.current;
+    suspendedRef.current = false;
+    if (!wasSuspended) return;
+    el.muted = isMuted;
+    try {
+      player?.setMute(isMuted);
+    } catch {
+      /* ignore */
+    }
+    if (wasPlayingRef.current) void el.play().catch(() => {});
+  }, [suspended, isMuted]);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -161,6 +195,7 @@ export function CampaignVideo({
     };
 
     const kickPlay = () => {
+      if (suspendedRef.current) return;
       void el.play().catch(() => {});
     };
 
@@ -186,14 +221,14 @@ export function CampaignVideo({
         const { MediaPlayer } = await import("dashjs");
         if (cancelled || videoRef.current !== el) return;
 
-        el.muted = mutedProp;
+        el.muted = suspendedRef.current ? true : mutedProp;
         const player = MediaPlayer().create();
         dashPlayerRef.current = player;
-        player.initialize(el, src, autoPlay);
-        player.setMute(mutedProp);
+        player.initialize(el, src, autoPlay && !suspendedRef.current);
+        player.setMute(suspendedRef.current ? true : mutedProp);
 
         const onEnded = () => {
-          if (!loop) return;
+          if (!loop || suspendedRef.current) return;
           try {
             player.seek(0);
             void el.play().catch(() => {});
@@ -203,7 +238,7 @@ export function CampaignVideo({
         };
         if (loop) el.addEventListener("ended", onEnded);
 
-        if (autoPlay) {
+        if (autoPlay && !suspendedRef.current) {
           queueMicrotask(kickPlay);
           detachPlayWhenReady = attachPlayWhenReady();
         }
@@ -266,7 +301,7 @@ export function CampaignVideo({
         ref={videoRef}
         className={className}
         playsInline={playsInline}
-        muted={isMuted}
+        muted={suspended || isMuted}
         loop={useDash ? false : loop}
         autoPlay={useDash ? false : autoPlay}
         controls={false}

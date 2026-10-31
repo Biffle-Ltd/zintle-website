@@ -3619,6 +3619,7 @@ const Layout = () => {
             <Campaign
               organisationId={organisationId}
               setShowLogin={setShowLogin}
+              loginOpen={showLogin}
             />
           }
         />

@@ -36,7 +36,6 @@ import {
   copyShareChatVerifyParams,
   mergeRememberedShareChatVerifySearch,
   rememberShareChatVerifySearch,
-  sendShareChatSubmitApplication,
   shareChatVerifySearchHasParams,
 } from "../utils/shareChatPixel";
 import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
@@ -326,7 +325,6 @@ export function CampaignLanguage({
         }
         languageSaved = true;
       }
-      sendShareChatSubmitApplication();
       sendCampaignLanguageSaved(pixelContext, { language_code: selectedCode });
       const pending = getCampaignLanguageCheckoutRedirect();
       if (pending?.startsWith("/")) {

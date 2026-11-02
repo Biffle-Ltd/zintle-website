@@ -51,6 +51,7 @@ import {
   copyShareChatVerifyParams,
   mergeRememberedShareChatVerifySearch,
   rememberShareChatVerifySearch,
+  sendShareChatInitiateCheckout,
   sendShareChatStartTrial,
   shareChatVerifySearchHasParams,
 } from "../utils/shareChatPixel";
@@ -729,6 +730,7 @@ export const Subscriptions = ({
   }>({ loading: false, error: null, data: null });
 
   const startTrialEventSentRef = useRef(false);
+  const initiateCheckoutSentRef = useRef(false);
   const campaignLanguageGateCheckedRef = useRef(false);
   const [campaignLanguageGateReady, setCampaignLanguageGateReady] = useState(
     () => !isCampaign || !isLoggedIn || !isBiffleOrganisationId(organisationId),
@@ -745,6 +747,7 @@ export const Subscriptions = ({
     }
     if (campaignLanguageGateCheckedRef.current) return;
     campaignLanguageGateCheckedRef.current = true;
+    setCampaignLanguageGateReady(false);
 
     let cancelled = false;
     const shareChatSearch =
@@ -774,6 +777,21 @@ export const Subscriptions = ({
       cancelled = true;
     };
   }, [isCampaign, isLoggedIn, location.pathname, location.search, navigate, organisationId, token]);
+
+  useEffect(() => {
+    if (initiateCheckoutSentRef.current) return;
+    if (!isCampaign || !isLoggedIn || !campaignLanguageGateReady) return;
+    if (!planId || planDetailsState.loading || !planDetailsState.data) return;
+    initiateCheckoutSentRef.current = true;
+    sendShareChatInitiateCheckout();
+  }, [
+    isCampaign,
+    isLoggedIn,
+    campaignLanguageGateReady,
+    planId,
+    planDetailsState.loading,
+    planDetailsState.data,
+  ]);
 
   useLayoutEffect(() => {
     if (!isCampaign) return;

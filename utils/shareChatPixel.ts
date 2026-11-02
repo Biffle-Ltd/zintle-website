@@ -110,12 +110,7 @@ export function sendShareChatStartTrial(): void {
   sendShareChatPredefined("Start trial");
 }
 
-/** Fires when the free-trial page Start Free Trial button is clicked. */
-export function sendShareChatViewContent(): void {
-  sendShareChatPredefined("View content");
-}
-
-/** Fires when Continue is clicked after language selection on the free-trial flow. */
-export function sendShareChatSubmitApplication(): void {
-  sendShareChatPredefined("Submit application");
+/** Fires when the free-trial payment options are on screen. */
+export function sendShareChatInitiateCheckout(): void {
+  sendShareChatPredefined("Initiate checkout");
 }

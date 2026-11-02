@@ -65,7 +65,6 @@ import { navigateAfterCampaignLoginGate } from "../utils/campaignLanguageGate";
 import {
   clearShareChatVerifySearch,
   rememberShareChatVerifySearch,
-  sendShareChatViewContent,
   shareChatVerifySearchHasParams,
 } from "../utils/shareChatPixel";
 
@@ -348,7 +347,6 @@ export function Campaign({
 
   const handleStartFreeTrial = async () => {
     if (!checkoutPath) return;
-    sendShareChatViewContent();
     if (!isLoggedIn) {
       sessionStorage.setItem(ZINTLE_POST_LOGIN_REDIRECT_KEY, checkoutPath);
       setShowLogin(true);

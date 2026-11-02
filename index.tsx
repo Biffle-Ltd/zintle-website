@@ -78,10 +78,6 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { WebCallCampaign } from "./pages/WebCallCampaign";
 import { navigateAfterCampaignLoginGate } from "./utils/campaignLanguageGate";
 import {
-  readCampaignSelectedLanguage,
-  writeCampaignSelectedLanguage,
-} from "./utils/campaignSelectedLanguage";
-import {
   CAMPAIGN_HINDI_LANGUAGE_CODE,
   CAMPAIGN_TAMIL_LANGUAGE_CODE,
   isCampaignLanguagePickerFlow,
@@ -1743,40 +1739,25 @@ const CoinStore = ({
                 return;
               }
               if (organisationId && isBiffleOrganisationId(organisationId)) {
-                const selectedLanguage =
-                  readCampaignSelectedLanguage(organisationId);
                 try {
                   const details = await fetchUserDetails(
                     authToken,
                     organisationId,
                   );
-                  const profileLanguage = firstActiveLanguageCode(details);
-                  if (profileLanguage) {
-                    writeCampaignSelectedLanguage(
-                      organisationId,
-                      profileLanguage,
-                    );
-                  } else if (isCampaignTamilLanguageFlag(pending)) {
-                    await updateUserLanguages(
-                      authToken,
-                      organisationId,
-                      CAMPAIGN_TAMIL_LANGUAGE_CODE,
-                    );
-                  } else if (
-                    isCampaignLanguagePickerFlow(pending) &&
-                    selectedLanguage
-                  ) {
-                    await updateUserLanguages(
-                      authToken,
-                      organisationId,
-                      selectedLanguage,
-                    );
-                  } else if (!isCampaignLanguagePickerFlow(pending)) {
-                    await updateUserLanguages(
-                      authToken,
-                      organisationId,
-                      CAMPAIGN_HINDI_LANGUAGE_CODE,
-                    );
+                  if (!firstActiveLanguageCode(details)) {
+                    if (isCampaignTamilLanguageFlag(pending)) {
+                      await updateUserLanguages(
+                        authToken,
+                        organisationId,
+                        CAMPAIGN_TAMIL_LANGUAGE_CODE,
+                      );
+                    } else if (!isCampaignLanguagePickerFlow(pending)) {
+                      await updateUserLanguages(
+                        authToken,
+                        organisationId,
+                        CAMPAIGN_HINDI_LANGUAGE_CODE,
+                      );
+                    }
                   }
                 } catch (err) {
                   console.error(
@@ -3644,6 +3625,7 @@ const Layout = () => {
             <Campaign
               organisationId={organisationId}
               setShowLogin={setShowLogin}
+              loginOpen={showLogin}
             />
           }
         />

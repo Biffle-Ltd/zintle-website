@@ -16,16 +16,13 @@ import {
   isNoActiveCampaignFreePlanError,
   type CampaignFreePlanDetails,
 } from "../utils/campaignFreePlan";
-import { ZINTLE_POST_LOGIN_REDIRECT_KEY, buildCampaignLanguagePath } from "../utils/postLoginRedirect";
-import {
-  readCampaignSelectedLanguage,
-  writeCampaignSelectedLanguage,
-} from "../utils/campaignSelectedLanguage";
+import { ZINTLE_POST_LOGIN_REDIRECT_KEY } from "../utils/postLoginRedirect";
 import {
   campaignDirectLanguageCode,
   isCampaignLanguagePickerFlow,
   isCampaignTamilLanguageFlag,
 } from "../utils/campaignTamilFlag";
+import { withPublicTrialVideo } from "../utils/campaignTrialVideo";
 import {
   fetchUserDetails,
   firstActiveLanguageCode,
@@ -121,9 +118,11 @@ function trialDaysLabel(days: number | undefined): string {
 export function Campaign({
   organisationId,
   setShowLogin,
+  loginOpen,
 }: {
   organisationId: string;
   setShowLogin: (v: boolean) => void;
+  loginOpen: boolean;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -141,21 +140,21 @@ export function Campaign({
 
   useEffect(() => {
     const abort = new AbortController();
-    let redirected = false;
+    const languagePicker =
+      isBiffle && isCampaignLanguagePickerFlow(location.search);
+    // Direct links lock Hindi or Tamil. `all=1` waits for a profile language
+    // and otherwise plays the default trial video until login.
+    let language: string | null =
+      isBiffle && !languagePicker
+        ? campaignDirectLanguageCode(location.search)
+        : null;
     (async () => {
       setLoading(true);
       setFetchError(null);
-      let language: string | null = null;
       try {
         const rawJwt = getJwtFromStorage(organisationId);
         let jwt = headerSafeToken(rawJwt);
-        const languagePicker =
-          isBiffle && isCampaignLanguagePickerFlow(location.search);
-        language = !isBiffle
-          ? null
-          : languagePicker
-            ? readCampaignSelectedLanguage(organisationId)
-            : campaignDirectLanguageCode(location.search);
+        let usedAuth = Boolean(jwt);
         if (isBiffle && jwt && languagePicker) {
           try {
             const details = await fetchUserDetails(
@@ -165,67 +164,75 @@ export function Campaign({
             );
             if (abort.signal.aborted) return;
             const code = firstActiveLanguageCode(details);
-            if (code) {
-              writeCampaignSelectedLanguage(organisationId, code);
-              language = code;
-            }
+            if (code) language = code;
           } catch (err) {
             if (abort.signal.aborted || isCampaignFreePlanAbortError(err)) {
               return;
             }
-            // A bad session still gets the logged-out language picker.
+            // A bad session still gets the logged-out default video.
             if (isCampaignReAuthStatus(campaignFreePlanErrorStatus(err))) {
               clearJwtForOrganisation(organisationId);
               jwt = null;
+              usedAuth = false;
             }
           }
         }
-        if (isBiffle && !language) {
-          redirected = true;
-          navigate(buildCampaignLanguagePath(location.search), {
-            replace: true,
-          });
-          return;
-        }
-        const plan = await fetchCampaignActiveFreePlan(
-          organisationId,
-          jwt,
-          abort.signal,
-          isBiffle ? language : undefined,
-        );
-        if (abort.signal.aborted) return;
-        setActivePlan(plan);
-      } catch (err) {
-        let failure = err;
-        if (abort.signal.aborted || isCampaignFreePlanAbortError(failure)) return;
-        if (
-          isBiffle &&
-          isCampaignReAuthStatus(campaignFreePlanErrorStatus(failure))
-        ) {
-          clearJwtForOrganisation(organisationId);
-          try {
-            const plan = await fetchCampaignActiveFreePlan(
+        const planLanguage = isBiffle && language ? language : undefined;
+        let plan: CampaignFreePlanDetails;
+        try {
+          plan = await fetchCampaignActiveFreePlan(
+            organisationId,
+            jwt,
+            abort.signal,
+            planLanguage,
+          );
+        } catch (err) {
+          if (abort.signal.aborted || isCampaignFreePlanAbortError(err)) return;
+          if (
+            jwt &&
+            isCampaignReAuthStatus(campaignFreePlanErrorStatus(err))
+          ) {
+            clearJwtForOrganisation(organisationId);
+            usedAuth = false;
+            plan = await fetchCampaignActiveFreePlan(
               organisationId,
               null,
               abort.signal,
-              language ?? undefined,
+              planLanguage,
             );
-            if (abort.signal.aborted) return;
-            setActivePlan(plan);
-            return;
-          } catch (retryErr) {
-            if (
-              abort.signal.aborted ||
-              isCampaignFreePlanAbortError(retryErr)
-            ) {
-              return;
-            }
-            failure = retryErr;
+          } else {
+            throw err;
           }
         }
+        if (abort.signal.aborted) return;
+        // Signed-in visitors on the generic link keep the public trial video.
+        // Tamil, and an `all=1` visitor who already has a language, keep theirs.
+        const keepPublicTrialVideo =
+          isBiffle &&
+          usedAuth &&
+          !isCampaignTamilLanguageFlag(location.search) &&
+          !(languagePicker && language);
+        if (keepPublicTrialVideo) {
+          try {
+            const publicPlan = await fetchCampaignActiveFreePlan(
+              organisationId,
+              null,
+              abort.signal,
+            );
+            if (abort.signal.aborted) return;
+            plan = withPublicTrialVideo(plan, publicPlan);
+          } catch (err) {
+            if (abort.signal.aborted || isCampaignFreePlanAbortError(err)) return;
+            console.error("[Campaign] Failed to load the public trial video", err);
+          }
+        }
+        if (abort.signal.aborted) return;
+        setActivePlan(plan);
+      } catch (err) {
+        if (abort.signal.aborted || isCampaignFreePlanAbortError(err)) return;
         if (
           handleCampaignUnauthorized(
-            campaignFreePlanErrorStatus(failure),
+            campaignFreePlanErrorStatus(err),
             organisationId,
             () => setShowLogin(true),
           )
@@ -234,18 +241,18 @@ export function Campaign({
         }
         setActivePlan(null);
         setFetchError(
-          isNoActiveCampaignFreePlanError(failure)
+          isNoActiveCampaignFreePlanError(err)
             ? "No active free plan is configured for this org."
             : "Could not load plan details. Try again later.",
         );
       } finally {
-        if (!abort.signal.aborted && !redirected) setLoading(false);
+        if (!abort.signal.aborted) setLoading(false);
       }
     })();
     return () => {
       abort.abort();
     };
-  }, [isBiffle, location.search, navigate, organisationId, setShowLogin]);
+  }, [isBiffle, location.search, organisationId, setShowLogin]);
 
   const handleCampaignMediaReady = useCallback(() => {
     if (!activePlan?.id || freeTrialViewedSentRef.current) return;
@@ -561,6 +568,7 @@ export function Campaign({
                 loop
                 autoPlay
                 preload="auto"
+                suspended={loginOpen}
                 onMediaReady={handleCampaignMediaReady}
               />
             ) : (

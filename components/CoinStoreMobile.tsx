@@ -107,7 +107,6 @@ type CoinStoreMobileProps = {
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
   freeTrial?: VisibleFreeTrial | null;
-  freeTrialDisabled?: boolean;
   paymentInProgress?: boolean;
 };
 
@@ -404,7 +403,6 @@ export const CoinStoreMobile = ({
   featuredWeeklyPlan,
   basicWeeklyPlan,
   freeTrial = null,
-  freeTrialDisabled = false,
   paymentInProgress = false,
 }: CoinStoreMobileProps) => {
   const indexedPacks = useMemo(() => {
@@ -444,7 +442,6 @@ export const CoinStoreMobile = ({
             trial={freeTrial}
             brand="zintle"
             selected={selectedPackageId === freeTrial.planId}
-            disabled={freeTrialDisabled}
             onSelect={(pack) => onPackSelect(pack, 0)}
           />
         )}
@@ -532,11 +529,7 @@ export const CoinStoreMobile = ({
         <button
           type="button"
           onClick={onRecharge}
-          disabled={
-            !selectedInList ||
-            paymentInProgress ||
-            (freeTrialDisabled && selectedPackageId === freeTrial?.planId)
-          }
+          disabled={!selectedInList || paymentInProgress}
           className="mb-5 w-full rounded-full bg-gradient-to-r from-[#FF4B7A] via-[#FF5E4D] to-[#FF8A3D] py-4 text-base font-bold text-white shadow-lg shadow-[#FF5E4D]/30 transition-opacity hover:opacity-95 disabled:opacity-40"
         >
           {paymentInProgress ? "Processing..." : "Recharge Now"}

@@ -255,7 +255,6 @@ type QuickRechargePopupProps = {
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
   freeTrial?: VisibleFreeTrial | null;
-  freeTrialDisabled?: boolean;
   timerPack: CoinStorePack | null;
   callContext?: QuickRechargeCallContext | null;
   surface?: CoinPurchaseSurface | null;
@@ -273,7 +272,6 @@ export const QuickRechargePopup = ({
   featuredWeeklyPlan,
   basicWeeklyPlan,
   freeTrial = null,
-  freeTrialDisabled = false,
   timerPack,
   callContext = null,
   surface = null,
@@ -376,7 +374,6 @@ export const QuickRechargePopup = ({
               trial={freeTrial}
               brand="zintle"
               selected={selectedPackageId === freeTrial.planId}
-              disabled={freeTrialDisabled}
               onSelect={(pack) => onPackSelect(pack, 0)}
             />
           </div>
@@ -459,11 +456,7 @@ export const QuickRechargePopup = ({
       <button
         type="button"
         onClick={onContinue}
-        disabled={
-          selectedPackageId == null ||
-          paymentInProgress ||
-          (freeTrialDisabled && selectedPackageId === freeTrial?.planId)
-        }
+        disabled={selectedPackageId == null || paymentInProgress}
         className="mt-3 w-full shrink-0 rounded-full bg-gradient-to-r from-[#FF4B7A] via-[#FF5E4D] to-[#FF8A3D] py-3.5 text-base font-bold text-white shadow-lg shadow-[#FF5E4D]/30 transition-opacity hover:opacity-95 disabled:opacity-40"
       >
         {paymentInProgress

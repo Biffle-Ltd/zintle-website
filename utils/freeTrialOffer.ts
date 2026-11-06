@@ -299,34 +299,29 @@ export function preferFreeTrialSelection<T extends { id: number }>(
 }
 
 /**
- * The follow-up subscription-packs response still says this checkout's trial
- * can be bought. The card stays on screen and the current selection stays put.
+ * After get-user-details. A member leaves the trial and weekly cards, so the
+ * selection must be a coin pack or nothing. A non-member keeps a pack they
+ * already chose, including the 399-coin weekly plan.
  */
-export function trialCheckoutStillOpen(options: {
-  lockedTrialPlanId: number | null;
-  offerEligible: boolean;
-  offerPlanId: number | null;
-}): boolean {
-  return (
-    options.lockedTrialPlanId != null &&
-    options.offerEligible &&
-    options.offerPlanId === options.lockedTrialPlanId
-  );
-}
-
-/**
- * A failed weekly mandate must not re-enable a trial checkout that is still
- * outstanding. Only the mandate that opened the lock can clear it.
- */
-export function trialLockAfterMandateFailure(
-  lockedPlanId: number | null,
-  lockedMandateId: number | null,
-  failedMandateId: number,
-): number | null {
-  if (lockedMandateId != null && lockedMandateId === failedMandateId) {
-    return null;
+export function selectionAfterMembershipCheck<T extends { id: number }>(
+  current: T | null,
+  options: {
+    isMember: boolean;
+    memberPack: T | null;
+    trialPack: T | null;
+    weeklyPack: T | null;
+    goneTrialPlanId: number | null;
+  },
+): T | null {
+  if (options.isMember) return options.memberPack;
+  if (options.trialPack) return current ?? options.trialPack;
+  if (
+    options.weeklyPack &&
+    (current == null || current.id === options.goneTrialPlanId)
+  ) {
+    return options.weeklyPack;
   }
-  return lockedPlanId;
+  return current;
 }
 
 function formatRupee(amount: number): string {

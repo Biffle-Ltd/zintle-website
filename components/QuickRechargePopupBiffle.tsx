@@ -18,6 +18,8 @@ import {
   type CoinPurchaseSurface,
 } from "../utils/pixelEvents";
 import { weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
+import { FreeTrialOfferCard } from "./FreeTrialOfferCard";
+import type { VisibleFreeTrial } from "../utils/freeTrialOffer";
 
 export type QuickRechargePack = {
   id: number;
@@ -211,6 +213,7 @@ type QuickRechargePopupBiffleProps = {
   isMember: boolean;
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
+  freeTrial?: VisibleFreeTrial | null;
   timerPack: CoinStorePack | null;
   callContext?: QuickRechargeCallContext | null;
   surface?: CoinPurchaseSurface | null;
@@ -227,6 +230,7 @@ export const QuickRechargePopupBiffle = ({
   isMember,
   featuredWeeklyPlan,
   basicWeeklyPlan,
+  freeTrial = null,
   timerPack,
   callContext = null,
   surface = null,
@@ -257,6 +261,7 @@ export const QuickRechargePopupBiffle = ({
 
   const micropackGridStartIndex =
     (isMember && timerPack ? 1 : 0) +
+    (!isMember && freeTrial ? 1 : 0) +
     (!isMember && featuredWeeklyPlan ? 1 : 0) +
     (!isMember && basicWeeklyPlan ? 1 : 0);
 
@@ -266,6 +271,13 @@ export const QuickRechargePopupBiffle = ({
     featuredWeeklyPlan,
     basicWeeklyPlan,
     timerPack,
+    freeTrial
+      ? {
+          planId: freeTrial.planId,
+          coins: freeTrial.trialCoins ?? 0,
+          price: freeTrial.trialAmount,
+        }
+      : null,
   );
   const selectedPrice = selectedPack?.price ?? null;
 
@@ -319,6 +331,15 @@ export const QuickRechargePopupBiffle = ({
       </h2>
 
       <div className="max-h-[min(70vh,640px)] space-y-3 overflow-y-auto px-0.5 pb-4">
+        {!isMember && freeTrial && (
+          <FreeTrialOfferCard
+            trial={freeTrial}
+            brand="biffle"
+            selected={selectedPackageId === freeTrial.planId}
+            onSelect={(pack) => onPackSelect(pack, 0)}
+          />
+        )}
+
         {!isMember && featuredWeeklyPlan && (
           <BiffleFeaturedWeeklyPlanCard
             plan={featuredWeeklyPlan}
@@ -348,9 +369,11 @@ export const QuickRechargePopupBiffle = ({
         )}
 
         {filteredPacks.length === 0 ? (
-          <p className="py-6 text-center text-sm text-gray-500">
-            No coin packs available right now.
-          </p>
+          freeTrial || featuredWeeklyPlan || basicWeeklyPlan ? null : (
+            <p className="py-6 text-center text-sm text-gray-500">
+              No coin packs available right now.
+            </p>
+          )
         ) : (
           <div className="grid grid-cols-2 gap-3 px-0.5">
             {filteredPacks.map((pack, index) => {

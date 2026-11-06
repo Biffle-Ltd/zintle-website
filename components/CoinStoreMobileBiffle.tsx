@@ -9,6 +9,8 @@ import {
   getCoinStoreTimerEndMs,
 } from "../utils/coinStoreTimer";
 import { weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
+import { FreeTrialOfferCard } from "./FreeTrialOfferCard";
+import type { VisibleFreeTrial } from "../utils/freeTrialOffer";
 
 type CoinStoreMobileBiffleProps = {
   timerPack: CoinStorePack | null;
@@ -20,6 +22,7 @@ type CoinStoreMobileBiffleProps = {
   isMember: boolean;
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
+  freeTrial?: VisibleFreeTrial | null;
   paymentInProgress?: boolean;
 };
 
@@ -275,8 +278,12 @@ function resolveSelectedPrice(
   topPlans: CoinStorePack[],
   featuredWeeklyPlan: SubscriptionPlan | null,
   basicWeeklyPlan: SubscriptionPlan | null,
+  freeTrial: VisibleFreeTrial | null,
 ): number | null {
   if (selectedPackageId == null) return null;
+  if (freeTrial && freeTrial.planId === selectedPackageId) {
+    return freeTrial.trialAmount;
+  }
   if (featuredWeeklyPlan?.id === selectedPackageId) return featuredWeeklyPlan.price;
   if (basicWeeklyPlan?.id === selectedPackageId) return basicWeeklyPlan.price;
   const allPacks = [
@@ -298,6 +305,7 @@ export const CoinStoreMobileBiffle = ({
   isMember,
   featuredWeeklyPlan,
   basicWeeklyPlan,
+  freeTrial = null,
   paymentInProgress = false,
 }: CoinStoreMobileBiffleProps) => {
   const indexedPacks = useMemo(() => {
@@ -322,6 +330,7 @@ export const CoinStoreMobileBiffle = ({
     topPlans,
     featuredWeeklyPlan,
     basicWeeklyPlan,
+    freeTrial,
   );
   const selectedInList = selectedPackageId != null;
 
@@ -340,6 +349,14 @@ export const CoinStoreMobileBiffle = ({
           />
         )}
 
+        {!isMember && freeTrial && (
+          <FreeTrialOfferCard
+            trial={freeTrial}
+            brand="biffle"
+            selected={selectedPackageId === freeTrial.planId}
+            onSelect={(pack) => onPackSelect(pack, 0)}
+          />
+        )}
         {!isMember && (featuredWeeklyPlan || basicWeeklyPlan) && (
           <section className="space-y-3">
             {featuredWeeklyPlan && (

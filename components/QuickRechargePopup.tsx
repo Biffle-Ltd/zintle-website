@@ -16,6 +16,8 @@ import {
   type CoinPurchaseSurface,
 } from "../utils/pixelEvents";
 import { weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
+import { FreeTrialOfferCard } from "./FreeTrialOfferCard";
+import type { VisibleFreeTrial } from "../utils/freeTrialOffer";
 
 export type QuickRechargePack = {
   id: number;
@@ -252,6 +254,7 @@ type QuickRechargePopupProps = {
   isMember: boolean;
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
+  freeTrial?: VisibleFreeTrial | null;
   timerPack: CoinStorePack | null;
   callContext?: QuickRechargeCallContext | null;
   surface?: CoinPurchaseSurface | null;
@@ -268,6 +271,7 @@ export const QuickRechargePopup = ({
   isMember,
   featuredWeeklyPlan,
   basicWeeklyPlan,
+  freeTrial = null,
   timerPack,
   callContext = null,
   surface = null,
@@ -287,6 +291,7 @@ export const QuickRechargePopup = ({
 
   const micropackGridStartIndex =
     (isMember && timerPack ? 1 : 0) +
+    (!isMember && freeTrial ? 1 : 0) +
     (!isMember && featuredWeeklyPlan ? 1 : 0) +
     (!isMember && basicWeeklyPlan ? 1 : 0);
 
@@ -296,11 +301,19 @@ export const QuickRechargePopup = ({
     featuredWeeklyPlan,
     basicWeeklyPlan,
     timerPack,
+    freeTrial
+      ? {
+          planId: freeTrial.planId,
+          coins: freeTrial.trialCoins ?? 0,
+          price: freeTrial.trialAmount,
+        }
+      : null,
   );
   const selectedPrice = selectedPack?.price ?? null;
 
   const hasOptions =
     filteredPacks.length > 0 ||
+    (!isMember && freeTrial) ||
     (!isMember && (featuredWeeklyPlan || basicWeeklyPlan)) ||
     (isMember && timerPack);
 
@@ -355,6 +368,17 @@ export const QuickRechargePopup = ({
       </h2>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden">
+        {!isMember && freeTrial && (
+          <div className="shrink-0">
+            <FreeTrialOfferCard
+              trial={freeTrial}
+              brand="zintle"
+              selected={selectedPackageId === freeTrial.planId}
+              onSelect={(pack) => onPackSelect(pack, 0)}
+            />
+          </div>
+        )}
+
         {!isMember && featuredWeeklyPlan && (
           <div className="shrink-0">
           <ZintleFeaturedWeeklyPlanCard

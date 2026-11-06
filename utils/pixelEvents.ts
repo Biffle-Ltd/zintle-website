@@ -49,6 +49,7 @@ export type CoinPackForAnalytics = {
   bonus_coins?: number;
   is_subscription?: boolean;
   is_limited_plan?: boolean;
+  is_free_trial?: boolean;
 };
 
 export enum CoinPixelEventName {
@@ -223,7 +224,13 @@ function buildStoreViewedEventParams(
   return {
     ...buildBaseEventParams(ctx),
     event_info: {
-      coin_packs: packs.map((p) => ({ id: p.id, name: p.name ?? "" })),
+      coin_packs: packs.map((p) => ({
+        id: p.id,
+        name: p.name ?? "",
+        ...(p.is_free_trial
+          ? { is_free_trial: true, is_subscription: true }
+          : {}),
+      })),
     },
   };
 }
@@ -243,6 +250,7 @@ function buildCoinPackSelectedEventInfo(
     is_limited_plan: pack.is_limited_plan === true,
     position,
     ...(pack.is_subscription ? { is_subscription: true } : {}),
+    ...(pack.is_free_trial ? { is_free_trial: true } : {}),
     ...(options?.selected_by_default ? { selected_by_default: true } : {}),
   };
 }
@@ -257,6 +265,7 @@ function buildCoinPaymentInitiatedEventInfo(
     currency: CURRENCY,
     payment_gateway: PAYMENT_GATEWAY,
     ...(pack.is_subscription ? { is_subscription: true } : {}),
+    ...(pack.is_free_trial ? { is_free_trial: true } : {}),
   };
 }
 
@@ -396,6 +405,7 @@ export function sendCoinPaymentSuccess(
     coin_quantity: number;
     mandate_uuid?: string;
     is_subscription?: boolean;
+    is_free_trial?: boolean;
   },
 ): void {
   if (!ctx) return;
@@ -415,6 +425,7 @@ export function sendCoinPaymentSuccess(
     device_id: ctx.device_id,
     ...(args.mandate_uuid ? { mandate_uuid: args.mandate_uuid } : {}),
     ...(args.is_subscription ? { is_subscription: true } : {}),
+    ...(args.is_free_trial ? { is_free_trial: true } : {}),
   };
   sendCoinEvent(ctx, CoinPixelEventName.CoinPaymentSuccess, eventParams);
 }
@@ -425,6 +436,7 @@ export function sendCoinPaymentFailed(
     failure_reason?: string;
     coin_pack_id?: number;
     is_subscription?: boolean;
+    is_free_trial?: boolean;
   },
 ): void {
   if (!ctx) return;
@@ -440,6 +452,7 @@ export function sendCoinPaymentFailed(
     device_id: ctx.device_id,
     ...(args.coin_pack_id != null ? { coin_pack_id: args.coin_pack_id } : {}),
     ...(args.is_subscription ? { is_subscription: true } : {}),
+    ...(args.is_free_trial ? { is_free_trial: true } : {}),
   };
   sendCoinEvent(ctx, CoinPixelEventName.CoinPaymentFailed, eventParams);
 }

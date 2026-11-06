@@ -108,7 +108,7 @@ import {
   firstActiveLanguageCode,
   updateUserLanguages,
 } from "./utils/userProfileApi";
-import { fetchSubscriptionPlans } from "./utils/subscriptionPlansApi";
+import { fetchSubscriptionPlans, EMPTY_COIN_STORE_PLANS, type CoinStoreSubscriptionPlans } from "./utils/subscriptionPlansApi";
 import {
   coinStoreSessionKey,
   parseIsMemberQueryParam,
@@ -155,6 +155,12 @@ import {
   toCoinPackForAnalytics,
   weeklyPlanToStorePack,
 } from "./utils/coinStoreVisiblePacks";
+import {
+  freeTrialToStorePack,
+  preferFreeTrialSelection,
+  resolveCoinStoreTrialSurface,
+  withholdUnconfirmedTrial,
+} from "./utils/freeTrialOffer";
 import {
   clearTrackedMandate,
   peekTrackedMandate,
@@ -278,6 +284,7 @@ function fireDefaultCoinPackSelected(
   alreadySentRef: { current: boolean },
   featuredWeeklyPlan: SubscriptionPlan | null,
   basicWeeklyPlan: SubscriptionPlan | null,
+  freeTrialPlanId?: number | null,
 ): void {
   if (alreadySentRef.current || !pixelContext) return;
   const index = visiblePacks.findIndex((p) => p.id === pack.id);
@@ -287,7 +294,12 @@ function fireDefaultCoinPackSelected(
     pixelContext,
     toCoinPackForAnalytics(
       pack,
-      analyticsFlagsForStorePack(pack, featuredWeeklyPlan, basicWeeklyPlan),
+      analyticsFlagsForStorePack(
+        pack,
+        featuredWeeklyPlan,
+        basicWeeklyPlan,
+        freeTrialPlanId,
+      ),
     ),
     index,
     { selected_by_default: true },
@@ -368,10 +380,14 @@ type CoinPackValidateApiResponse = {
 
 type CoinStoreMembershipState = {
   isMember: boolean;
-  featuredWeeklyPlan: SubscriptionPlan | null;
-  basicWeeklyPlan: SubscriptionPlan | null;
-  subscriptionPlanIds: number[];
-};
+} & CoinStoreSubscriptionPlans;
+
+function plansFromMembership(
+  state: CoinStoreMembershipState,
+): CoinStoreSubscriptionPlans {
+  const { isMember: _isMember, ...plans } = state;
+  return plans;
+}
 
 /** Fetches is_member from get-user-details, then subscription plans when non-member. */
 async function syncCoinStoreMembershipState(
@@ -390,9 +406,7 @@ async function syncCoinStoreMembershipState(
     }
     return {
       isMember: true,
-      featuredWeeklyPlan: null,
-      basicWeeklyPlan: null,
-      subscriptionPlanIds: [],
+      ...EMPTY_COIN_STORE_PLANS,
     };
   }
   try {
@@ -402,9 +416,7 @@ async function syncCoinStoreMembershipState(
     // Same as before: plans fetch failed → coin packs only, never a stale mandate CTA.
     return {
       isMember: true,
-      featuredWeeklyPlan: null,
-      basicWeeklyPlan: null,
-      subscriptionPlanIds: [],
+      ...EMPTY_COIN_STORE_PLANS,
     };
   }
 }
@@ -2152,12 +2164,38 @@ const CoinsPage = ({
     membershipSeed.loading,
   );
   const [isMember, setIsMember] = useState(membershipSeed.isMember);
-  const [featuredWeeklyPlan, setFeaturedWeeklyPlan] =
-    useState<SubscriptionPlan | null>(membershipSeed.featuredWeeklyPlan);
-  const [basicWeeklyPlan, setBasicWeeklyPlan] =
-    useState<SubscriptionPlan | null>(membershipSeed.basicWeeklyPlan);
-  const [subscriptionPlanIds, setSubscriptionPlanIds] = useState<number[]>(
-    membershipSeed.subscriptionPlanIds,
+  const [subscriptionPlans, setSubscriptionPlans] =
+    useState<CoinStoreSubscriptionPlans>(() => plansFromMembership(membershipSeed));
+  // Cached eligibility can outlive the penny-drop gate. Don't paint ₹2 until
+  // this document's subscription-packs response confirms it.
+  const [trialOfferConfirmed, setTrialOfferConfirmed] = useState(() => {
+    const seed = membershipSeed;
+    // A cached non-member catalog is always revalidated. Selecting the weekly
+    // plan before that response lands paints the wrong default once the trial
+    // card appears, and fires the default event for the wrong pack.
+    const revalidatingNonMember = !seed.loading && !seed.isMember;
+    return !revalidatingNonMember;
+  });
+  const [checkoutTrialPlanId, setCheckoutTrialPlanId] = useState<number | null>(
+    null,
+  );
+  const plansForSurface = trialOfferConfirmed
+    ? subscriptionPlans
+    : withholdUnconfirmedTrial(subscriptionPlans);
+  const {
+    featuredWeeklyPlan,
+    basicWeeklyPlan,
+    subscriptionPlanIds,
+    freeTrial,
+  } = useMemo(
+    () =>
+      resolveCoinStoreTrialSurface({
+        isMember,
+        quickRecharge,
+        plans: plansForSurface,
+        holdPlanId: checkoutTrialPlanId,
+      }),
+    [isMember, quickRecharge, plansForSurface, checkoutTrialPlanId],
   );
 
   // Membership check — seed already applied; this revalidates from network / prefetch.
@@ -2186,30 +2224,34 @@ const CoinsPage = ({
       const memberStatus = isMemberParam;
       console.log("[CoinStore] Using URL param is_member:", memberStatus);
       setIsMember(memberStatus);
+      if (memberStatus) setSubscriptionPlans(EMPTY_COIN_STORE_PLANS);
 
       if (!memberStatus) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
 
         fetchSubscriptionPlans(token, organisationId, controller.signal)
-          .then(
-            ({ featuredWeeklyPlan, basicWeeklyPlan, subscriptionPlanIds }) => {
-              if (cancelled) return;
-              console.log("[CoinStore] Plans fetched:", {
-                featuredWeeklyPlan,
-                basicWeeklyPlan,
-              });
-              setFeaturedWeeklyPlan(featuredWeeklyPlan);
-              setBasicWeeklyPlan(basicWeeklyPlan);
-              setSubscriptionPlanIds(subscriptionPlanIds);
-            },
-          )
+          .then((plans) => {
+            if (cancelled) return;
+            console.log("[CoinStore] Plans fetched:", {
+              featuredWeeklyPlan: plans.featuredWeeklyPlan,
+              basicWeeklyPlan: plans.basicWeeklyPlan,
+              showInCoinstore: plans.showInCoinstore,
+              showInQuickCoinstore: plans.showInQuickCoinstore,
+              freeTrialEligible: plans.freeTrialOffer.eligible,
+            });
+            setSubscriptionPlans(plans);
+            setTrialOfferConfirmed(true);
+          })
           .catch((err) => {
             if (cancelled) return;
             console.error(
               "[CoinStore] Plans fetch failed for non-member:",
               err,
             );
+            // A stale cached offer must not stay tappable after a failed revalidation.
+            setSubscriptionPlans((prev) => withholdUnconfirmedTrial(prev));
+            setTrialOfferConfirmed(true);
           })
           .finally(() => {
             clearTimeout(timeout);
@@ -2238,9 +2280,8 @@ const CoinsPage = ({
       .then((state) => {
         if (cancelled) return;
         setIsMember(state.isMember);
-        setFeaturedWeeklyPlan(state.featuredWeeklyPlan);
-        setBasicWeeklyPlan(state.basicWeeklyPlan);
-        setSubscriptionPlanIds(state.subscriptionPlanIds);
+        setSubscriptionPlans(plansFromMembership(state));
+        setTrialOfferConfirmed(true);
       })
       .catch(() => {
         if (cancelled) return;
@@ -2248,9 +2289,8 @@ const CoinsPage = ({
         // Also drop any seeded plan cards so recharge cannot hit mandate with
         // a stale weekly plan id.
         setIsMember(true);
-        setFeaturedWeeklyPlan(null);
-        setBasicWeeklyPlan(null);
-        setSubscriptionPlanIds([]);
+        setSubscriptionPlans(EMPTY_COIN_STORE_PLANS);
+        setTrialOfferConfirmed(true);
       })
       .finally(() => {
         clearTimeout(timeout);
@@ -2266,13 +2306,22 @@ const CoinsPage = ({
 
   const refreshMembershipFromApi = useCallback(async () => {
     if (!token) return;
+    const purchasedTrialId = checkoutTrialPlanId;
     try {
       clearCachedUserDetails(token, organisationId);
       const state = await syncCoinStoreMembershipState(token, organisationId);
       setIsMember(state.isMember);
-      setFeaturedWeeklyPlan(state.featuredWeeklyPlan);
-      setBasicWeeklyPlan(state.basicWeeklyPlan);
-      setSubscriptionPlanIds(state.subscriptionPlanIds);
+      setSubscriptionPlans(plansFromMembership(state));
+      setTrialOfferConfirmed(true);
+      if (!state.freeTrialOffer.eligible) setCheckoutTrialPlanId(null);
+      // Keep the post-checkout hold. An INITIATED trial is still "eligible",
+      // and selecting it again would open a second penny drop on a hidden card.
+      const resolved = resolveCoinStoreTrialSurface({
+        isMember: state.isMember,
+        quickRecharge,
+        plans: state,
+        holdPlanId: state.freeTrialOffer.eligible ? purchasedTrialId : null,
+      });
 
       if (state.isMember) {
         const nextPack =
@@ -2281,13 +2330,13 @@ const CoinsPage = ({
           displayedPacks[0] ??
           null;
         if (nextPack) setSelectedPackage(nextPack);
-      } else if (state.featuredWeeklyPlan) {
-        setSelectedPackage({
-          id: state.featuredWeeklyPlan.id,
-          coins: state.featuredWeeklyPlan.coin_value ?? 0,
-          price: state.featuredWeeklyPlan.price,
-          name: state.featuredWeeklyPlan.plan_name,
-        });
+      } else if (resolved.freeTrial) {
+        setSelectedPackage(freeTrialToStorePack(resolved.freeTrial));
+      } else if (
+        resolved.featuredWeeklyPlan &&
+        resolved.featuredWeeklyPlan.id !== purchasedTrialId
+      ) {
+        setSelectedPackage(weeklyPlanToStorePack(resolved.featuredWeeklyPlan));
       }
 
       refreshCoinPacksCallback?.();
@@ -2297,7 +2346,14 @@ const CoinsPage = ({
         err,
       );
     }
-  }, [token, organisationId, timerPack, displayedPacks]);
+  }, [
+    token,
+    organisationId,
+    timerPack,
+    displayedPacks,
+    quickRecharge,
+    checkoutTrialPlanId,
+  ]);
 
   const refreshMembershipFromApiRef = useRef(refreshMembershipFromApi);
   refreshMembershipFromApiRef.current = refreshMembershipFromApi;
@@ -2334,6 +2390,7 @@ const CoinsPage = ({
                 coin_quantity: ref.coinQuantity,
                 ...(mandateUuid ? { mandate_uuid: mandateUuid } : {}),
                 is_subscription: true,
+                ...(ref.isFreeTrial ? { is_free_trial: true } : {}),
               });
             }
             showPaymentStatusCallback?.("SUCCESS");
@@ -2347,9 +2404,11 @@ const CoinsPage = ({
                 failure_reason: result.mandate_state,
                 coin_pack_id: ref.coinPackId,
                 is_subscription: true,
+                ...(ref.isFreeTrial ? { is_free_trial: true } : {}),
               });
             }
             showPaymentStatusCallback?.("FAILED");
+            setCheckoutTrialPlanId(null);
             return;
           }
         } catch {
@@ -2395,6 +2454,7 @@ const CoinsPage = ({
             basicWeeklyPlan,
             timerPack,
             micropacks: displayedPacks,
+            freeTrialPack: freeTrial ? freeTrialToStorePack(freeTrial) : null,
           })
         : getVisibleCoinStorePacks({
             isMember,
@@ -2403,6 +2463,7 @@ const CoinsPage = ({
             timerPack,
             exclusiveDeals,
             topPlans,
+            freeTrialPack: freeTrial ? freeTrialToStorePack(freeTrial) : null,
           }),
     [
       quickRecharge,
@@ -2413,6 +2474,7 @@ const CoinsPage = ({
       displayedPacks,
       exclusiveDeals,
       topPlans,
+      freeTrial,
     ],
   );
 
@@ -2421,14 +2483,23 @@ const CoinsPage = ({
       !pixelContext ||
       storeViewedSentRef.current ||
       membershipLoading ||
-      coinPacksLoading
+      coinPacksLoading ||
+      !trialOfferConfirmed
     ) {
       return;
     }
     if (visibleAnalyticsPacks.length === 0) return;
     storeViewedSentRef.current = true;
     const packs = visibleAnalyticsPacks.map((pack) =>
-      toCoinPackForAnalytics(pack),
+      toCoinPackForAnalytics(
+        pack,
+        analyticsFlagsForStorePack(
+          pack,
+          featuredWeeklyPlan,
+          basicWeeklyPlan,
+          freeTrial?.planId,
+        ),
+      ),
     );
     if (quickRecharge) {
       sendQuickRechargePopupViewed(pixelContext, packs);
@@ -2439,6 +2510,7 @@ const CoinsPage = ({
     pixelContext,
     membershipLoading,
     coinPacksLoading,
+    trialOfferConfirmed,
     visibleAnalyticsPacks,
     quickRecharge,
   ]);
@@ -2447,14 +2519,63 @@ const CoinsPage = ({
     const hasAnyPack =
       displayedPacks.length > 0 ||
       !!timerPack ||
-      (!isMember && !!(featuredWeeklyPlan || basicWeeklyPlan));
-    if (membershipLoading || coinPacksLoading || !hasAnyPack) return;
+      (!isMember && !!(freeTrial || featuredWeeklyPlan || basicWeeklyPlan));
+    if (
+      membershipLoading ||
+      coinPacksLoading ||
+      !trialOfferConfirmed ||
+      !hasAnyPack
+    ) {
+      return;
+    }
+
+    if (
+      checkoutTrialPlanId != null &&
+      selectedPackage?.id === checkoutTrialPlanId
+    ) {
+      const fallback =
+        !isMember &&
+        featuredWeeklyPlan &&
+        featuredWeeklyPlan.id !== checkoutTrialPlanId
+          ? weeklyPlanToStorePack(featuredWeeklyPlan)
+          : !isMember &&
+              basicWeeklyPlan &&
+              basicWeeklyPlan.id !== checkoutTrialPlanId
+            ? weeklyPlanToStorePack(basicWeeklyPlan)
+            : null;
+      setSelectedPackage(fallback);
+      return;
+    }
 
     if (quickRecharge) {
       if (
         isStartSessionCoinPopupSurface(quickRechargeSurface) &&
         !quickRechargeManualSelectRef.current
       ) {
+        if (!isMember && freeTrial) {
+          const initial = freeTrialToStorePack(freeTrial);
+          const next = preferFreeTrialSelection(selectedPackage, initial, [
+            featuredWeeklyPlan?.id,
+            basicWeeklyPlan?.id,
+          ]);
+          if (next.id !== selectedPackage?.id) setSelectedPackage(next);
+          if (next.id === initial.id) {
+            setQuickRechargeHeaderPack({
+              coins: initial.coins,
+              price: initial.price,
+            });
+            fireDefaultCoinPackSelected(
+              pixelContext,
+              initial,
+              visibleAnalyticsPacks,
+              defaultPackSelectedRef,
+              featuredWeeklyPlan,
+              basicWeeklyPlan,
+              freeTrial.planId,
+            );
+          }
+          return;
+        }
         const pack100 = resolveStartSessionDefaultPack({
           packs: displayedPacks,
           featuredWeeklyPlan,
@@ -2495,6 +2616,7 @@ const CoinsPage = ({
             defaultPackSelectedRef,
             featuredWeeklyPlan,
             basicWeeklyPlan,
+            freeTrial?.planId,
           );
           return;
         }
@@ -2508,7 +2630,15 @@ const CoinsPage = ({
       ) {
         const inCallPack = resolveInCallDefaultPack(displayedPacks);
         if (inCallPack) {
-          setSelectedPackage((prev) => prev ?? inCallPack);
+          setSelectedPackage((prev) => {
+            if (
+              prev == null ||
+              (freeTrial != null && prev.id === freeTrial.planId)
+            ) {
+              return inCallPack;
+            }
+            return prev;
+          });
           if (!quickRechargeHeaderLockedRef.current) {
             quickRechargeHeaderLockedRef.current = true;
             setQuickRechargeHeaderPack({
@@ -2523,9 +2653,39 @@ const CoinsPage = ({
             defaultPackSelectedRef,
             featuredWeeklyPlan,
             basicWeeklyPlan,
+            freeTrial?.planId,
           );
           return;
         }
+      }
+
+      if (!isMember && freeTrial && !quickRechargeManualSelectRef.current) {
+        const initial = freeTrialToStorePack(freeTrial);
+        const next = preferFreeTrialSelection(selectedPackage, initial, [
+          featuredWeeklyPlan?.id,
+          basicWeeklyPlan?.id,
+        ]);
+        if (next.id !== selectedPackage?.id) setSelectedPackage(next);
+        if (next.id === initial.id) {
+          if (!quickRechargeHeaderLockedRef.current) {
+            if (isInSessionCoinPopupSurface(quickRechargeSurface)) {
+              quickRechargeHeaderLockedRef.current = true;
+            }
+            setQuickRechargeHeaderPack((prev) =>
+              prev ?? { coins: initial.coins, price: initial.price },
+            );
+          }
+          fireDefaultCoinPackSelected(
+            pixelContext,
+            initial,
+            visibleAnalyticsPacks,
+            defaultPackSelectedRef,
+            featuredWeeklyPlan,
+            basicWeeklyPlan,
+            freeTrial.planId,
+          );
+        }
+        return;
       }
 
       if (!isMember && featuredWeeklyPlan) {
@@ -2547,6 +2707,7 @@ const CoinsPage = ({
             defaultPackSelectedRef,
             featuredWeeklyPlan,
             basicWeeklyPlan,
+            freeTrial?.planId,
           );
         }
       } else if (isMember && timerPack) {
@@ -2567,6 +2728,7 @@ const CoinsPage = ({
             defaultPackSelectedRef,
             featuredWeeklyPlan,
             basicWeeklyPlan,
+            freeTrial?.planId,
           );
         }
       } else if (displayedPacks[0]) {
@@ -2588,13 +2750,36 @@ const CoinsPage = ({
             defaultPackSelectedRef,
             featuredWeeklyPlan,
             basicWeeklyPlan,
+            freeTrial?.planId,
           );
         }
       }
       return;
     }
 
-    // For non-members, default select the featured weekly plan
+    // Non-members with a visible trial card land on that card. Weekly stays
+    // the fallback when the trial is hidden.
+    if (!isMember && freeTrial && !quickRechargeManualSelectRef.current) {
+      const initial = freeTrialToStorePack(freeTrial);
+      const next = preferFreeTrialSelection(selectedPackage, initial, [
+        featuredWeeklyPlan?.id,
+        basicWeeklyPlan?.id,
+      ]);
+      if (next.id !== selectedPackage?.id) setSelectedPackage(next);
+      if (next.id === initial.id) {
+        fireDefaultCoinPackSelected(
+          pixelContext,
+          initial,
+          visibleAnalyticsPacks,
+          defaultPackSelectedRef,
+          featuredWeeklyPlan,
+          basicWeeklyPlan,
+          freeTrial.planId,
+        );
+      }
+      return;
+    }
+
     if (!isMember && featuredWeeklyPlan) {
       const initial = weeklyPlanToStorePack(featuredWeeklyPlan);
       setSelectedPackage((prev) => prev ?? initial);
@@ -2605,6 +2790,7 @@ const CoinsPage = ({
         defaultPackSelectedRef,
         featuredWeeklyPlan,
         basicWeeklyPlan,
+        freeTrial?.planId,
       );
       return;
     }
@@ -2629,6 +2815,7 @@ const CoinsPage = ({
   }, [
     membershipLoading,
     coinPacksLoading,
+    trialOfferConfirmed,
     quickRecharge,
     quickRechargeSurface,
     quickRechargeCallContext,
@@ -2638,6 +2825,9 @@ const CoinsPage = ({
     isMember,
     featuredWeeklyPlan,
     basicWeeklyPlan,
+    freeTrial,
+    selectedPackage,
+    checkoutTrialPlanId,
     visibleAnalyticsPacks,
   ]);
 
@@ -2653,9 +2843,7 @@ const CoinsPage = ({
   }, [displayedPacks, selectedPackage, subscriptionPlanIds, timerPack]);
 
   const handlePackSelect = (pkg: CoinStorePack, index: number) => {
-    if (quickRecharge) {
-      quickRechargeManualSelectRef.current = true;
-    }
+    quickRechargeManualSelectRef.current = true;
     const enriched = enrichStorePackWithWeeklyPlan(
       pkg,
       featuredWeeklyPlan,
@@ -2673,6 +2861,7 @@ const CoinsPage = ({
           enriched,
           featuredWeeklyPlan,
           basicWeeklyPlan,
+          freeTrial?.planId,
         ),
       ),
       resolvedIndex >= 0 ? resolvedIndex : index,
@@ -2775,17 +2964,19 @@ const CoinsPage = ({
       return;
     }
     const source =
-      selectedPackage?.id === planId
-        ? enrichStorePackWithWeeklyPlan(
-            selectedPackage,
-            featuredWeeklyPlan,
-            basicWeeklyPlan,
-          )
-        : featuredWeeklyPlan?.id === planId
-          ? weeklyPlanToStorePack(featuredWeeklyPlan)
-          : basicWeeklyPlan?.id === planId
-            ? weeklyPlanToStorePack(basicWeeklyPlan)
-            : null;
+      freeTrial?.planId === planId
+        ? freeTrialToStorePack(freeTrial)
+        : selectedPackage?.id === planId
+          ? enrichStorePackWithWeeklyPlan(
+              selectedPackage,
+              featuredWeeklyPlan,
+              basicWeeklyPlan,
+            )
+          : featuredWeeklyPlan?.id === planId
+            ? weeklyPlanToStorePack(featuredWeeklyPlan)
+            : basicWeeklyPlan?.id === planId
+              ? weeklyPlanToStorePack(basicWeeklyPlan)
+              : null;
     const analyticsPack = source
       ? toCoinPackForAnalytics(
           source,
@@ -2793,6 +2984,7 @@ const CoinsPage = ({
             source,
             featuredWeeklyPlan,
             basicWeeklyPlan,
+            freeTrial?.planId,
           ),
         )
       : null;
@@ -2806,6 +2998,9 @@ const CoinsPage = ({
             coin_pack_id: analyticsPack.id,
             ...(analyticsPack.is_subscription
               ? { is_subscription: true as const }
+              : {}),
+            ...(analyticsPack.is_free_trial
+              ? { is_free_trial: true as const }
               : {}),
           }
         : {}),
@@ -2871,6 +3066,7 @@ const CoinsPage = ({
           amount: analyticsPack.price,
           coinQuantity: analyticsPack.coins,
           isSubscription: true,
+          ...(analyticsPack.is_free_trial ? { isFreeTrial: true } : {}),
           pixelContext,
         });
       }
@@ -2893,6 +3089,12 @@ const CoinsPage = ({
       // package=com.phonepe.app makes Chrome open Play Store instead of the
       // UPI app chooser.
       openMandateRedirectUrl(redirectUrl);
+      if (analyticsPack?.is_free_trial) {
+        // An INITIATED trial does not block another penny drop. Hide this
+        // card until the mandate fails or membership refresh says it is gone.
+        setCheckoutTrialPlanId(planId);
+        setSelectedPackage((prev) => (prev?.id === planId ? null : prev));
+      }
       if (Number.isFinite(mandateId)) {
         void pollMandateStatus(mandateId);
       }
@@ -2919,6 +3121,7 @@ const CoinsPage = ({
         isMember={isMember}
         featuredWeeklyPlan={featuredWeeklyPlan}
         basicWeeklyPlan={basicWeeklyPlan}
+        freeTrial={freeTrial}
         timerPack={timerPack}
         callContext={quickRechargeCallContext}
         surface={quickRechargeSurface}
@@ -2934,6 +3137,7 @@ const CoinsPage = ({
         isMember={isMember}
         featuredWeeklyPlan={featuredWeeklyPlan}
         basicWeeklyPlan={basicWeeklyPlan}
+        freeTrial={freeTrial}
         timerPack={timerPack}
         callContext={quickRechargeCallContext}
         surface={quickRechargeSurface}
@@ -2967,6 +3171,7 @@ const CoinsPage = ({
     isMember,
     featuredWeeklyPlan,
     basicWeeklyPlan,
+    freeTrial,
     paymentInProgress: isPaymentInProgress,
   };
 

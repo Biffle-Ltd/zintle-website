@@ -14,7 +14,14 @@ export function analyticsFlagsForStorePack(
   pack: { id: number },
   featuredWeeklyPlan: SubscriptionPlan | null,
   basicWeeklyPlan: SubscriptionPlan | null,
-): Pick<CoinPackForAnalytics, "is_subscription" | "is_limited_plan"> {
+  freeTrialPlanId?: number | null,
+): Pick<
+  CoinPackForAnalytics,
+  "is_subscription" | "is_limited_plan" | "is_free_trial"
+> {
+  if (freeTrialPlanId != null && pack.id === freeTrialPlanId) {
+    return { is_subscription: true, is_free_trial: true };
+  }
   if (featuredWeeklyPlan?.id === pack.id) {
     return { is_subscription: true, is_limited_plan: true };
   }
@@ -26,7 +33,10 @@ export function analyticsFlagsForStorePack(
 
 export function toCoinPackForAnalytics(
   pack: Pick<CoinStorePack, "id" | "coins" | "price" | "name" | "bonus_coins">,
-  flags?: Pick<CoinPackForAnalytics, "is_subscription" | "is_limited_plan">,
+  flags?: Pick<
+    CoinPackForAnalytics,
+    "is_subscription" | "is_limited_plan" | "is_free_trial"
+  >,
 ): CoinPackForAnalytics {
   return {
     id: pack.id,
@@ -36,6 +46,7 @@ export function toCoinPackForAnalytics(
     bonus_coins: pack.bonus_coins ?? 0,
     ...(flags?.is_subscription ? { is_subscription: true } : {}),
     ...(flags?.is_limited_plan ? { is_limited_plan: true } : {}),
+    ...(flags?.is_free_trial ? { is_free_trial: true } : {}),
   };
 }
 
@@ -70,6 +81,7 @@ export function getVisibleCoinStorePacks(options: {
   timerPack: CoinStorePack | null;
   exclusiveDeals: CoinStorePack[];
   topPlans: CoinStorePack[];
+  freeTrialPack?: CoinStorePack | null;
 }): CoinStorePack[] {
   const {
     isMember,
@@ -78,9 +90,13 @@ export function getVisibleCoinStorePacks(options: {
     timerPack,
     exclusiveDeals,
     topPlans,
+    freeTrialPack,
   } = options;
   const packs: CoinStorePack[] = [];
 
+  if (!isMember && freeTrialPack) {
+    packs.push(freeTrialPack);
+  }
   if (!isMember && featuredWeeklyPlan) {
     packs.push(weeklyPlanToStorePack(featuredWeeklyPlan));
   } else if (isMember && timerPack) {
@@ -107,6 +123,7 @@ export function getVisibleQuickRechargePacks(options: {
   basicWeeklyPlan: SubscriptionPlan | null;
   timerPack: CoinStorePack | null;
   micropacks: CoinStorePack[];
+  freeTrialPack?: CoinStorePack | null;
 }): CoinStorePack[] {
   const {
     isMember,
@@ -114,9 +131,13 @@ export function getVisibleQuickRechargePacks(options: {
     basicWeeklyPlan,
     timerPack,
     micropacks,
+    freeTrialPack,
   } = options;
   const packs: CoinStorePack[] = [];
 
+  if (!isMember && freeTrialPack) {
+    packs.push(freeTrialPack);
+  }
   if (!isMember && featuredWeeklyPlan) {
     packs.push(weeklyPlanToStorePack(featuredWeeklyPlan));
   }

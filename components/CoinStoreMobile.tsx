@@ -6,6 +6,8 @@ import {
   getCoinStoreTimerEndMs,
 } from "../utils/coinStoreTimer";
 import { weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
+import { FreeTrialOfferCard } from "./FreeTrialOfferCard";
+import type { VisibleFreeTrial } from "../utils/freeTrialOffer";
 
 export const TIMER_COIN_PRODUCT_ID = "coin_100";
 export const TIMER_COIN_FALLBACK_PRODUCT_ID = "coin_149";
@@ -104,6 +106,7 @@ type CoinStoreMobileProps = {
   isMember: boolean;
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
+  freeTrial?: VisibleFreeTrial | null;
   paymentInProgress?: boolean;
 };
 
@@ -399,6 +402,7 @@ export const CoinStoreMobile = ({
   isMember,
   featuredWeeklyPlan,
   basicWeeklyPlan,
+  freeTrial = null,
   paymentInProgress = false,
 }: CoinStoreMobileProps) => {
   const indexedPacks = useMemo(() => {
@@ -431,6 +435,14 @@ export const CoinStoreMobile = ({
               onPackSelect(timerPack, row?.index ?? 0);
             }}
             index={0}
+          />
+        )}
+        {!isMember && freeTrial && (
+          <FreeTrialOfferCard
+            trial={freeTrial}
+            brand="zintle"
+            selected={selectedPackageId === freeTrial.planId}
+            onSelect={(pack) => onPackSelect(pack, 0)}
           />
         )}
         {!isMember && featuredWeeklyPlan && (

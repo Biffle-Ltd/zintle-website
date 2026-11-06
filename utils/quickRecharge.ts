@@ -353,8 +353,12 @@ export function resolveSelectedPackDetails(
   featuredWeeklyPlan: SubscriptionPlan | null,
   basicWeeklyPlan: SubscriptionPlan | null,
   timerPack: CoinStorePack | null,
+  freeTrial?: { planId: number; coins: number; price: number } | null,
 ): { coins: number; price: number } | null {
   if (selectedPackageId == null) return null;
+  if (freeTrial && freeTrial.planId === selectedPackageId) {
+    return { coins: freeTrial.coins, price: freeTrial.price };
+  }
   if (featuredWeeklyPlan?.id === selectedPackageId) {
     return {
       coins: featuredWeeklyPlan.coin_value ?? 0,

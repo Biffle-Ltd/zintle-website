@@ -9,6 +9,7 @@ export type TrackedMandatePurchase = {
   amount: number;
   coinQuantity: number;
   isSubscription: true;
+  isFreeTrial?: boolean;
   pixelContext: ParsedCoinPixelContext;
 };
 
@@ -27,6 +28,7 @@ function isTrackedMandatePurchase(
     typeof v.amount === "number" &&
     typeof v.coinQuantity === "number" &&
     v.isSubscription === true &&
+    (v.isFreeTrial == null || typeof v.isFreeTrial === "boolean") &&
     v.pixelContext != null &&
     typeof v.pixelContext === "object"
   );

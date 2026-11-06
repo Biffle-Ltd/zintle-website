@@ -22,6 +22,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["./**/*.ts", "./**/*.tsx", "./vite-env.d.ts"],
-  "exclude": ["./**/*.test.ts"]
+  "include": ["./**/*.ts", "./**/*.tsx", "./vite-env.d.ts"]
 }

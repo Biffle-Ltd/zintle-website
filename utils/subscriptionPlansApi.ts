@@ -1,4 +1,11 @@
 import type { SubscriptionPlan } from "../components/CoinStoreMobile.tsx";
+import {
+  HIDDEN_FREE_TRIAL_OFFER,
+  parseFreeTrialOffer,
+  parseTrialSurfaceFlags,
+  withTrialMandatePlanId,
+  type FreeTrialOffer,
+} from "./freeTrialOffer.ts";
 import { HOST } from "./host.ts";
 import { headerSafeToken } from "./headerSafeToken.ts";
 import {
@@ -13,10 +20,18 @@ export type CoinStoreSubscriptionPlans = {
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
   subscriptionPlanIds: number[];
+  showInCoinstore: boolean;
+  showInQuickCoinstore: boolean;
+  freeTrialOffer: FreeTrialOffer;
 };
 
 type SubscriptionPacksApiResponse = {
-  data?: { plans?: unknown[] };
+  data?: {
+    plans?: unknown[];
+    show_in_coinstore?: unknown;
+    show_in_quick_coinstore?: unknown;
+    free_trial_offer?: unknown;
+  };
 };
 
 function subscriptionPacksCacheKey(
@@ -43,16 +58,30 @@ function cachedPlansFromStorage(
   const basicWeeklyPlan = cached.basicWeeklyPlan
     ? normalizeSubscriptionPlan(cached.basicWeeklyPlan)
     : null;
-  if (!featuredWeeklyPlan) return null;
-  if (!subscriptionPlanIds.includes(featuredWeeklyPlan.id)) return null;
-  if (basicWeeklyPlan && !subscriptionPlanIds.includes(basicWeeklyPlan.id)) {
+  const flags = parseTrialSurfaceFlags(cached);
+  const freeTrialOffer = parseFreeTrialOffer(cached.freeTrialOffer);
+  const ids = withTrialMandatePlanId(
+    subscriptionPlanIds,
+    flags.showInCoinstore,
+    flags.showInQuickCoinstore,
+    freeTrialOffer,
+  );
+  if (!featuredWeeklyPlan) {
+    const trialId = ids.find((id) => id === freeTrialOffer.planId);
+    if (trialId == null || !freeTrialOffer.eligible) return null;
+  } else if (!ids.includes(featuredWeeklyPlan.id)) {
+    return null;
+  }
+  if (basicWeeklyPlan && !ids.includes(basicWeeklyPlan.id)) {
     return null;
   }
 
   return {
     featuredWeeklyPlan,
     basicWeeklyPlan,
-    subscriptionPlanIds,
+    subscriptionPlanIds: ids,
+    ...flags,
+    freeTrialOffer,
   };
 }
 
@@ -74,6 +103,9 @@ export const EMPTY_COIN_STORE_PLANS: CoinStoreSubscriptionPlans = {
   featuredWeeklyPlan: null,
   basicWeeklyPlan: null,
   subscriptionPlanIds: [],
+  showInCoinstore: false,
+  showInQuickCoinstore: false,
+  freeTrialOffer: HIDDEN_FREE_TRIAL_OFFER,
 };
 
 function rememberSubscriptionPlans(
@@ -141,10 +173,23 @@ function plansFromPayload(
     .filter((plan): plan is SubscriptionPlan => plan != null);
   const { featuredWeeklyPlan, basicWeeklyPlan } =
     partitionCoinStoreSubscriptionPlans(plans);
+  const data = json?.data;
+  const flags = parseTrialSurfaceFlags({
+    show_in_coinstore: data?.show_in_coinstore,
+    show_in_quick_coinstore: data?.show_in_quick_coinstore,
+  });
+  const freeTrialOffer = parseFreeTrialOffer(data?.free_trial_offer);
   return {
     featuredWeeklyPlan,
     basicWeeklyPlan,
-    subscriptionPlanIds: plans.map((plan) => plan.id),
+    subscriptionPlanIds: withTrialMandatePlanId(
+      plans.map((plan) => plan.id),
+      flags.showInCoinstore,
+      flags.showInQuickCoinstore,
+      freeTrialOffer,
+    ),
+    ...flags,
+    freeTrialOffer,
   };
 }
 

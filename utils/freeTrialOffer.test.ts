@@ -7,6 +7,8 @@ import {
   parseFreeTrialOffer,
   parseTrialSurfaceFlags,
   resolveCoinStoreTrialSurface,
+  trialCheckoutStillOpen,
+  trialLockAfterMandateFailure,
   trialMandatePlanId,
   withTrialMandatePlanId,
   withholdUnconfirmedTrial,
@@ -223,6 +225,39 @@ describe("trial surface", () => {
     assert.equal(preferFreeTrialSelection(weekly, trial, [10, 9]).id, 7);
     assert.equal(preferFreeTrialSelection(coins, trial, [10, 9]).id, 22);
     assert.equal(preferFreeTrialSelection(trial, trial, [10, 9]), trial);
+  });
+
+  it("keeps a trial checkout locked while the offer is still eligible", () => {
+    assert.equal(
+      trialCheckoutStillOpen({
+        lockedTrialPlanId: 7,
+        offerEligible: true,
+        offerPlanId: 7,
+      }),
+      true,
+    );
+    assert.equal(
+      trialCheckoutStillOpen({
+        lockedTrialPlanId: 7,
+        offerEligible: false,
+        offerPlanId: 7,
+      }),
+      false,
+    );
+    assert.equal(
+      trialCheckoutStillOpen({
+        lockedTrialPlanId: null,
+        offerEligible: true,
+        offerPlanId: 7,
+      }),
+      false,
+    );
+  });
+
+  it("clears the trial lock only for the mandate that opened it", () => {
+    assert.equal(trialLockAfterMandateFailure(7, 44, 44), null);
+    assert.equal(trialLockAfterMandateFailure(7, 44, 90), 7);
+    assert.equal(trialLockAfterMandateFailure(null, null, 90), null);
   });
 
   it("treats a lowercase INR currency as eligible", () => {

@@ -23,6 +23,7 @@ type CoinStoreMobileBiffleProps = {
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
   freeTrial?: VisibleFreeTrial | null;
+  freeTrialDisabled?: boolean;
   paymentInProgress?: boolean;
 };
 
@@ -306,6 +307,7 @@ export const CoinStoreMobileBiffle = ({
   featuredWeeklyPlan,
   basicWeeklyPlan,
   freeTrial = null,
+  freeTrialDisabled = false,
   paymentInProgress = false,
 }: CoinStoreMobileBiffleProps) => {
   const indexedPacks = useMemo(() => {
@@ -354,6 +356,7 @@ export const CoinStoreMobileBiffle = ({
             trial={freeTrial}
             brand="biffle"
             selected={selectedPackageId === freeTrial.planId}
+            disabled={freeTrialDisabled}
             onSelect={(pack) => onPackSelect(pack, 0)}
           />
         )}
@@ -441,7 +444,11 @@ export const CoinStoreMobileBiffle = ({
         <button
           type="button"
           onClick={onRecharge}
-          disabled={!selectedInList || paymentInProgress}
+          disabled={
+            !selectedInList ||
+            paymentInProgress ||
+            (freeTrialDisabled && selectedPackageId === freeTrial?.planId)
+          }
           className="mb-5 w-full rounded-full py-4 text-base font-bold text-white shadow-lg shadow-violet-500/20 transition-opacity hover:opacity-95 disabled:opacity-40"
           style={campaignCtaGradientStyle(true)}
         >

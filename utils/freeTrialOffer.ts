@@ -234,7 +234,10 @@ export function resolveCoinStoreTrialSurface(options: {
   isMember: boolean;
   quickRecharge: boolean;
   plans: PlansWithTrial;
-  /** Hide the card and its weekly duplicate while this plan's checkout is open. */
+  /**
+   * Hide the card and its weekly duplicate. The coin store does not pass this:
+   * an open trial checkout stays on screen and is disabled instead.
+   */
   holdPlanId?: number | null;
 }): {
   featuredWeeklyPlan: SubscriptionPlan | null;
@@ -293,6 +296,37 @@ export function preferFreeTrialSelection<T extends { id: number }>(
     return trialPack;
   }
   return current;
+}
+
+/**
+ * The follow-up subscription-packs response still says this checkout's trial
+ * can be bought. The card stays on screen and the current selection stays put.
+ */
+export function trialCheckoutStillOpen(options: {
+  lockedTrialPlanId: number | null;
+  offerEligible: boolean;
+  offerPlanId: number | null;
+}): boolean {
+  return (
+    options.lockedTrialPlanId != null &&
+    options.offerEligible &&
+    options.offerPlanId === options.lockedTrialPlanId
+  );
+}
+
+/**
+ * A failed weekly mandate must not re-enable a trial checkout that is still
+ * outstanding. Only the mandate that opened the lock can clear it.
+ */
+export function trialLockAfterMandateFailure(
+  lockedPlanId: number | null,
+  lockedMandateId: number | null,
+  failedMandateId: number,
+): number | null {
+  if (lockedMandateId != null && lockedMandateId === failedMandateId) {
+    return null;
+  }
+  return lockedPlanId;
 }
 
 function formatRupee(amount: number): string {

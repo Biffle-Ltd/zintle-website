@@ -12,6 +12,7 @@ type FreeTrialOfferCardProps = {
   trial: VisibleFreeTrial;
   brand: "biffle" | "zintle";
   selected: boolean;
+  disabled?: boolean;
   onSelect: (pack: CoinStorePack) => void;
 };
 
@@ -24,6 +25,7 @@ export function FreeTrialOfferCard({
   trial,
   brand,
   selected,
+  disabled = false,
   onSelect,
 }: FreeTrialOfferCardProps) {
   const isBiffle = brand === "biffle";
@@ -47,8 +49,15 @@ export function FreeTrialOfferCard({
     <button
       type="button"
       data-testid="free-trial-offer"
-      onClick={() => onSelect(freeTrialToStorePack(trial))}
-      className={`relative w-full rounded-[24px] p-[2.5px] text-left transition-transform active:scale-[0.98] ${frame}`}
+      disabled={disabled}
+      aria-disabled={disabled || undefined}
+      onClick={() => {
+        if (disabled) return;
+        onSelect(freeTrialToStorePack(trial));
+      }}
+      className={`relative w-full rounded-[24px] p-[2.5px] text-left transition-transform ${
+        disabled ? "cursor-not-allowed opacity-60" : "active:scale-[0.98]"
+      } ${frame}`}
     >
       <div className={`relative overflow-hidden rounded-[22px] px-4 py-3.5 ${fill}`}>
         <div

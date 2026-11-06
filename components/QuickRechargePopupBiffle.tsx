@@ -214,6 +214,7 @@ type QuickRechargePopupBiffleProps = {
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
   freeTrial?: VisibleFreeTrial | null;
+  freeTrialDisabled?: boolean;
   timerPack: CoinStorePack | null;
   callContext?: QuickRechargeCallContext | null;
   surface?: CoinPurchaseSurface | null;
@@ -231,6 +232,7 @@ export const QuickRechargePopupBiffle = ({
   featuredWeeklyPlan,
   basicWeeklyPlan,
   freeTrial = null,
+  freeTrialDisabled = false,
   timerPack,
   callContext = null,
   surface = null,
@@ -336,6 +338,7 @@ export const QuickRechargePopupBiffle = ({
             trial={freeTrial}
             brand="biffle"
             selected={selectedPackageId === freeTrial.planId}
+            disabled={freeTrialDisabled}
             onSelect={(pack) => onPackSelect(pack, 0)}
           />
         )}
@@ -406,7 +409,11 @@ export const QuickRechargePopupBiffle = ({
       <button
         type="button"
         onClick={onContinue}
-        disabled={selectedPackageId == null || paymentInProgress}
+        disabled={
+          selectedPackageId == null ||
+          paymentInProgress ||
+          (freeTrialDisabled && selectedPackageId === freeTrial?.planId)
+        }
         className="w-full rounded-full py-4 text-base font-bold text-white shadow-lg shadow-violet-500/20 transition-opacity hover:opacity-95 disabled:opacity-40"
         style={campaignCtaGradientStyle(true)}
       >

@@ -159,6 +159,8 @@ import {
   freeTrialToStorePack,
   preferFreeTrialSelection,
   resolveCoinStoreTrialSurface,
+  trialCheckoutStillOpen,
+  trialLockAfterMandateFailure,
   withholdUnconfirmedTrial,
 } from "./utils/freeTrialOffer";
 import {
@@ -2145,7 +2147,11 @@ const CoinsPage = ({
   } | null>(null);
   const [isPaymentInProgress, setIsPaymentInProgress] = useState(false);
   const paymentInProgressRef = useRef(false);
-  const mandatePollGenRef = useRef(0);
+  // One epoch cancels every poll on unmount. Each mandate keeps its own token
+  // so a weekly poll cannot abandon the trial poll that is allowed to re-enable
+  // the card.
+  const mandatePollEpochRef = useRef(0);
+  const mandatePollTokenRef = useRef(new Map<number, number>());
 
   const releasePaymentLock = useCallback(() => {
     paymentInProgressRef.current = false;
@@ -2179,6 +2185,20 @@ const CoinsPage = ({
   const [checkoutTrialPlanId, setCheckoutTrialPlanId] = useState<number | null>(
     null,
   );
+  // State lags a frame behind the click. The ref is what blocks a second
+  // penny drop the moment the first mandate redirect opens.
+  const checkoutTrialPlanIdRef = useRef<number | null>(null);
+  const checkoutTrialMandateIdRef = useRef<number | null>(null);
+  const lockTrialCheckout = (planId: number, mandateId: number) => {
+    checkoutTrialPlanIdRef.current = planId;
+    checkoutTrialMandateIdRef.current = mandateId;
+    setCheckoutTrialPlanId(planId);
+  };
+  const unlockTrialCheckout = () => {
+    checkoutTrialPlanIdRef.current = null;
+    checkoutTrialMandateIdRef.current = null;
+    setCheckoutTrialPlanId(null);
+  };
   const plansForSurface = trialOfferConfirmed
     ? subscriptionPlans
     : withholdUnconfirmedTrial(subscriptionPlans);
@@ -2193,9 +2213,8 @@ const CoinsPage = ({
         isMember,
         quickRecharge,
         plans: plansForSurface,
-        holdPlanId: checkoutTrialPlanId,
       }),
-    [isMember, quickRecharge, plansForSurface, checkoutTrialPlanId],
+    [isMember, quickRecharge, plansForSurface],
   );
 
   // Membership check — seed already applied; this revalidates from network / prefetch.
@@ -2306,21 +2325,25 @@ const CoinsPage = ({
 
   const refreshMembershipFromApi = useCallback(async () => {
     if (!token) return;
-    const purchasedTrialId = checkoutTrialPlanId;
+    const purchasedTrialId = checkoutTrialPlanIdRef.current;
     try {
       clearCachedUserDetails(token, organisationId);
       const state = await syncCoinStoreMembershipState(token, organisationId);
       setIsMember(state.isMember);
       setSubscriptionPlans(plansFromMembership(state));
       setTrialOfferConfirmed(true);
-      if (!state.freeTrialOffer.eligible) setCheckoutTrialPlanId(null);
-      // Keep the post-checkout hold. An INITIATED trial is still "eligible",
-      // and selecting it again would open a second penny drop on a hidden card.
+      const keepSelection = trialCheckoutStillOpen({
+        lockedTrialPlanId: purchasedTrialId,
+        offerEligible: state.freeTrialOffer.eligible,
+        offerPlanId: state.freeTrialOffer.planId,
+      });
+      if (purchasedTrialId != null && (state.isMember || !keepSelection)) {
+        unlockTrialCheckout();
+      }
       const resolved = resolveCoinStoreTrialSurface({
         isMember: state.isMember,
         quickRecharge,
         plans: state,
-        holdPlanId: state.freeTrialOffer.eligible ? purchasedTrialId : null,
       });
 
       if (state.isMember) {
@@ -2330,13 +2353,25 @@ const CoinsPage = ({
           displayedPacks[0] ??
           null;
         if (nextPack) setSelectedPackage(nextPack);
+      } else if (keepSelection) {
+        // The trial card is still the right one to show. Leave whatever the
+        // user moved to after Pay, including the trial itself.
       } else if (resolved.freeTrial) {
-        setSelectedPackage(freeTrialToStorePack(resolved.freeTrial));
+        const trialPack = freeTrialToStorePack(resolved.freeTrial);
+        setSelectedPackage((prev) =>
+          preferFreeTrialSelection(prev, trialPack, [
+            resolved.featuredWeeklyPlan?.id,
+            resolved.basicWeeklyPlan?.id,
+          ]),
+        );
       } else if (
         resolved.featuredWeeklyPlan &&
         resolved.featuredWeeklyPlan.id !== purchasedTrialId
       ) {
-        setSelectedPackage(weeklyPlanToStorePack(resolved.featuredWeeklyPlan));
+        const weeklyPack = weeklyPlanToStorePack(resolved.featuredWeeklyPlan);
+        setSelectedPackage((prev) =>
+          prev == null || prev.id === purchasedTrialId ? weeklyPack : prev,
+        );
       }
 
       refreshCoinPacksCallback?.();
@@ -2352,7 +2387,6 @@ const CoinsPage = ({
     timerPack,
     displayedPacks,
     quickRecharge,
-    checkoutTrialPlanId,
   ]);
 
   const refreshMembershipFromApiRef = useRef(refreshMembershipFromApi);
@@ -2361,7 +2395,12 @@ const CoinsPage = ({
   const pollMandateStatus = useCallback(
     async (mandateId: number) => {
       if (!Number.isFinite(mandateId)) return;
-      const gen = ++mandatePollGenRef.current;
+      const epoch = mandatePollEpochRef.current;
+      const pollToken = (mandatePollTokenRef.current.get(mandateId) ?? 0) + 1;
+      mandatePollTokenRef.current.set(mandateId, pollToken);
+      const stale = () =>
+        epoch !== mandatePollEpochRef.current ||
+        mandatePollTokenRef.current.get(mandateId) !== pollToken;
       const authToken = headerSafeToken(token);
       for (let attempt = 0; attempt < 12; attempt++) {
         if (attempt > 0) {
@@ -2369,7 +2408,7 @@ const CoinsPage = ({
             window.setTimeout(resolve, MANDATE_STATUS_POLL_INTERVAL_MS),
           );
         }
-        if (gen !== mandatePollGenRef.current) return;
+        if (stale()) return;
         try {
           const result = await fetchMandateStatus({
             host: HOST,
@@ -2377,7 +2416,7 @@ const CoinsPage = ({
             authToken,
             organisationId,
           });
-          if (gen !== mandatePollGenRef.current) return;
+          if (stale()) return;
           if (isMandateActive(result.mandate_state)) {
             const ref = takeTrackedMandate(mandateId);
             if (ref) {
@@ -2408,14 +2447,19 @@ const CoinsPage = ({
               });
             }
             showPaymentStatusCallback?.("FAILED");
-            setCheckoutTrialPlanId(null);
+            const nextLock = trialLockAfterMandateFailure(
+              checkoutTrialPlanIdRef.current,
+              checkoutTrialMandateIdRef.current,
+              mandateId,
+            );
+            if (nextLock == null) unlockTrialCheckout();
             return;
           }
         } catch {
           // Transient error, keep polling
         }
       }
-      if (gen !== mandatePollGenRef.current) return;
+      if (stale()) return;
       // Keep session tracking so a later resume can still close the funnel.
       showPaymentStatusCallback?.("PENDING");
     },
@@ -2438,7 +2482,7 @@ const CoinsPage = ({
     window.addEventListener("focus", resume);
     window.addEventListener("pageshow", resume);
     return () => {
-      mandatePollGenRef.current += 1;
+      mandatePollEpochRef.current += 1;
       document.removeEventListener("visibilitychange", resume);
       window.removeEventListener("focus", resume);
       window.removeEventListener("pageshow", resume);
@@ -2526,24 +2570,6 @@ const CoinsPage = ({
       !trialOfferConfirmed ||
       !hasAnyPack
     ) {
-      return;
-    }
-
-    if (
-      checkoutTrialPlanId != null &&
-      selectedPackage?.id === checkoutTrialPlanId
-    ) {
-      const fallback =
-        !isMember &&
-        featuredWeeklyPlan &&
-        featuredWeeklyPlan.id !== checkoutTrialPlanId
-          ? weeklyPlanToStorePack(featuredWeeklyPlan)
-          : !isMember &&
-              basicWeeklyPlan &&
-              basicWeeklyPlan.id !== checkoutTrialPlanId
-            ? weeklyPlanToStorePack(basicWeeklyPlan)
-            : null;
-      setSelectedPackage(fallback);
       return;
     }
 
@@ -2827,7 +2853,6 @@ const CoinsPage = ({
     basicWeeklyPlan,
     freeTrial,
     selectedPackage,
-    checkoutTrialPlanId,
     visibleAnalyticsPacks,
   ]);
 
@@ -2937,6 +2962,14 @@ const CoinsPage = ({
       isMember,
     );
     if (!selectedPackage || paymentInProgressRef.current) return;
+    // The card stays visible after Pay. Block another trial mandate until the
+    // membership refresh says the offer is gone, or the mandate fails.
+    if (
+      checkoutTrialPlanIdRef.current != null &&
+      selectedPackage.id === checkoutTrialPlanIdRef.current
+    ) {
+      return;
+    }
 
     // Subscription plans from the plans API use mandate flow
     const isSubscriptionPlan =
@@ -3089,11 +3122,11 @@ const CoinsPage = ({
       // package=com.phonepe.app makes Chrome open Play Store instead of the
       // UPI app chooser.
       openMandateRedirectUrl(redirectUrl);
-      if (analyticsPack?.is_free_trial) {
-        // An INITIATED trial does not block another penny drop. Hide this
-        // card until the mandate fails or membership refresh says it is gone.
-        setCheckoutTrialPlanId(planId);
-        setSelectedPackage((prev) => (prev?.id === planId ? null : prev));
+      if (freeTrial?.planId === planId && Number.isFinite(mandateId)) {
+        // Leave the card on screen. An INITIATED trial does not block another
+        // penny drop on the server, so lock this plan until refresh says the
+        // offer is gone or this mandate fails.
+        lockTrialCheckout(planId, mandateId);
       }
       if (Number.isFinite(mandateId)) {
         void pollMandateStatus(mandateId);
@@ -3111,6 +3144,11 @@ const CoinsPage = ({
     }
   };
 
+  const freeTrialDisabled =
+    freeTrial != null &&
+    (checkoutTrialPlanId === freeTrial.planId ||
+      (isPaymentInProgress && selectedPackage?.id === freeTrial.planId));
+
   if (quickRecharge) {
     const popup = isBiffle ? (
       <QuickRechargePopupBiffle
@@ -3122,6 +3160,7 @@ const CoinsPage = ({
         featuredWeeklyPlan={featuredWeeklyPlan}
         basicWeeklyPlan={basicWeeklyPlan}
         freeTrial={freeTrial}
+        freeTrialDisabled={freeTrialDisabled}
         timerPack={timerPack}
         callContext={quickRechargeCallContext}
         surface={quickRechargeSurface}
@@ -3138,6 +3177,7 @@ const CoinsPage = ({
         featuredWeeklyPlan={featuredWeeklyPlan}
         basicWeeklyPlan={basicWeeklyPlan}
         freeTrial={freeTrial}
+        freeTrialDisabled={freeTrialDisabled}
         timerPack={timerPack}
         callContext={quickRechargeCallContext}
         surface={quickRechargeSurface}
@@ -3172,6 +3212,7 @@ const CoinsPage = ({
     featuredWeeklyPlan,
     basicWeeklyPlan,
     freeTrial,
+    freeTrialDisabled,
     paymentInProgress: isPaymentInProgress,
   };
 

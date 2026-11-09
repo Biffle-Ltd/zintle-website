@@ -321,16 +321,15 @@ export const QuickRechargePopupBiffle = ({
 
   return (
     <div
-      className="w-full bg-white pb-6 shadow-[0_-8px_40px_rgba(0,0,0,0.12)]"
+      className="flex h-full min-h-0 w-full flex-1 flex-col bg-white px-5 pt-[max(1.25rem,env(safe-area-inset-top))] shadow-[0_-8px_40px_rgba(0,0,0,0.12)]"
       role="dialog"
       aria-label="Top up coins"
     >
-      <div className="px-5 pt-5">
-      <h2 className="mb-5 text-lg font-semibold text-[#111827]">
+      <h2 className="mb-5 shrink-0 text-lg font-semibold text-[#111827]">
         {headerText}
       </h2>
 
-      <div className="max-h-[min(70vh,640px)] space-y-3 overflow-y-auto px-0.5 pb-4">
+      <div className="min-h-0 flex-1 touch-pan-y space-y-3 overflow-x-hidden overflow-y-scroll overscroll-y-contain px-0.5 pb-4 [-webkit-overflow-scrolling:touch] max-h-[calc(100dvh-12.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]">
         {!isMember && freeTrial && (
           <FreeTrialOfferCard
             trial={freeTrial}
@@ -403,6 +402,7 @@ export const QuickRechargePopupBiffle = ({
         )}
       </div>
 
+      <div className="shrink-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3">
       <button
         type="button"
         onClick={onContinue}

@@ -359,7 +359,7 @@ export const QuickRechargePopup = ({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col px-5 pb-4 pt-2"
+      className="flex h-full min-h-0 w-full flex-1 flex-col px-5 pt-[max(0.5rem,env(safe-area-inset-top))]"
       role="dialog"
       aria-label="Quick recharge"
     >
@@ -367,7 +367,7 @@ export const QuickRechargePopup = ({
         {headerText}
       </h2>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden">
+      <div className="min-h-0 flex-1 touch-pan-y space-y-2.5 overflow-x-hidden overflow-y-scroll overscroll-y-contain pb-3 [-webkit-overflow-scrolling:touch] max-h-[calc(100dvh-11rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]">
         {!isMember && freeTrial && (
           <div className="shrink-0">
             <FreeTrialOfferCard
@@ -426,7 +426,7 @@ export const QuickRechargePopup = ({
             </div>
           )
         ) : (
-          <div className="grid min-h-0 flex-1 grid-cols-2 gap-2.5 p-0.5">
+          <div className="grid grid-cols-2 gap-2.5 p-0.5">
             {filteredPacks.map((pack, index) => {
               const isLoneLastItem =
                 filteredPacks.length % 2 === 1 &&
@@ -453,11 +453,12 @@ export const QuickRechargePopup = ({
         )}
       </div>
 
+      <div className="shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
       <button
         type="button"
         onClick={onContinue}
         disabled={selectedPackageId == null || paymentInProgress}
-        className="mt-3 w-full shrink-0 rounded-full bg-gradient-to-r from-[#FF4B7A] via-[#FF5E4D] to-[#FF8A3D] py-3.5 text-base font-bold text-white shadow-lg shadow-[#FF5E4D]/30 transition-opacity hover:opacity-95 disabled:opacity-40"
+        className="w-full rounded-full bg-gradient-to-r from-[#FF4B7A] via-[#FF5E4D] to-[#FF8A3D] py-3.5 text-base font-bold text-white shadow-lg shadow-[#FF5E4D]/30 transition-opacity hover:opacity-95 disabled:opacity-40"
       >
         {paymentInProgress
           ? "Processing..."
@@ -465,6 +466,7 @@ export const QuickRechargePopup = ({
             ? `Continue Call for ${formatRupee(selectedPrice)}`
             : "Continue Call"}
       </button>
+      </div>
     </div>
   );
 };

@@ -3216,7 +3216,7 @@ const CoinsPage = ({
 
     return (
       <div
-        className={`fixed inset-0 z-50 flex flex-col ${isBiffle ? "bg-white" : "bg-[#001A3D]"}`}
+        className={`fixed inset-0 z-50 flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden ${isBiffle ? "bg-white" : "bg-[#001A3D]"}`}
       >
         <Suspense
           fallback={

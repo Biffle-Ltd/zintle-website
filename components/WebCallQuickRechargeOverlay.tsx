@@ -153,7 +153,7 @@ export function WebCallQuickRechargeOverlay({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative z-10 overflow-hidden rounded-t-3xl bg-white [&_h2]:pr-12">
+      <div className="relative z-10 flex max-h-[92dvh] min-h-0 w-full flex-col overflow-hidden rounded-t-3xl bg-white [&_h2]:pr-12">
         <button
           type="button"
           onClick={onClose}

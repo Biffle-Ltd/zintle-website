@@ -29,13 +29,16 @@ export function FreeTrialOfferCard({
   const isBiffle = brand === "biffle";
   const price = formatRupee(trial.trialAmount, isBiffle);
   const coins = trial.trialCoins;
+  // Solid border, not a left-to-right gradient. The old gradient only
+  // painted white through the middle of the top and bottom, and the
+  // selection ring sat outside the card where the store's overflow clips it.
   const frame = isBiffle
     ? selected
-      ? "bg-gradient-to-r from-white via-[#FBCFE8] to-white shadow-[0_12px_28px_rgba(219,39,119,0.35)] ring-2 ring-green-500"
-      : "bg-gradient-to-r from-[#F9A8D4] via-white to-[#FB7185] shadow-[0_8px_24px_rgba(219,39,119,0.28)]"
+      ? "border-[#DB2777] bg-[#DB2777] shadow-[0_10px_24px_rgba(219,39,119,0.32)]"
+      : "border-[#F9A8D4] bg-[#F9A8D4] shadow-[0_8px_20px_rgba(219,39,119,0.22)]"
     : selected
-      ? "bg-gradient-to-r from-[#FDE68A] via-white to-[#FBBF24] shadow-[0_12px_32px_rgba(251,191,36,0.48)] ring-2 ring-white/90 ring-offset-2 ring-offset-[#000D26]"
-      : "bg-gradient-to-r from-[#FCD34D] via-[#FB7185] to-[#FDE68A] shadow-[0_8px_22px_rgba(244,63,94,0.32)]";
+      ? "border-white bg-white shadow-[0_10px_28px_rgba(251,191,36,0.42)]"
+      : "border-[#FDE68A] bg-[#FDE68A] shadow-[0_8px_20px_rgba(244,63,94,0.28)]";
   const fill = isBiffle
     ? "bg-gradient-to-br from-[#BE185D] via-[#DB2777] to-[#F97316]"
     : "bg-gradient-to-br from-[#7F1D1D] via-[#F43F5E] to-[#FBBF24]";
@@ -48,9 +51,9 @@ export function FreeTrialOfferCard({
       type="button"
       data-testid="free-trial-offer"
       onClick={() => onSelect(freeTrialToStorePack(trial))}
-      className={`relative w-full rounded-[24px] p-[2.5px] text-left transition-transform active:scale-[0.98] ${frame}`}
+      className={`relative w-full overflow-hidden rounded-[24px] border-[3px] border-solid text-left transition-transform active:scale-[0.98] ${frame}`}
     >
-      <div className={`relative overflow-hidden rounded-[22px] px-4 py-3.5 ${fill}`}>
+      <div className={`relative overflow-hidden rounded-[21px] px-4 py-3.5 ${fill}`}>
         <div
           className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,transparent_28%,rgba(255,255,255,0.28)_46%,transparent_62%)]"
           aria-hidden

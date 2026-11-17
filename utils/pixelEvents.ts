@@ -6,10 +6,10 @@
  * - Optional user profile: URL query `user` (JSON, URI-encoded) for user_id / phone_number / email.
  * - Optional `device_info` / `app_info` (JSON, URI-encoded) for analytics + device_id resolution.
  * - coin_payment_failed: only when payment_status === "FAILED" (not CANCELLED / PENDING / etc.).
- * - payment_gateway / payment_method: matches PAYMENT_GATEWAY in index.tsx.
+ * - payment_gateway / payment_method: matches getPaymentGatewayFromUrl() in index.tsx.
  */
 
-import { PAYMENT_GATEWAY } from "./paymentGateway";
+import { getPaymentGatewayFromUrl } from "./paymentGateway";
 import { sendCoinAnalyticsEvent } from "./coinAnalyticsApi";
 import { sendMetaPixelCustomEvent } from "./metaPixel";
 import { getOrganisationIdFromSearch } from "./organisationIdFromUrl";
@@ -267,7 +267,7 @@ function buildCoinPaymentInitiatedEventInfo(
     coins: pack.coins,
     price: pack.price,
     currency: CURRENCY,
-    payment_gateway: PAYMENT_GATEWAY,
+    payment_gateway: getPaymentGatewayFromUrl(),
     ...(pack.is_subscription ? { is_subscription: true } : {}),
     ...(pack.is_free_trial ? { is_free_trial: true } : {}),
   };
@@ -451,8 +451,8 @@ export function sendCoinPaymentSuccess(
     coin_pack_id: args.coin_pack_id,
     coin_quantity: args.coin_quantity,
     surface: ctx.surface,
-    payment_method: PAYMENT_GATEWAY,
-    payment_gateway: PAYMENT_GATEWAY,
+    payment_method: getPaymentGatewayFromUrl(),
+    payment_gateway: getPaymentGatewayFromUrl(),
     event_timestamp: eventTimestampUnixMs(),
     platform: ctx.platform,
     device_id: ctx.device_id,
@@ -478,8 +478,8 @@ export function sendCoinPaymentFailed(
     currency: CURRENCY,
     failure_reason: args.failure_reason ?? "",
     surface: ctx.surface,
-    payment_method: PAYMENT_GATEWAY,
-    payment_gateway: PAYMENT_GATEWAY,
+    payment_method: getPaymentGatewayFromUrl(),
+    payment_gateway: getPaymentGatewayFromUrl(),
     event_timestamp: eventTimestampUnixMs(),
     platform: ctx.platform,
     device_id: ctx.device_id,

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from "react";
-import { ZINTLE_BALANCE_COIN_SRC } from "../utils/coinStoreAssets";
+import { ZINTLE_BALANCE_COIN_SRC, ZINTLE_CHEVRONS_RIGHT_SRC } from "../utils/coinStoreAssets";
 import type { CoinStorePack, SubscriptionPlan } from "./CoinStoreMobile";
 import type { QuickRechargeCallContext } from "../utils/quickRecharge";
 import type { CoinPurchaseSurface } from "../utils/pixelEvents";
@@ -9,6 +9,7 @@ import {
   splitCoinStoreOffers,
 } from "../utils/coinStoreOffer";
 import type { VisibleFreeTrial } from "../utils/freeTrialOffer";
+import { CheckoutOpeningNotice, PressableCard } from "./PressableCard";
 
 export type QuickRechargePack = {
   id: number;
@@ -51,11 +52,13 @@ function PackRow({
   pack,
   tone,
   disabled,
+  busyLabel = null,
   onBuy,
 }: {
   pack: QuickRechargePack;
   tone: PackTone;
   disabled: boolean;
+  busyLabel?: string | null;
   onBuy: () => void;
 }) {
   const figures =
@@ -66,11 +69,11 @@ function PackRow({
   const plain = tone === "plain";
 
   return (
-    <button
-      type="button"
+    <PressableCard
       onClick={onBuy}
       disabled={disabled}
-      className={`flex min-h-[52px] w-full touch-manipulation items-center justify-between text-left transition-transform active:scale-[0.99] disabled:opacity-60 ${
+      busyLabel={busyLabel}
+      className={`flex min-h-[52px] w-full items-center justify-between text-left ${
         starter
           ? "rounded-[16px] bg-[rgba(94,216,106,0.12)] px-3 pb-3 pt-2"
           : tone === "highlight"
@@ -126,7 +129,7 @@ function PackRow({
       >
         {formatRupee(pack.price)}
       </span>
-    </button>
+    </PressableCard>
   );
 }
 
@@ -149,6 +152,8 @@ type QuickRechargePopupProps = {
   /** Balance chip opens coin history. The destination can change later. */
   onOpenCoinHistory?: () => void;
   paymentInProgress?: boolean;
+  /** The card waiting on UPI or checkout. That card stays lit. */
+  pendingPurchase?: { id: number; label: string } | null;
   /** Opens the full coin store. */
   onMorePlans?: () => void;
   /** One-time rows under Most Purchased. Null shows every remaining pack. */
@@ -176,6 +181,7 @@ export const QuickRechargePopup = ({
   coinBalance = null,
   onOpenCoinHistory,
   paymentInProgress = false,
+  pendingPurchase = null,
 }: QuickRechargePopupProps) => {
   useEffect(() => {
     const id = "znw-instrument-sans";
@@ -227,6 +233,10 @@ export const QuickRechargePopup = ({
     onPackSelect(pack, index);
     onContinue(pack);
   };
+  const busyLabelFor = (id: number) =>
+    pendingPurchase?.id === id ? pendingPurchase.label : null;
+  const rowDisabled = (id: number) =>
+    paymentInProgress && pendingPurchase?.id !== id;
 
   const page = layout === "page";
 
@@ -281,6 +291,8 @@ export const QuickRechargePopup = ({
           )}
         </div>
 
+        <CheckoutOpeningNotice label={pendingPurchase?.label} />
+
         {sheet.empty ? (
           <div className="rounded-[16px] bg-[rgba(10,37,72,0.3)] px-6 py-10 text-center">
             <p className="text-sm text-white/70">
@@ -298,7 +310,8 @@ export const QuickRechargePopup = ({
                 <PackRow
                   pack={sheet.starter}
                   tone="starter"
-                  disabled={paymentInProgress}
+                  disabled={rowDisabled(sheet.starter.id)}
+                  busyLabel={busyLabelFor(sheet.starter.id)}
                   onBuy={() =>
                     buy(sheet.starter!, sheet.indexOf(sheet.starter!.id))
                   }
@@ -314,7 +327,8 @@ export const QuickRechargePopup = ({
                 <PackRow
                   pack={sheet.mostPurchased}
                   tone="highlight"
-                  disabled={paymentInProgress}
+                  disabled={rowDisabled(sheet.mostPurchased.id)}
+                  busyLabel={busyLabelFor(sheet.mostPurchased.id)}
                   onBuy={() =>
                     buy(
                       sheet.mostPurchased!,
@@ -336,7 +350,8 @@ export const QuickRechargePopup = ({
                       key={pack.id}
                       pack={{ ...pack, showOffer: false }}
                       tone="plain"
-                      disabled={paymentInProgress}
+                      disabled={rowDisabled(pack.id)}
+                      busyLabel={busyLabelFor(pack.id)}
                       onBuy={() => buy(pack, sheet.indexOf(pack.id))}
                     />
                   ))}
@@ -345,30 +360,47 @@ export const QuickRechargePopup = ({
             )}
 
             {sheet.preview.length > 0 && (
-              <div className="flex flex-col gap-2">
-                {sheet.preview.map((pack) => (
-                  <PackRow
-                    key={pack.id}
-                    pack={pack}
-                    tone="plain"
-                    disabled={paymentInProgress}
-                    onBuy={() => buy(pack, sheet.indexOf(pack.id))}
-                  />
-                ))}
-              </div>
+              <section className="flex flex-col gap-2">
+                <h3 className="text-[16px] font-medium leading-5 text-white">
+                  One Time Purchase
+                </h3>
+                <div className="flex flex-col gap-2">
+                  {sheet.preview.map((pack) => (
+                    <PackRow
+                      key={pack.id}
+                      pack={pack}
+                      tone="plain"
+                      disabled={rowDisabled(pack.id)}
+                      busyLabel={busyLabelFor(pack.id)}
+                      onBuy={() => buy(pack, sheet.indexOf(pack.id))}
+                    />
+                  ))}
+                </div>
+              </section>
             )}
           </div>
         )}
 
         {onMorePlans != null && (
-          <button
-            type="button"
-            onClick={onMorePlans}
-            disabled={paymentInProgress}
-            className="min-h-11 w-full touch-manipulation py-3 text-center text-[14px] font-medium text-[#E9E7E9] underline decoration-white/30 underline-offset-4 disabled:opacity-40"
-          >
-            Check out more plans
-          </button>
+          <div className="flex w-full flex-col items-center gap-4 pt-1">
+            <div className="h-px w-full bg-[#E9E7E9]/40" aria-hidden />
+            <button
+              type="button"
+              onClick={onMorePlans}
+              disabled={paymentInProgress}
+              className="inline-flex min-h-11 touch-manipulation items-center justify-center gap-[11px] text-[14px] font-semibold text-white transition-transform active:scale-95 disabled:opacity-40"
+            >
+              See More Plans
+              <img
+                src={ZINTLE_CHEVRONS_RIGHT_SRC}
+                alt=""
+                width={24}
+                height={24}
+                draggable={false}
+                className="h-6 w-6 shrink-0"
+              />
+            </button>
+          </div>
         )}
       </div>
     </div>

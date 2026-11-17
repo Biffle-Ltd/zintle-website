@@ -128,7 +128,10 @@ import {
   appendPhonePeChromeWVParam,
   openPhonePeIframeCheckout,
 } from "./utils/phonePeIframeCheckout";
-import { watchPaymentCheckoutIframeLoad } from "./utils/paymentCheckoutIframeLoad";
+import {
+  retainLockUntilCheckoutSettles,
+  watchPaymentCheckoutIframeLoad,
+} from "./utils/paymentCheckoutIframeLoad";
 import { fetchCoinPackDetails, readCachedCoinPacks } from "./utils/coinPacksApi";
 import {
   loadEasebuzzCheckoutScript,
@@ -137,6 +140,7 @@ import {
 import {
   openMandateRedirectUrl,
   resolveMandateRedirectUrl,
+  waitForUpiHandoff,
 } from "./utils/upiMandateLaunch";
 import {
   fetchMandateStatus,
@@ -145,9 +149,10 @@ import {
   MANDATE_STATUS_POLL_INTERVAL_MS,
 } from "./utils/mandateStatus";
 import {
-  COIN_ORDER_PAYMENT_GATEWAY,
+  coinCheckoutOpeningLabel,
   getPaymentGatewayFromUrl,
   PAYMENT_GATEWAY,
+  PAYMENT_GATEWAY_MAP,
   type PaymentGateway,
 } from "./utils/paymentGateway";
 import type { CreateOrderPixelOptions as BaseCreateOrderPixelOptions } from "./utils/coinCheckoutOptions";
@@ -446,6 +451,7 @@ const createCoinOrder = async (
   coinPackId: number | string,
   token?: string | null,
   organisationId: string = DEFAULT_ORGANISATION_ID,
+  gateway: PaymentGateway = getPaymentGatewayFromUrl(),
 ): Promise<CoinOrderApiResponse> => {
   const rawToken = token || getJwtFromStorage(organisationId);
   const jwtToken = headerSafeToken(rawToken);
@@ -458,7 +464,7 @@ const createCoinOrder = async (
     },
     body: JSON.stringify({
       coin_pack_id: coinPackId,
-      payment_gateway: COIN_ORDER_PAYMENT_GATEWAY,
+      payment_gateway: PAYMENT_GATEWAY_MAP[gateway],
     }),
   });
   const data = (await r.json()) as CoinOrderApiResponse;
@@ -785,6 +791,7 @@ export const createOrderAndInitiatePayment = async (
         }
       : null;
   const onCheckoutClosed = options?.onCheckoutClosed;
+  const gateway = getPaymentGatewayFromUrl();
   coinCheckoutPollOptionsRef = options?.suppressPaymentStatusPopup ||
     options?.onAfterCheckoutPoll
     ? {
@@ -804,6 +811,7 @@ export const createOrderAndInitiatePayment = async (
     coinPackId,
     token,
     organisationId,
+    gateway,
   );
   const order = orderData.data;
   if (!order?.order_uuid) {
@@ -829,7 +837,7 @@ export const createOrderAndInitiatePayment = async (
     organisationId,
   );
   const payment = paymentData.data;
-  if (PAYMENT_GATEWAY === "PhonePe") {
+  if (gateway === "PhonePe") {
     const tokenUrl = payment?.access_token;
     if (!tokenUrl) {
       return { order, payment, checkoutLaunched: false };
@@ -843,7 +851,7 @@ export const createOrderAndInitiatePayment = async (
     );
     return { order, payment, checkoutLaunched: true };
   }
-  if (PAYMENT_GATEWAY === "Easebuzz") {
+  if (gateway === "Easebuzz") {
     await launchEasebuzzCheckout(
       payment?.access_token,
       order.order_uuid,
@@ -2196,6 +2204,10 @@ const CoinsPage = ({
     price: number;
   } | null>(null);
   const [isPaymentInProgress, setIsPaymentInProgress] = useState(false);
+  const [pendingPurchase, setPendingPurchase] = useState<{
+    id: number;
+    label: string;
+  } | null>(null);
   const paymentInProgressRef = useRef(false);
   // One epoch cancels every poll on unmount. Each mandate keeps its own token
   // so a weekly poll cannot abandon the trial poll that is allowed to re-enable
@@ -2206,6 +2218,7 @@ const CoinsPage = ({
   const releasePaymentLock = useCallback(() => {
     paymentInProgressRef.current = false;
     setIsPaymentInProgress(false);
+    setPendingPurchase(null);
   }, []);
 
   const acquirePaymentLock = useCallback(() => {
@@ -3068,6 +3081,14 @@ const CoinsPage = ({
     }
 
     if (!acquirePaymentLock()) return;
+    setPendingPurchase({
+      id: packageToUse.id,
+      label: coinCheckoutOpeningLabel(),
+    });
+    const handoff = retainLockUntilCheckoutSettles(
+      getPaymentGatewayFromUrl() === "PhonePe" ? "phonepe" : "easebuzz",
+      releasePaymentLock,
+    );
 
     try {
       const result = await createOrderAndInitiatePayment(
@@ -3083,16 +3104,15 @@ const CoinsPage = ({
             coins: packageToUse.coins,
             bonus_coins: packageToUse.bonus_coins ?? 0,
           },
-          onCheckoutClosed: releasePaymentLock,
+          onCheckoutClosed: handoff.onClosed,
         },
         organisationId,
       );
-      if (!result.checkoutLaunched) {
-        releasePaymentLock();
-      }
+      if (!result.checkoutLaunched) handoff.onClosed();
+      else handoff.armGiveUp();
     } catch (e) {
       console.error("Failed to create coin order from CoinsPage", e);
-      releasePaymentLock();
+      handoff.onClosed();
     }
   };
 
@@ -3135,6 +3155,7 @@ const CoinsPage = ({
 
     if (isSubscriptionPlan) {
       if (!acquirePaymentLock()) return;
+      setPendingPurchase({ id: target.id, label: "Opening UPI…" });
       const planId = target.id;
       const purchasingTrial = freeTrial?.planId === planId;
       void (async () => {
@@ -3143,7 +3164,11 @@ const CoinsPage = ({
             const gate = await readTrialPurchaseGateRef.current();
             if (gate !== "open") return;
           }
-          await handleSubscriptionMandateInit(planId);
+          const launched = await handleSubscriptionMandateInit(planId);
+          // The mandate request can finish before Android shows the app
+          // chooser. Keep this card busy until the webview is covered or the
+          // chooser has had time to appear.
+          if (launched) await waitForUpiHandoff();
         } finally {
           releasePaymentLock();
         }
@@ -3153,10 +3178,12 @@ const CoinsPage = ({
     }
   };
 
-  const handleSubscriptionMandateInit = async (planId: number) => {
+  const handleSubscriptionMandateInit = async (
+    planId: number,
+  ): Promise<boolean> => {
     if (!isLoggedIn) {
       setShowLogin(true);
-      return;
+      return false;
     }
     const source =
       freeTrial?.planId === planId
@@ -3230,7 +3257,7 @@ const CoinsPage = ({
         console.error("[CoinStore] Mandate initiation failed:", errMsg);
         sendCoinPaymentFailed(pixelContext, failArgs(errMsg));
         showPaymentStatusCallback?.("FAILED");
-        return;
+        return false;
       }
       const mandateData = data.data;
       const mandateId = Number(mandateData.id);
@@ -3247,7 +3274,7 @@ const CoinsPage = ({
         );
         clearTrackedMandate();
         showPaymentStatusCallback?.("FAILED");
-        return;
+        return false;
       }
       if (analyticsPack && pixelContext && Number.isFinite(mandateId)) {
         const mandateUuid =
@@ -3287,6 +3314,7 @@ const CoinsPage = ({
       if (Number.isFinite(mandateId)) {
         void pollMandateStatus(mandateId);
       }
+      return true;
     } catch (e) {
       console.error("[CoinStore] Mandate initiation error:", e);
       sendCoinPaymentFailed(
@@ -3297,6 +3325,7 @@ const CoinsPage = ({
       );
       clearTrackedMandate();
       showPaymentStatusCallback?.("FAILED");
+      return false;
     }
   };
 
@@ -3322,6 +3351,7 @@ const CoinsPage = ({
           headerPack={quickRechargeHeaderPack}
           coinBalance={coinBalance}
           paymentInProgress={isPaymentInProgress}
+          pendingPurchase={pendingPurchase}
         />
       );
     }
@@ -3380,6 +3410,7 @@ const CoinsPage = ({
           {...coinStoreMobileProps}
           coinBalance={coinBalance}
           onOpenCoinHistory={openCoinHistory}
+          pendingPurchase={pendingPurchase}
         />
       )}
 

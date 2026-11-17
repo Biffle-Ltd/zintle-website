@@ -66,6 +66,36 @@ export function buildAndroidUpiIntentUrl(
   return `intent://${rest}#Intent;scheme=upi;package=${packageName};action=android.intent.action.VIEW;end`;
 }
 
+/**
+ * Keeps the tapped plan looking busy while Android draws the UPI chooser.
+ * The webview often stays visible until an app is picked, so the wait also
+ * ends on its own if the chooser never hides the page.
+ */
+export function waitForUpiHandoff(timeoutMs = 2000): Promise<void> {
+  if (typeof document === "undefined") return Promise.resolve();
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", finish);
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") finish();
+    };
+    const timer = window.setTimeout(finish, timeoutMs);
+    if (document.visibilityState === "hidden") {
+      finish();
+      return;
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", finish);
+  });
+}
+
 function navigateToUrl(url: string): void {
   if (typeof window === "undefined") return;
   // Anchor click is more reliable than location.assign for intent:// on Chrome Android.

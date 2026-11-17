@@ -7,6 +7,7 @@ import {
 import { uniqueWeeklyPlans, weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
 import { freeTrialToStorePack, type VisibleFreeTrial } from "../utils/freeTrialOffer";
 import { ZINTLE_BALANCE_COIN_SRC, ZINTLE_HELP_ICON_SRC } from "../utils/coinStoreAssets";
+import { CheckoutOpeningNotice, PressableCard } from "./PressableCard";
 
 export const TIMER_COIN_PRODUCT_ID = "coin_100";
 export const TIMER_COIN_FALLBACK_PRODUCT_ID = "coin_149";
@@ -88,6 +89,8 @@ type CoinStoreMobileProps = {
   coinBalance?: number | null;
   /** Balance and Help both open coin history for now. */
   onOpenCoinHistory?: (source: "coin_balance" | "help") => void;
+  /** The card that is waiting on UPI or checkout. Others stay dimmed. */
+  pendingPurchase?: { id: number; label: string } | null;
 };
 
 type PackTone = "starter" | "highlight" | "plain";
@@ -144,12 +147,14 @@ function PackRow({
   pack,
   tone,
   disabled,
+  busyLabel = null,
   showOffer = true,
   onBuy,
 }: {
   pack: CoinStorePack;
   tone: PackTone;
   disabled: boolean;
+  busyLabel?: string | null;
   showOffer?: boolean;
   onBuy: () => void;
 }) {
@@ -162,11 +167,11 @@ function PackRow({
   const plain = tone === "plain";
 
   return (
-    <button
-      type="button"
+    <PressableCard
       onClick={onBuy}
       disabled={disabled}
-      className={`flex min-h-[52px] w-full touch-manipulation items-center justify-between text-left transition-transform active:scale-[0.99] disabled:opacity-60 ${
+      busyLabel={busyLabel}
+      className={`flex min-h-[52px] w-full items-center justify-between text-left ${
         starter
           ? "rounded-[16px] bg-[rgba(94,216,106,0.12)] px-3 pb-3 pt-2"
           : tone === "highlight"
@@ -213,17 +218,19 @@ function PackRow({
       >
         {formatRupee(pack.price)}
       </span>
-    </button>
+    </PressableCard>
   );
 }
 
 function TrialBanner({
   trial,
   disabled,
+  busyLabel = null,
   onBuy,
 }: {
   trial: VisibleFreeTrial;
   disabled: boolean;
+  busyLabel?: string | null;
   onBuy: () => void;
 }) {
   const clock = useDayCountdown();
@@ -234,11 +241,11 @@ function TrialBanner({
       : `Trail Pack for ${formatRupee(trial.trialAmount)}`;
 
   return (
-    <button
-      type="button"
+    <PressableCard
       onClick={onBuy}
       disabled={disabled}
-      className="relative min-h-[81px] w-full touch-manipulation overflow-hidden rounded-[16px] bg-[linear-gradient(101.45deg,#F4486E_2.28%,#FF7000_94.35%)] px-4 pb-2 pt-[7px] text-center text-white transition-transform active:scale-[0.99] disabled:opacity-60"
+      busyLabel={busyLabel}
+      className="min-h-[81px] w-full rounded-[16px] bg-[linear-gradient(101.45deg,#F4486E_2.28%,#FF7000_94.35%)] px-4 pb-2 pt-[7px] text-center text-white"
     >
       <FigmaCoin className="pointer-events-none absolute -left-10 top-2 h-8 w-8 -rotate-[15deg]" />
       <FigmaCoin className="pointer-events-none absolute -left-6 top-1/2 h-[78px] w-[74px] -translate-y-1/2 -rotate-[15deg]" />
@@ -257,7 +264,7 @@ function TrialBanner({
         <TimeBox value={clock.seconds} />
         <span>sec</span>
       </span>
-    </button>
+    </PressableCard>
   );
 }
 
@@ -304,6 +311,7 @@ export const CoinStoreMobile = ({
   paymentInProgress = false,
   coinBalance = null,
   onOpenCoinHistory,
+  pendingPurchase = null,
 }: CoinStoreMobileProps) => {
   useEffect(() => {
     const id = "znw-instrument-sans";
@@ -333,6 +341,11 @@ export const CoinStoreMobile = ({
     }
     return splitCoinStoreOffers(packs);
   }, [timerPack, exclusiveDeals, topPlans, weeklyPlans]);
+
+  const busyLabelFor = (id: number) =>
+    pendingPurchase?.id === id ? pendingPurchase.label : null;
+  const rowDisabled = (id: number) =>
+    paymentInProgress && pendingPurchase?.id !== id;
 
   const buy = (pack: CoinStorePack, index: number) => {
     if (paymentInProgress) return;
@@ -399,6 +412,7 @@ export const CoinStoreMobile = ({
       </header>
 
       <main className="relative flex flex-col gap-4 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3">
+        <CheckoutOpeningNotice label={pendingPurchase?.label} />
         {!hasRows && (
           <div className="rounded-[16px] bg-[rgba(10,37,72,0.3)] px-6 py-10 text-center">
             <p className="text-sm text-white/70">
@@ -411,7 +425,8 @@ export const CoinStoreMobile = ({
         {freeTrial && (
           <TrialBanner
             trial={freeTrial}
-            disabled={paymentInProgress}
+            disabled={rowDisabled(freeTrial.planId)}
+            busyLabel={busyLabelFor(freeTrial.planId)}
             onBuy={() => buy(freeTrialToStorePack(freeTrial), 0)}
           />
         )}
@@ -424,7 +439,8 @@ export const CoinStoreMobile = ({
             <PackRow
               pack={offers.starter}
               tone="starter"
-              disabled={paymentInProgress}
+              disabled={rowDisabled(offers.starter.id)}
+              busyLabel={busyLabelFor(offers.starter.id)}
               onBuy={() => buy(offers.starter!, indexFor(offers.starter!))}
             />
           </section>
@@ -438,7 +454,8 @@ export const CoinStoreMobile = ({
             <PackRow
               pack={offers.mostPurchased}
               tone="highlight"
-              disabled={paymentInProgress}
+              disabled={rowDisabled(offers.mostPurchased.id)}
+              busyLabel={busyLabelFor(offers.mostPurchased.id)}
               onBuy={() =>
                 buy(offers.mostPurchased!, indexFor(offers.mostPurchased!))
               }
@@ -460,7 +477,8 @@ export const CoinStoreMobile = ({
                     pack={pack}
                     tone="plain"
                     showOffer={false}
-                    disabled={paymentInProgress}
+                    disabled={rowDisabled(pack.id)}
+                    busyLabel={busyLabelFor(pack.id)}
                     onBuy={() => buy(pack, indexFor(pack))}
                   />
                 );
@@ -480,7 +498,8 @@ export const CoinStoreMobile = ({
                   key={pack.id}
                   pack={pack}
                   tone="plain"
-                  disabled={paymentInProgress}
+                  disabled={rowDisabled(pack.id)}
+                  busyLabel={busyLabelFor(pack.id)}
                   onBuy={() => buy(pack, indexFor(pack))}
                 />
               ))}

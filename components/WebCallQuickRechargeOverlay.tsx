@@ -16,6 +16,11 @@ import {
   sendCoinPackSelected,
 } from "../utils/pixelEvents";
 import { toCoinPackForAnalytics } from "../utils/coinStoreVisiblePacks";
+import {
+  coinCheckoutOpeningLabel,
+  getPaymentGatewayFromUrl,
+} from "../utils/paymentGateway";
+import { retainLockUntilCheckoutSettles } from "../utils/paymentCheckoutIframeLoad";
 
 export function WebCallQuickRechargeOverlay({
   organisationId,
@@ -57,6 +62,7 @@ export function WebCallQuickRechargeOverlay({
     price: number;
   } | null>(null);
   const [paying, setPaying] = useState(false);
+  const [pendingPackId, setPendingPackId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const payingRef = useRef(false);
 
@@ -120,36 +126,40 @@ export function WebCallQuickRechargeOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organisationId]);
 
+  const stopPaying = () => {
+    payingRef.current = false;
+    setPaying(false);
+    setPendingPackId(null);
+  };
+
   const pay = async (pkg?: CoinStorePack) => {
     const target = pkg ?? selectedRef.current;
     if (!target || payingRef.current) return;
     payingRef.current = true;
     setPaying(true);
+    setPendingPackId(target.id);
+    const handoff = retainLockUntilCheckoutSettles(
+      getPaymentGatewayFromUrl() === "PhonePe" ? "phonepe" : "easebuzz",
+      stopPaying,
+    );
     try {
       const result = await createOrderAndInitiatePayment(
         target.id,
         authToken,
         {
           suppressPaymentStatusPopup: true,
-          onCheckoutClosed: () => {
-            payingRef.current = false;
-            setPaying(false);
-          },
+          onCheckoutClosed: handoff.onClosed,
           onAfterCheckoutPoll: ({ status }) => {
-            payingRef.current = false;
-            setPaying(false);
+            handoff.onClosed();
             if ((status || "").toUpperCase() === "SUCCESS") onRecharged();
           },
         },
         organisationId,
       );
-      if (!result.checkoutLaunched) {
-        payingRef.current = false;
-        setPaying(false);
-      }
+      if (!result.checkoutLaunched) handoff.onClosed();
+      else handoff.armGiveUp();
     } catch {
-      payingRef.current = false;
-      setPaying(false);
+      handoff.onClosed();
     }
   };
 
@@ -215,6 +225,10 @@ export function WebCallQuickRechargeOverlay({
     surface: "in_call_coin_popup" as const,
     headerPack,
     paymentInProgress: paying,
+    pendingPurchase:
+      pendingPackId != null
+        ? { id: pendingPackId, label: coinCheckoutOpeningLabel() }
+        : null,
   };
 
   if (!isBiffle) {

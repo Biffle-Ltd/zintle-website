@@ -138,3 +138,49 @@ export function watchPaymentCheckoutIframeLoad(
     cleanup();
   };
 }
+
+function checkoutIframeIsOpen(gateway: CheckoutIframeGateway): boolean {
+  if (typeof document === "undefined") return false;
+  return Array.from(document.querySelectorAll("iframe")).some((iframe) =>
+    matchesGateway(iframe, gateway),
+  );
+}
+
+/**
+ * Keeps a purchase lock until the gateway closes. If no checkout iframe has
+ * appeared when the wait expires, the lock releases so the store does not stay
+ * dead. An iframe that is actually open keeps the lock until checkout closes.
+ * Call `armGiveUp` only after checkout has actually launched.
+ */
+export function retainLockUntilCheckoutSettles(
+  gateway: CheckoutIframeGateway,
+  release: () => void,
+  giveUpMs = WATCH_TIMEOUT_MS,
+): { onClosed: () => void; armGiveUp: () => void } {
+  let released = false;
+  let stopWatch = () => {};
+  let timer = 0;
+  const onClosed = () => {
+    if (released) return;
+    released = true;
+    if (typeof window !== "undefined") window.clearTimeout(timer);
+    stopWatch();
+    release();
+  };
+  return {
+    onClosed,
+    armGiveUp: () => {
+      if (released || typeof window === "undefined" || typeof document === "undefined") {
+        return;
+      }
+      stopWatch = watchPaymentCheckoutIframeLoad(gateway, () => {
+        window.clearTimeout(timer);
+      });
+      timer = window.setTimeout(() => {
+        stopWatch();
+        if (checkoutIframeIsOpen(gateway)) return;
+        onClosed();
+      }, giveUpMs);
+    },
+  };
+}

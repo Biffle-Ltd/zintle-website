@@ -44,6 +44,7 @@ import {
   isStartSessionCoinPopupSurface,
   isChatCoinPopupSurface,
   isCallCoinPopupSurface,
+  sendCoinCtaClicked,
   sendCoinPackSelected,
   sendCoinPaymentFailed,
   sendCoinPaymentInitiated,
@@ -68,6 +69,7 @@ import {
 import {
   canonicalizeWebCallPostLoginPath,
   destinationKeepsPaywallBackStops,
+  fetchWalletBalance,
   settlePaywallBackStops,
   webCallPathAfterLogin,
 } from "./utils/webCall";
@@ -76,6 +78,7 @@ import { installTapFadeFeedback } from "./utils/tapFade";
 import { clearChunkReloadFlag, lazyWithRetry } from "./utils/lazyWithRetry";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { WebCallCampaign } from "./pages/WebCallCampaign";
+import { CoinHistory } from "./pages/CoinHistory";
 import { navigateAfterCampaignLoginGate } from "./utils/campaignLanguageGate";
 import {
   CAMPAIGN_HINDI_LANGUAGE_CODE,
@@ -152,6 +155,8 @@ import {
   enrichStorePackWithWeeklyPlan,
   getVisibleCoinStorePacks,
   getVisibleQuickRechargePacks,
+  getZintleQuickRechargeSheetPacks,
+  getZintleVisibleStorePacks,
   toCoinPackForAnalytics,
   weeklyPlanToStorePack,
 } from "./utils/coinStoreVisiblePacks";
@@ -286,6 +291,7 @@ function fireDefaultCoinPackSelected(
   featuredWeeklyPlan: SubscriptionPlan | null,
   basicWeeklyPlan: SubscriptionPlan | null,
   freeTrialPlanId?: number | null,
+  catalogOffer = false,
 ): void {
   if (alreadySentRef.current || !pixelContext) return;
   const index = visiblePacks.findIndex((p) => p.id === pack.id);
@@ -301,6 +307,7 @@ function fireDefaultCoinPackSelected(
         basicWeeklyPlan,
         freeTrialPlanId,
       ),
+      { catalogOffer },
     ),
     index,
     { selected_by_default: true },
@@ -2070,6 +2077,7 @@ const CoinsPage = ({
 }) => {
   const isBiffle = isBiffleOrganisationId(organisationId);
   const location = useLocation();
+  const navigate = useNavigate();
   const searchParams = new URLSearchParams(location.search);
   const isMemberQuery = parseIsMemberQueryParam(searchParams.get("is_member"));
 
@@ -2096,10 +2104,16 @@ const CoinsPage = ({
       }),
     [location.search, isBiffle, quickRechargeSurface],
   );
-  const displayedPacks = useMemo(
-    () => (quickRecharge ? coinPacks.filter((p) => p.is_micropack) : coinPacks),
-    [coinPacks, quickRecharge],
-  );
+  const displayedPacks = useMemo(() => {
+    if (!quickRecharge) return coinPacks;
+    const micropacks = coinPacks.filter((p) => p.is_micropack);
+    if (isBiffle) return micropacks;
+    // Zintle's Most Purchased card is the recommended ₹99 pack. It is not a micropack.
+    const recommended = coinPacks.find(
+      (pack) => !pack.is_micropack && /recommend/i.test(pack.name ?? ""),
+    );
+    return recommended ? [...micropacks, recommended] : micropacks;
+  }, [coinPacks, quickRecharge, isBiffle]);
 
   // From full list so QR can feature coin_100 (non-micropack) as limited offer.
   const timerPack = useMemo(
@@ -2131,6 +2145,27 @@ const CoinsPage = ({
   // Use token from query params if available, otherwise fall back to localStorage
   const token = resolvePageAuthToken(location.search, organisationId);
   const isLoggedIn = !!token;
+
+  const [coinBalance, setCoinBalance] = useState<number | null>(() => {
+    const raw = searchParams.get("wallet_balance");
+    if (raw == null || raw.trim() === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  });
+
+  useEffect(() => {
+    if (!token || isBiffle) return;
+    let cancelled = false;
+    void fetchWalletBalance({
+      organisationId,
+      authToken: token,
+    }).then((balance) => {
+      if (!cancelled && balance != null && balance >= 0) setCoinBalance(balance);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, organisationId, isBiffle]);
 
   const [membershipSeed] = useState(() =>
     seedCoinStoreMembership(token, organisationId, location.search),
@@ -2528,38 +2563,63 @@ const CoinsPage = ({
     };
   }, [pollMandateStatus]);
 
-  const visibleAnalyticsPacks = useMemo(
+  const zintleQuickRechargePacks = useMemo(
     () =>
-      quickRecharge
+      getZintleQuickRechargeSheetPacks({
+        isMember,
+        timerPack,
+        micropacks: displayedPacks,
+      }),
+    [isMember, timerPack, displayedPacks],
+  );
+
+  const visibleAnalyticsPacks = useMemo(() => {
+    const freeTrialPack = freeTrial ? freeTrialToStorePack(freeTrial) : null;
+    if (quickRecharge) {
+      return isBiffle
         ? getVisibleQuickRechargePacks({
             isMember,
             featuredWeeklyPlan,
             basicWeeklyPlan,
             timerPack,
             micropacks: displayedPacks,
-            freeTrialPack: freeTrial ? freeTrialToStorePack(freeTrial) : null,
+            freeTrialPack,
           })
-        : getVisibleCoinStorePacks({
-            isMember,
-            featuredWeeklyPlan,
-            basicWeeklyPlan,
-            timerPack,
-            exclusiveDeals,
-            topPlans,
-            freeTrialPack: freeTrial ? freeTrialToStorePack(freeTrial) : null,
-          }),
-    [
-      quickRecharge,
+        : zintleQuickRechargePacks;
+    }
+    if (isBiffle) {
+      return getVisibleCoinStorePacks({
+        isMember,
+        featuredWeeklyPlan,
+        basicWeeklyPlan,
+        timerPack,
+        exclusiveDeals,
+        topPlans,
+        freeTrialPack,
+      });
+    }
+    return getZintleVisibleStorePacks({
       isMember,
       featuredWeeklyPlan,
       basicWeeklyPlan,
       timerPack,
-      displayedPacks,
       exclusiveDeals,
       topPlans,
-      freeTrial,
-    ],
-  );
+      freeTrialPack,
+    });
+  }, [
+    quickRecharge,
+    isBiffle,
+    isMember,
+    featuredWeeklyPlan,
+    basicWeeklyPlan,
+    timerPack,
+    displayedPacks,
+    zintleQuickRechargePacks,
+    exclusiveDeals,
+    topPlans,
+    freeTrial,
+  ]);
 
   useEffect(() => {
     if (
@@ -2582,6 +2642,7 @@ const CoinsPage = ({
           basicWeeklyPlan,
           freeTrial?.planId,
         ),
+        { catalogOffer: !isBiffle },
       ),
     );
     if (quickRecharge) {
@@ -2596,6 +2657,7 @@ const CoinsPage = ({
     trialOfferConfirmed,
     visibleAnalyticsPacks,
     quickRecharge,
+    isBiffle,
   ]);
 
   useEffect(() => {
@@ -2617,7 +2679,7 @@ const CoinsPage = ({
         isStartSessionCoinPopupSurface(quickRechargeSurface) &&
         !quickRechargeManualSelectRef.current
       ) {
-        if (!isMember && freeTrial) {
+        if (isBiffle && !isMember && freeTrial) {
           const initial = freeTrialToStorePack(freeTrial);
           const next = preferFreeTrialSelection(selectedPackage, initial, [
             featuredWeeklyPlan?.id,
@@ -2637,6 +2699,7 @@ const CoinsPage = ({
               featuredWeeklyPlan,
               basicWeeklyPlan,
               freeTrial.planId,
+              !isBiffle,
             );
           }
           return;
@@ -2682,7 +2745,7 @@ const CoinsPage = ({
             featuredWeeklyPlan,
             basicWeeklyPlan,
             freeTrial?.planId,
-          );
+            !isBiffle);
           return;
         }
       }
@@ -2719,12 +2782,12 @@ const CoinsPage = ({
             featuredWeeklyPlan,
             basicWeeklyPlan,
             freeTrial?.planId,
-          );
+            !isBiffle);
           return;
         }
       }
 
-      if (!isMember && freeTrial && !quickRechargeManualSelectRef.current) {
+      if (isBiffle && !isMember && freeTrial && !quickRechargeManualSelectRef.current) {
         const initial = freeTrialToStorePack(freeTrial);
         const next = preferFreeTrialSelection(selectedPackage, initial, [
           featuredWeeklyPlan?.id,
@@ -2748,12 +2811,12 @@ const CoinsPage = ({
             featuredWeeklyPlan,
             basicWeeklyPlan,
             freeTrial.planId,
-          );
+            !isBiffle);
         }
         return;
       }
 
-      if (!isMember && featuredWeeklyPlan) {
+      if (isBiffle && !isMember && featuredWeeklyPlan) {
         const initial = weeklyPlanToStorePack(featuredWeeklyPlan);
         setSelectedPackage((prev) => prev ?? initial);
         if (!quickRechargeHeaderLockedRef.current) {
@@ -2773,7 +2836,7 @@ const CoinsPage = ({
             featuredWeeklyPlan,
             basicWeeklyPlan,
             freeTrial?.planId,
-          );
+            !isBiffle);
         }
       } else if (isMember && timerPack) {
         setSelectedPackage((prev) => prev ?? timerPack);
@@ -2794,7 +2857,7 @@ const CoinsPage = ({
             featuredWeeklyPlan,
             basicWeeklyPlan,
             freeTrial?.planId,
-          );
+            !isBiffle);
         }
       } else if (displayedPacks[0]) {
         const initial = displayedPacks[0];
@@ -2816,7 +2879,7 @@ const CoinsPage = ({
             featuredWeeklyPlan,
             basicWeeklyPlan,
             freeTrial?.planId,
-          );
+            !isBiffle);
         }
       }
       return;
@@ -2840,7 +2903,7 @@ const CoinsPage = ({
           featuredWeeklyPlan,
           basicWeeklyPlan,
           freeTrial.planId,
-        );
+            !isBiffle);
       }
       return;
     }
@@ -2856,7 +2919,7 @@ const CoinsPage = ({
         featuredWeeklyPlan,
         basicWeeklyPlan,
         freeTrial?.planId,
-      );
+            !isBiffle);
       return;
     }
 
@@ -2875,7 +2938,8 @@ const CoinsPage = ({
         defaultPackSelectedRef,
         featuredWeeklyPlan,
         basicWeeklyPlan,
-      );
+        undefined,
+            !isBiffle);
     }
   }, [
     membershipLoading,
@@ -2893,6 +2957,7 @@ const CoinsPage = ({
     freeTrial,
     selectedPackage,
     visibleAnalyticsPacks,
+    isBiffle,
   ]);
 
   useEffect(() => {
@@ -2907,6 +2972,7 @@ const CoinsPage = ({
   }, [displayedPacks, selectedPackage, subscriptionPlanIds, timerPack]);
 
   const handlePackSelect = (pkg: CoinStorePack, index: number) => {
+    if (paymentInProgressRef.current) return;
     quickRechargeManualSelectRef.current = true;
     const enriched = enrichStorePackWithWeeklyPlan(
       pkg,
@@ -2917,19 +2983,41 @@ const CoinsPage = ({
     const resolvedIndex = visibleAnalyticsPacks.findIndex(
       (p) => p.id === enriched.id,
     );
-    sendCoinPackSelected(
-      pixelContext,
-      toCoinPackForAnalytics(
-        enriched,
-        analyticsFlagsForStorePack(
-          enriched,
-          featuredWeeklyPlan,
-          basicWeeklyPlan,
-          freeTrial?.planId,
-        ),
-      ),
-      resolvedIndex >= 0 ? resolvedIndex : index,
+    const flags = analyticsFlagsForStorePack(
+      enriched,
+      featuredWeeklyPlan,
+      basicWeeklyPlan,
+      freeTrial?.planId,
     );
+    const position = resolvedIndex >= 0 ? resolvedIndex : index;
+    const analyticsPack = toCoinPackForAnalytics(enriched, flags, {
+      catalogOffer: !isBiffle,
+    });
+    sendCoinPackSelected(pixelContext, analyticsPack, position);
+    if (!isBiffle) {
+      sendCoinCtaClicked(pixelContext, { cta: "pack", pack: analyticsPack });
+    }
+  };
+
+  const openFullCoinStore = () => {
+    sendCoinCtaClicked(pixelContext, { cta: "more_plans" });
+    const params = new URLSearchParams(location.search);
+    params.delete("quick_recharge");
+    navigate({ pathname: "/coins", search: params.toString() });
+  };
+
+  const openCoinHistory = (source: "coin_balance" | "help") => {
+    sendCoinCtaClicked(pixelContext, { cta: source });
+    try {
+      window.ReactNativeWebView?.postMessage(
+        JSON.stringify({ action: "open_coin_history" }),
+      );
+    } catch {
+      // Native history screen is not available in the browser.
+    }
+    const params = new URLSearchParams(location.search);
+    params.delete("quick_recharge");
+    navigate({ pathname: "/coins/history", search: params.toString() });
   };
 
   const handleDesktopRecharge = async (pkg: CoinStorePack, index: number) => {
@@ -2993,28 +3081,34 @@ const CoinsPage = ({
     );
   }
 
-  const handleMobileRecharge = () => {
-    console.log(
-      "[CoinStore] handleMobileRecharge called, selectedPackage:",
-      selectedPackage,
-      "isMember:",
-      isMember,
-    );
-    if (!selectedPackage || paymentInProgressRef.current) return;
+  const handleMobileRecharge = (pkg?: CoinStorePack) => {
+    // Biffle's Continue button is onClick={onRecharge}, so the click event
+    // arrives here. Only a real pack should override the selected package.
+    const clicked =
+      pkg != null && typeof pkg.id === "number" && typeof pkg.price === "number"
+        ? pkg
+        : null;
+    const target = clicked ?? selectedPackage;
+    if (!target || paymentInProgressRef.current) return;
+    if (!isLoggedIn) {
+      setShowLogin(true);
+      setShowCoins(true);
+      return;
+    }
 
     // Subscription plans from the plans API use mandate flow
     const isSubscriptionPlan =
-      !isMember && subscriptionPlanIds.includes(selectedPackage.id);
+      !isMember && subscriptionPlanIds.includes(target.id);
     console.log(
       "[CoinStore] isSubscriptionPlan:",
       isSubscriptionPlan,
       "selectedPackage.id:",
-      selectedPackage.id,
+      target.id,
     );
 
     if (isSubscriptionPlan) {
       if (!acquirePaymentLock()) return;
-      const planId = selectedPackage.id;
+      const planId = target.id;
       const purchasingTrial = freeTrial?.planId === planId;
       void (async () => {
         try {
@@ -3028,7 +3122,7 @@ const CoinsPage = ({
         }
       })();
     } else {
-      void handlePayClick(selectedPackage);
+      void handlePayClick(target);
     }
   };
 
@@ -3198,7 +3292,9 @@ const CoinsPage = ({
       />
     ) : (
       <QuickRechargePopup
-        packs={displayedPacks}
+        packs={zintleQuickRechargePacks}
+        onMorePlans={openFullCoinStore}
+        onOpenCoinHistory={() => openCoinHistory("coin_balance")}
         selectedPackageId={selectedPackage?.id ?? null}
         onPackSelect={handlePackSelect}
         onContinue={handleMobileRecharge}
@@ -3210,14 +3306,27 @@ const CoinsPage = ({
         callContext={quickRechargeCallContext}
         surface={quickRechargeSurface}
         headerPack={quickRechargeHeaderPack}
+        coinBalance={coinBalance}
         paymentInProgress={isPaymentInProgress}
       />
     );
 
+    if (!isBiffle) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(255,255,255,0.08)] backdrop-blur-[10px]">
+          <div className="mb-[max(10px,env(safe-area-inset-bottom))] flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-16px)] w-[min(388px,calc(100vw-16px))] min-h-0 flex-col">
+            <Suspense
+              fallback={<CoinStoreSkeleton isBiffle={false} quickRecharge />}
+            >
+              {popup}
+            </Suspense>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div
-        className={`fixed inset-0 z-50 flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden ${isBiffle ? "bg-white" : "bg-[#001A3D]"}`}
-      >
+      <div className="fixed inset-0 z-50 flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-white">
         <Suspense
           fallback={
             <CoinStoreSkeleton isBiffle={isBiffle} quickRecharge />
@@ -3252,7 +3361,11 @@ const CoinsPage = ({
           <CoinStoreMobileBiffle {...coinStoreMobileProps} />
         </Suspense>
       ) : (
-        <CoinStoreMobile {...coinStoreMobileProps} />
+        <CoinStoreMobile
+          {...coinStoreMobileProps}
+          coinBalance={coinBalance}
+          onOpenCoinHistory={openCoinHistory}
+        />
       )}
 
       <div className="container mx-auto hidden px-4 pb-8 pt-12 md:block md:pb-20">
@@ -3619,6 +3732,7 @@ const Layout = () => {
     [location.search, location.pathname],
   );
   const isCoinsPage = appPath === "/coins";
+  const isCoinHistoryPage = appPath === "/coins/history";
   const isQuickRechargeCoinsPage =
     isCoinsPage && isQuickRechargeFromSearch(location.search);
   const isSubscriptionsPage = appPath === "/subscriptions";
@@ -3665,9 +3779,9 @@ const Layout = () => {
   }, [isCampaignPage, location.search]);
 
   useEffect(() => {
-    if (isCoinsPage) return;
+    if (isCoinsPage || isCoinHistoryPage) return;
     window.__ZNW?.ensureFontAwesome?.();
-  }, [isCoinsPage]);
+  }, [isCoinsPage, isCoinHistoryPage]);
 
   useEffect(() => {
     let hasSentPageView = false;
@@ -3784,12 +3898,13 @@ const Layout = () => {
             ? "flex h-dvh max-h-dvh flex-col overflow-hidden sm:h-auto sm:max-h-none sm:min-h-dvh sm:overflow-y-auto"
             : isQuickRechargeCoinsPage
             ? "h-dvh max-h-dvh overflow-hidden bg-transparent"
-            : isCoinsPage
+            : isCoinsPage || isCoinHistoryPage
               ? ""
               : "min-h-screen"
       }`}
     >
       {!isCoinsPage &&
+        !isCoinHistoryPage &&
         !isSubscriptionsPage &&
         !isCampaignPage &&
         !isWelcomeBackOfferPage &&
@@ -3866,6 +3981,10 @@ const Layout = () => {
               <GetAppSection setShowLogin={setShowLogin} />
             </>
           }
+        />
+        <Route
+          path="/coins/history"
+          element={<CoinHistory />}
         />
         <Route
           path="/coins"
@@ -3974,6 +4093,7 @@ const Layout = () => {
       </Suspense>
 
       {!isCoinsPage &&
+        !isCoinHistoryPage &&
         !isSubscriptionsPage &&
         !isCampaignPage &&
         !isWelcomeBackOfferPage &&

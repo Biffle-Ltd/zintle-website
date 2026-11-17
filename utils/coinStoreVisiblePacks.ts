@@ -1,4 +1,5 @@
 import type { CoinStorePack, SubscriptionPlan } from "../components/CoinStoreMobile";
+import { orderedOfferPacks, packCardFigures } from "./coinStoreOffer";
 import type { CoinPackForAnalytics } from "./pixelEvents";
 
 export function weeklyPlanToStorePack(plan: SubscriptionPlan): CoinStorePack {
@@ -32,18 +33,38 @@ export function analyticsFlagsForStorePack(
 }
 
 export function toCoinPackForAnalytics(
-  pack: Pick<CoinStorePack, "id" | "coins" | "price" | "name" | "bonus_coins">,
+  pack: Pick<
+    CoinStorePack,
+    | "id"
+    | "coins"
+    | "price"
+    | "name"
+    | "bonus_coins"
+    | "bonus"
+    | "base_coins"
+    | "bonus_percent"
+  >,
   flags?: Pick<
     CoinPackForAnalytics,
     "is_subscription" | "is_limited_plan" | "is_free_trial"
   >,
+  options?: { catalogOffer?: boolean },
 ): CoinPackForAnalytics {
+  const figures = options?.catalogOffer ? packCardFigures(pack) : null;
   return {
     id: pack.id,
     name: pack.name,
     coins: pack.coins,
     price: pack.price,
-    bonus_coins: pack.bonus_coins ?? 0,
+    bonus_coins: figures ? figures.free : (pack.bonus_coins ?? 0),
+    ...(figures
+      ? {
+          ...(typeof pack.base_coins === "number" && pack.base_coins > 0
+            ? { base_coins: pack.base_coins }
+            : {}),
+          bonus_pct: figures.percent,
+        }
+      : {}),
     ...(flags?.is_subscription ? { is_subscription: true } : {}),
     ...(flags?.is_limited_plan ? { is_limited_plan: true } : {}),
     ...(flags?.is_free_trial ? { is_free_trial: true } : {}),
@@ -155,4 +176,86 @@ export function getVisibleQuickRechargePacks(options: {
   grid = filterDuplicateBasicWeeklyPrice(grid, isMember, basicWeeklyPlan);
   packs.push(...grid);
   return packs;
+}
+
+/** Zintle quick recharge is coin packs only. Trial and weekly stay on the full store. */
+export function getZintleQuickRechargePacks(options: {
+  isMember: boolean;
+  timerPack: CoinStorePack | null;
+  micropacks: CoinStorePack[];
+}): CoinStorePack[] {
+  const { isMember, timerPack, micropacks } = options;
+  const packs: CoinStorePack[] = [];
+  if (isMember && timerPack) packs.push(timerPack);
+  const grid =
+    isMember && timerPack
+      ? micropacks.filter((pack) => pack.id !== timerPack.id)
+      : micropacks;
+  packs.push(...grid);
+  return packs;
+}
+
+const ZINTLE_SHEET_ONE_TIME_PREVIEW = 2;
+
+/** Cards actually on the Zintle quick-recharge sheet, in on-screen order. */
+export function getZintleQuickRechargeSheetPacks(options: {
+  isMember: boolean;
+  timerPack: CoinStorePack | null;
+  micropacks: CoinStorePack[];
+}): CoinStorePack[] {
+  return orderedOfferPacks(
+    getZintleQuickRechargePacks(options),
+    ZINTLE_SHEET_ONE_TIME_PREVIEW,
+  );
+}
+
+/**
+ * Full Zintle store in the order the screen renders it: trial, starter,
+ * most purchased, one-time by price, then weekly plans.
+ */
+export function getZintleVisibleStorePacks(options: {
+  isMember: boolean;
+  featuredWeeklyPlan: SubscriptionPlan | null;
+  basicWeeklyPlan: SubscriptionPlan | null;
+  timerPack: CoinStorePack | null;
+  exclusiveDeals: CoinStorePack[];
+  topPlans: CoinStorePack[];
+  freeTrialPack?: CoinStorePack | null;
+}): CoinStorePack[] {
+  const {
+    isMember,
+    featuredWeeklyPlan,
+    basicWeeklyPlan,
+    timerPack,
+    exclusiveDeals,
+    topPlans,
+    freeTrialPack,
+  } = options;
+  const coins: CoinStorePack[] = [];
+  const seen = new Set<number>();
+  const pushCoin = (pack: CoinStorePack | null | undefined) => {
+    if (pack == null || seen.has(pack.id)) return;
+    seen.add(pack.id);
+    coins.push(pack);
+  };
+  pushCoin(timerPack);
+  for (const pack of exclusiveDeals) pushCoin(pack);
+  for (const pack of topPlans) pushCoin(pack);
+
+  const rows: CoinStorePack[] = [];
+  const seenRows = new Set<number>();
+  const pushRow = (pack: CoinStorePack | null | undefined) => {
+    if (pack == null || seenRows.has(pack.id)) return;
+    seenRows.add(pack.id);
+    rows.push(pack);
+  };
+  if (!isMember) pushRow(freeTrialPack);
+  for (const pack of orderedOfferPacks(coins, null)) pushRow(pack);
+  if (!isMember && featuredWeeklyPlan) {
+    pushRow(weeklyPlanToStorePack(featuredWeeklyPlan));
+  }
+  if (!isMember && basicWeeklyPlan) {
+    pushRow(weeklyPlanToStorePack(basicWeeklyPlan));
+  }
+  return rows;
 }

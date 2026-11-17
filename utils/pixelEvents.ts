@@ -47,6 +47,8 @@ export type CoinPackForAnalytics = {
   coins: number;
   price: number;
   bonus_coins?: number;
+  base_coins?: number;
+  bonus_pct?: number | null;
   is_subscription?: boolean;
   is_limited_plan?: boolean;
   is_free_trial?: boolean;
@@ -56,6 +58,7 @@ export enum CoinPixelEventName {
   CoinStoreViewed = "coin_store_viewed",
   QuickRechargePopupViewed = "quick_recharge_popup_viewed",
   CoinPackSelected = "coin_pack_selected",
+  CoinCtaClicked = "coin_cta_clicked",
   CoinPaymentInitiated = "coin_payment_initiated",
   CoinPaymentSuccess = "CoinPaymentSuccess",
   CoinPaymentFailed = "coin_payment_failed",
@@ -244,9 +247,10 @@ function buildCoinPackSelectedEventInfo(
     coinpack_id: pack.id,
     coins: pack.coins,
     bonus_coins: pack.bonus_coins ?? 0,
+    ...(typeof pack.base_coins === "number" ? { base_coins: pack.base_coins } : {}),
     price: pack.price,
     currency: CURRENCY,
-    bonus_pct: false,
+    bonus_pct: pack.bonus_pct === undefined ? false : pack.bonus_pct,
     is_limited_plan: pack.is_limited_plan === true,
     position,
     ...(pack.is_subscription ? { is_subscription: true } : {}),
@@ -367,6 +371,35 @@ export function sendQuickRechargePopupViewed(
   if (!ctx) return;
   const eventParams = buildStoreViewedEventParams(ctx, packs);
   sendCoinEvent(ctx, CoinPixelEventName.QuickRechargePopupViewed, eventParams);
+}
+
+export type CoinCtaName = "pack" | "more_plans" | "coin_balance" | "help";
+
+export function sendCoinCtaClicked(
+  ctx: ParsedCoinPixelContext | null,
+  args: { cta: CoinCtaName; pack?: CoinPackForAnalytics },
+): void {
+  if (!ctx) return;
+  const eventParams: Record<string, unknown> = {
+    ...buildBaseEventParams(ctx),
+    event_info: {
+      cta: args.cta,
+      ...(args.pack
+        ? {
+            coinpack_id: args.pack.id,
+            coins: args.pack.coins,
+            base_coins: args.pack.base_coins ?? args.pack.coins,
+            bonus_coins: args.pack.bonus_coins ?? 0,
+            bonus_pct: args.pack.bonus_pct ?? null,
+            price: args.pack.price,
+            currency: CURRENCY,
+            ...(args.pack.is_subscription ? { is_subscription: true } : {}),
+            ...(args.pack.is_free_trial ? { is_free_trial: true } : {}),
+          }
+        : {}),
+    },
+  };
+  sendCoinEvent(ctx, CoinPixelEventName.CoinCtaClicked, eventParams);
 }
 
 export function sendCoinPackSelected(

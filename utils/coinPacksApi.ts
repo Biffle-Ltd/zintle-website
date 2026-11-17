@@ -14,6 +14,11 @@ export type CoinPackApiRow = {
   coin_value?: number;
   amount?: number;
   bonus_coins?: number;
+  base_coins?: number;
+  base_coin_value?: number;
+  bonus_percent?: number;
+  bonus_percentage?: number;
+  percent_bonus?: number;
   product_id?: string;
   name?: string;
   icon_url?: string | null;
@@ -24,12 +29,25 @@ export type CoinPackApiRow = {
   is_active?: boolean;
 };
 
+function apiNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
 export const mapCoinPack = (p: CoinPackApiRow): CoinStorePack => ({
   id: p.id as number,
   coins: p.coin_value as number,
   price: p.amount as number,
   bonus: p.bonus_coins,
-  bonus_coins: p.bonus_coins ?? 0,
+  bonus_coins: apiNumber(p.bonus_coins) ?? 0,
+  base_coins: apiNumber(p.base_coins ?? p.base_coin_value),
+  bonus_percent: apiNumber(
+    p.bonus_percent ?? p.bonus_percentage ?? p.percent_bonus,
+  ),
   product_id: p.product_id,
   name: p.name,
   icon_url: p.icon_url ?? null,

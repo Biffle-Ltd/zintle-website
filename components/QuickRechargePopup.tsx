@@ -1,22 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { COIN_ICON_CLASS, ZintleCoinIcon } from "./ZintleCoinIcon";
-import { StopwatchIcon } from "./UiIcons";
+import React, { useEffect, useMemo } from "react";
+import { ZintleCoinIcon } from "./ZintleCoinIcon";
 import type { CoinStorePack, SubscriptionPlan } from "./CoinStoreMobile";
+import type { QuickRechargeCallContext } from "../utils/quickRecharge";
+import type { CoinPurchaseSurface } from "../utils/pixelEvents";
 import {
-  formatCountdown,
-  getCoinStoreTimerEndMs,
-} from "../utils/coinStoreTimer";
-import {
-  buildQuickRechargePopupHeader,
-  resolveSelectedPackDetails,
-  type QuickRechargeCallContext,
-} from "../utils/quickRecharge";
-import {
-  isInSessionCoinPopupSurface,
-  type CoinPurchaseSurface,
-} from "../utils/pixelEvents";
-import { weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
-import { FreeTrialOfferCard } from "./FreeTrialOfferCard";
+  comparePackPrice,
+  packCardFigures,
+  splitCoinStoreOffers,
+} from "../utils/coinStoreOffer";
 import type { VisibleFreeTrial } from "../utils/freeTrialOffer";
 
 export type QuickRechargePack = {
@@ -25,7 +16,17 @@ export type QuickRechargePack = {
   price: number;
   tag?: string;
   highlight?: boolean;
+  name?: string;
+  bonus_coins?: number;
+  bonus?: number;
+  base_coins?: number;
+  bonus_percent?: number;
+  /** Subscription rows should not invent a coin-pack bonus. */
+  showOffer?: boolean;
 };
+
+const SHEET_FONT =
+  '"Instrument Sans", ui-sans-serif, system-ui, sans-serif';
 
 function formatRupee(amount: number): string {
   const n = Number(amount);
@@ -39,207 +40,81 @@ function formatCoinAmount(coins: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n));
 }
 
-function BannerSparkleIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 32 32"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden
-    >
-      <path
-        d="M1 16H31M16 31V1M8.5 8.5L23.5 23.5M8.5 23.5L23.5 8.5"
-        stroke="white"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+function formatBalance(balance: number): string {
+  if (!Number.isFinite(balance)) return "0";
+  return Number.isInteger(balance) ? String(balance) : String(Math.round(balance));
 }
 
-function ZintleLimitedOfferCard({
+type PackTone = "starter" | "highlight" | "plain";
+
+function PackRow({
   pack,
-  selected,
-  onSelect,
+  tone,
+  disabled,
+  onBuy,
 }: {
   pack: QuickRechargePack;
-  selected: boolean;
-  onSelect: () => void;
+  tone: PackTone;
+  disabled: boolean;
+  onBuy: () => void;
 }) {
-  const [endMs] = useState(() => getCoinStoreTimerEndMs());
-  const [remainingMs, setRemainingMs] = useState(() =>
-    Math.max(0, endMs - Date.now()),
-  );
-
-  useEffect(() => {
-    const tick = () => setRemainingMs(Math.max(0, endMs - Date.now()));
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [endMs]);
+  const figures =
+    pack.showOffer === false
+      ? { coins: pack.coins, free: 0, percent: null }
+      : packCardFigures(pack);
+  const starter = tone === "starter";
+  const plain = tone === "plain";
 
   return (
     <button
       type="button"
-      onClick={onSelect}
-      className={`relative w-full rounded-[20px] border-2 text-left transition-transform active:scale-[0.99] ${
-        selected ? "border-white" : "border-transparent"
+      onClick={onBuy}
+      disabled={disabled}
+      className={`flex min-h-[52px] w-full touch-manipulation items-center justify-between text-left transition-transform active:scale-[0.99] disabled:opacity-60 ${
+        starter
+          ? "rounded-[16px] bg-[rgba(94,216,106,0.12)] px-3 pb-3 pt-2"
+          : tone === "highlight"
+            ? "rounded-[16px] bg-[rgba(255,112,0,0.11)] px-3 pb-3 pt-2"
+            : "rounded-[10px] bg-[rgba(10,37,72,0.3)] px-3 pb-3 pt-2"
       }`}
     >
-      <div className="relative overflow-hidden rounded-[18px] bg-gradient-to-r from-[#FF5A3C] via-[#FF4D5E] to-[#FF7A52] px-4 pb-3 pt-3">
-        <div
-          className="pointer-events-none absolute right-3 top-3 flex items-start gap-0.5 opacity-40"
-          aria-hidden
-        >
-          <BannerSparkleIcon className="h-8 w-8 shrink-0" />
-          <BannerSparkleIcon className="h-6 w-6 shrink-0 -mt-0.5" />
-        </div>
-
-        <div className="relative z-[1] pr-12">
-          <p className="text-[13px] font-semibold tracking-wide text-white">
-            Limited offer
-          </p>
-          <div className="mt-2.5 inline-flex items-center gap-2.5 rounded-full bg-white px-4 py-2 shadow-sm">
-            <StopwatchIcon className="h-[15px] w-[15px] text-[#0B1121]" />
-            <span className="text-[15px] font-bold tabular-nums text-[#0B1121]">
-              {formatCountdown(remainingMs)}
-            </span>
-          </div>
-        </div>
-
-        <div className="relative z-[1] mt-3 flex items-center justify-between rounded-2xl bg-[#00000033] px-4 py-3">
-          <div className="flex items-center gap-2.5 text-[26px] font-bold leading-none text-white">
-            <ZintleCoinIcon className={COIN_ICON_CLASS} />
-            <span>{formatCoinAmount(pack.coins)}</span>
-          </div>
-          <span className="shrink-0 pl-2 text-xl font-bold text-white">
-            {formatRupee(pack.price)}
+      <span className={`flex min-w-0 flex-col ${plain ? "gap-1" : "gap-2"}`}>
+        {figures.percent != null && (
+          <span
+            className={`inline-flex w-fit rounded-[3px] px-1.5 py-[5px] text-[10px] font-medium leading-[1.15] ${
+              starter
+                ? "bg-[#00201A] text-[#5ED86A]"
+                : "bg-[#191700] text-[#E6A433]"
+            }`}
+          >
+            {figures.percent}% bonus
           </span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function ZintleFeaturedWeeklyPlanCard({
-  plan,
-  selected,
-  onSelect,
-}: {
-  plan: SubscriptionPlan;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const [endMs] = useState(() => getCoinStoreTimerEndMs());
-  const [remainingMs, setRemainingMs] = useState(() =>
-    Math.max(0, endMs - Date.now()),
-  );
-
-  useEffect(() => {
-    const tick = () => setRemainingMs(Math.max(0, endMs - Date.now()));
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [endMs]);
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`relative w-full rounded-[20px] border-2 text-left transition-transform active:scale-[0.99] ${
-        selected ? "border-white" : "border-transparent"
-      }`}
-    >
-      <div className="relative overflow-hidden rounded-[18px] bg-gradient-to-r from-[#FF5A3C] via-[#FF4D5E] to-[#FF7A52] px-4 pb-3 pt-3">
-        <div
-          className="pointer-events-none absolute right-3 top-3 flex items-start gap-0.5 opacity-40"
-          aria-hidden
+        )}
+        <span
+          className={`flex min-w-0 items-center ${plain ? "gap-[5px]" : "gap-[7px]"}`}
         >
-          <BannerSparkleIcon className="h-8 w-8 shrink-0" />
-          <BannerSparkleIcon className="h-6 w-6 shrink-0 -mt-0.5" />
-        </div>
-
-        <div className="relative z-[1] pr-12">
-          <p className="text-[13px] font-semibold tracking-wide text-white">
-            Weekly Plan
-          </p>
-          <div className="mt-2.5 inline-flex items-center gap-2.5 rounded-full bg-white px-4 py-2 shadow-sm">
-            <StopwatchIcon className="h-[15px] w-[15px] text-[#0B1121]" />
-            <span className="text-[15px] font-bold tabular-nums text-[#0B1121]">
-              {formatCountdown(remainingMs)}
+          <span className="flex shrink-0 items-center gap-0.5">
+            <ZintleCoinIcon size={24} className="h-6 w-6 shrink-0" />
+            <span className="whitespace-nowrap text-[16px] font-semibold leading-[1.15] text-white">
+              {formatCoinAmount(figures.coins)}
             </span>
-          </div>
-        </div>
-
-        <div className="relative z-[1] mt-3 flex items-center justify-between rounded-2xl bg-[#00000033] px-4 py-3">
-          <div className="flex items-center gap-2.5 text-[26px] font-bold leading-none text-white">
-            <ZintleCoinIcon className={COIN_ICON_CLASS} />
-            <span>{plan.coin_value ?? 0}</span>
-          </div>
-          <span className="shrink-0 pl-2 text-xl font-bold text-white">
-            {formatRupee(plan.price)}
           </span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function ZintleWeeklyPlanCard({
-  plan,
-  selected,
-  onSelect,
-}: {
-  plan: SubscriptionPlan;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`relative flex w-full shrink-0 items-center justify-between rounded-2xl border-2 bg-[#1e293b] px-4 pb-3 pt-8 text-left transition-all active:scale-[0.99] ${
-        selected ? "border-white" : "border-white/10"
-      }`}
-    >
-      <span className="absolute left-0 top-0 rounded-br-lg rounded-tl-2xl bg-[#3B82F6] px-2.5 py-1 text-[10px] font-bold uppercase leading-none tracking-wide text-white">
-        Weekly Plan
+          {figures.free > 0 && (
+            <span
+              className={`truncate font-normal leading-[1.15] text-[#E6A433] ${
+                plain ? "text-[10px]" : "text-[10.2px]"
+              }`}
+            >
+              +{formatCoinAmount(figures.free)} Free coins
+            </span>
+          )}
+        </span>
       </span>
-      <div className="flex items-center gap-2 text-xl font-bold leading-none text-white">
-        <ZintleCoinIcon className={COIN_ICON_CLASS} />
-        <span>{plan.coin_value ?? 0}</span>
-      </div>
-      <span className="shrink-0 text-base font-semibold leading-none text-white">
-        {formatRupee(plan.price)}
-      </span>
-    </button>
-  );
-}
-
-function MicropackCard({
-  pack,
-  selected,
-  onSelect,
-}: {
-  pack: QuickRechargePack;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`box-border flex w-full min-h-0 flex-col items-center rounded-2xl border-2 bg-[#1e293b] px-3 pb-3 pt-4 text-center transition-all active:scale-[0.98] ${
-        selected ? "border-white" : "border-white/10"
-      }`}
-    >
-      <p className="mb-2 flex items-center justify-center gap-2 text-lg font-semibold leading-none text-white">
-        <ZintleCoinIcon className={COIN_ICON_CLASS} />
-        <span>{formatCoinAmount(pack.coins)}</span>
-      </p>
-      <span className="mt-auto w-full rounded-full bg-[#ef4444] px-3 py-2 text-sm font-semibold leading-normal text-white">
+      <span
+        className={`ml-3 inline-flex h-7 min-w-[63px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[14px] font-semibold leading-[1.15] text-black ${
+          starter ? "bg-[#5ED86A]" : "bg-[#FEFFFF]"
+        }`}
+      >
         {formatRupee(pack.price)}
       </span>
     </button>
@@ -250,7 +125,7 @@ type QuickRechargePopupProps = {
   packs: QuickRechargePack[];
   selectedPackageId: number | null;
   onPackSelect: (pkg: QuickRechargePack, index: number) => void;
-  onContinue: () => void;
+  onContinue: (pkg?: QuickRechargePack) => void;
   isMember: boolean;
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
@@ -258,214 +133,169 @@ type QuickRechargePopupProps = {
   timerPack: CoinStorePack | null;
   callContext?: QuickRechargeCallContext | null;
   surface?: CoinPurchaseSurface | null;
-  /** Initial pack for header copy; does not change when user taps another pack. */
+  /** Kept so existing callers still compile. The sheet title is fixed. */
   headerPack?: { coins: number; price: number } | null;
+  /** Account balance from get-wallet-balance. Zintle only. */
+  coinBalance?: number | null;
+  /** Balance chip opens coin history. The destination can change later. */
+  onOpenCoinHistory?: () => void;
   paymentInProgress?: boolean;
+  /** Opens the full coin store. */
+  onMorePlans?: () => void;
+  /** One-time rows under Most Purchased. Null shows every remaining pack. */
+  oneTimeLimit?: number | null;
 };
+
+const SHEET_ONE_TIME_PREVIEW = 2;
 
 export const QuickRechargePopup = ({
   packs,
-  selectedPackageId,
   onPackSelect,
   onContinue,
-  isMember,
-  featuredWeeklyPlan,
-  basicWeeklyPlan,
-  freeTrial = null,
-  timerPack,
+  onMorePlans,
+  oneTimeLimit = SHEET_ONE_TIME_PREVIEW,
   callContext = null,
-  surface = null,
-  headerPack = null,
+  coinBalance = null,
+  onOpenCoinHistory,
   paymentInProgress = false,
 }: QuickRechargePopupProps) => {
-  const filteredPacks = useMemo(() => {
-    let result = packs;
-    if (isMember && timerPack) {
-      result = result.filter((p) => p.id !== timerPack.id);
-    }
-    if (!isMember && basicWeeklyPlan) {
-      result = result.filter((p) => p.price !== basicWeeklyPlan.price);
-    }
-    return result;
-  }, [packs, isMember, basicWeeklyPlan, timerPack]);
-
-  const micropackGridStartIndex =
-    (isMember && timerPack ? 1 : 0) +
-    (!isMember && freeTrial ? 1 : 0) +
-    (!isMember && featuredWeeklyPlan ? 1 : 0) +
-    (!isMember && basicWeeklyPlan ? 1 : 0);
-
-  const selectedPack = resolveSelectedPackDetails(
-    selectedPackageId,
-    packs,
-    featuredWeeklyPlan,
-    basicWeeklyPlan,
-    timerPack,
-    freeTrial
-      ? {
-          planId: freeTrial.planId,
-          coins: freeTrial.trialCoins ?? 0,
-          price: freeTrial.trialAmount,
-        }
-      : null,
-  );
-  const selectedPrice = selectedPack?.price ?? null;
-
-  const hasOptions =
-    filteredPacks.length > 0 ||
-    (!isMember && freeTrial) ||
-    (!isMember && (featuredWeeklyPlan || basicWeeklyPlan)) ||
-    (isMember && timerPack);
-
-  const computedHeaderText = useMemo(
-    () =>
-      buildQuickRechargePopupHeader({
-        surface,
-        headerPack,
-        callContext,
-        formatPrice: formatRupee,
-        fallback: hasOptions
-          ? "Tap on the plan to recharge"
-          : "No coin packs available",
-      }),
-    [surface, headerPack, callContext, hasOptions],
-  );
-
-  const [lockedInSessionHeader, setLockedInSessionHeader] = useState<
-    string | null
-  >(null);
-
   useEffect(() => {
-    setLockedInSessionHeader(null);
-  }, [surface, callContext?.walletBalance, callContext?.callPrice]);
+    const id = "znw-instrument-sans";
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap";
+    document.head.appendChild(link);
+  }, []);
 
-  useEffect(() => {
-    if (!isInSessionCoinPopupSurface(surface)) return;
-    if (lockedInSessionHeader != null) return;
-    if (!headerPack || !callContext) return;
-    setLockedInSessionHeader(computedHeaderText);
-  }, [
-    surface,
-    headerPack,
-    callContext,
-    computedHeaderText,
-    lockedInSessionHeader,
-  ]);
+  const sheet = useMemo(() => {
+    const split = splitCoinStoreOffers(packs as CoinStorePack[]);
+    const oneTime = [...split.oneTime].sort(comparePackPrice);
+    const ordered = [
+      ...(split.starter ? [split.starter] : []),
+      ...(split.mostPurchased ? [split.mostPurchased] : []),
+      ...oneTime,
+    ];
+    const indexOf = (id: number) => ordered.findIndex((pack) => pack.id === id);
+    return {
+      starter: split.starter,
+      mostPurchased: split.mostPurchased,
+      preview:
+        oneTimeLimit == null ? oneTime : oneTime.slice(0, oneTimeLimit),
+      indexOf,
+      empty: ordered.length === 0,
+    };
+  }, [packs, oneTimeLimit]);
+  const balance = coinBalance ?? callContext?.walletBalance ?? null;
 
-  const headerText =
-    isInSessionCoinPopupSurface(surface) && lockedInSessionHeader != null
-      ? lockedInSessionHeader
-      : computedHeaderText;
+  const buy = (pack: QuickRechargePack, index: number) => {
+    if (paymentInProgress) return;
+    onPackSelect(pack, index);
+    onContinue(pack);
+  };
 
   return (
     <div
-      className="flex h-full min-h-0 w-full flex-1 flex-col px-5 pt-[max(0.5rem,env(safe-area-inset-top))]"
+      className="flex max-h-full min-h-0 w-full touch-manipulation flex-col items-center gap-6 overflow-hidden rounded-[26px] bg-[#011735] p-4"
+      style={{ fontFamily: SHEET_FONT }}
       role="dialog"
       aria-label="Quick recharge"
     >
-      <h2 className="mb-2 shrink-0 text-left text-base font-medium text-white">
-        {headerText}
-      </h2>
+      <div className="h-[3px] w-[41px] shrink-0 rounded-full bg-[#E9E7E9] opacity-40" />
 
-      <div className="min-h-0 flex-1 touch-pan-y space-y-2.5 overflow-x-hidden overflow-y-scroll overscroll-y-contain pb-3 [-webkit-overflow-scrolling:touch] max-h-[calc(100dvh-11rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]">
-        {!isMember && freeTrial && (
-          <div className="shrink-0">
-            <FreeTrialOfferCard
-              trial={freeTrial}
-              brand="zintle"
-              selected={selectedPackageId === freeTrial.planId}
-              onSelect={(pack) => onPackSelect(pack, 0)}
-            />
+      <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="min-w-0 text-[20px] font-medium leading-6 text-[#E9E7E9]">
+            Quick Recharge
+          </h2>
+          {balance != null && (
+            <button
+              type="button"
+              onClick={() => onOpenCoinHistory?.()}
+              disabled={paymentInProgress}
+              className="inline-flex min-h-11 shrink-0 touch-manipulation items-center gap-[3px] rounded-[21px] border border-white/20 bg-[#0A2548] py-1 pl-1.5 pr-2 disabled:opacity-40"
+              aria-label="Coin history"
+            >
+              <ZintleCoinIcon size={24} className="h-6 w-6 shrink-0" />
+              <span className="text-[16px] font-semibold leading-5 text-[#E9E7E9]">
+                {formatBalance(balance)}
+              </span>
+            </button>
+          )}
+        </div>
+
+        {sheet.empty ? (
+          <div className="rounded-[16px] bg-[rgba(10,37,72,0.3)] px-6 py-10 text-center">
+            <p className="text-sm text-white/70">
+              There are no coin packs available right now. Please try again
+              later.
+            </p>
           </div>
-        )}
-
-        {!isMember && featuredWeeklyPlan && (
-          <div className="shrink-0">
-          <ZintleFeaturedWeeklyPlanCard
-            plan={featuredWeeklyPlan}
-            selected={selectedPackageId === featuredWeeklyPlan.id}
-            onSelect={() =>
-              onPackSelect(weeklyPlanToStorePack(featuredWeeklyPlan), 0)
-            }
-          />
-          </div>
-        )}
-
-        {isMember && timerPack && (
-          <div className="shrink-0">
-          <ZintleLimitedOfferCard
-            pack={timerPack}
-            selected={selectedPackageId === timerPack.id}
-            onSelect={() => onPackSelect(timerPack, 0)}
-          />
-          </div>
-        )}
-
-        {!isMember && basicWeeklyPlan && (
-          <div className="shrink-0">
-          <ZintleWeeklyPlanCard
-            plan={basicWeeklyPlan}
-            selected={selectedPackageId === basicWeeklyPlan.id}
-            onSelect={() =>
-              onPackSelect(weeklyPlanToStorePack(basicWeeklyPlan), 1)
-            }
-          />
-          </div>
-        )}
-
-        {filteredPacks.length === 0 ? (
-          !hasOptions && (
-            <div className="flex flex-col items-center rounded-2xl bg-[#1e293b] px-6 py-10 text-center">
-              <div className="mb-4 flex items-center justify-center text-3xl leading-none text-white/40">
-                <ZintleCoinIcon className={COIN_ICON_CLASS} />
-              </div>
-              <p className="text-sm text-white/70">
-                There are no coin packs available right now. Please try again
-                later.
-              </p>
-            </div>
-          )
         ) : (
-          <div className="grid grid-cols-2 gap-2.5 p-0.5">
-            {filteredPacks.map((pack, index) => {
-              const isLoneLastItem =
-                filteredPacks.length % 2 === 1 &&
-                index === filteredPacks.length - 1;
-
-              return (
-                <div
-                  key={pack.id}
-                  className={
-                    isLoneLastItem ? "col-span-2 mx-auto w-[calc(50%-6px)]" : ""
+          <div className="flex flex-col gap-4">
+            {sheet.starter && (
+              <section className="flex flex-col gap-2">
+                <h3 className="text-[16px] font-medium leading-5 text-white">
+                  Starter Pack
+                </h3>
+                <PackRow
+                  pack={sheet.starter}
+                  tone="starter"
+                  disabled={paymentInProgress}
+                  onBuy={() =>
+                    buy(sheet.starter!, sheet.indexOf(sheet.starter!.id))
                   }
-                >
-                  <MicropackCard
+                />
+              </section>
+            )}
+
+            {sheet.mostPurchased && (
+              <section className="flex flex-col gap-2">
+                <h3 className="text-[16px] font-medium leading-5 text-white">
+                  Most Purchased
+                </h3>
+                <PackRow
+                  pack={sheet.mostPurchased}
+                  tone="highlight"
+                  disabled={paymentInProgress}
+                  onBuy={() =>
+                    buy(
+                      sheet.mostPurchased!,
+                      sheet.indexOf(sheet.mostPurchased!.id),
+                    )
+                  }
+                />
+              </section>
+            )}
+
+            {sheet.preview.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {sheet.preview.map((pack) => (
+                  <PackRow
+                    key={pack.id}
                     pack={pack}
-                    selected={selectedPackageId === pack.id}
-                    onSelect={() =>
-                      onPackSelect(pack, micropackGridStartIndex + index)
-                    }
+                    tone="plain"
+                    disabled={paymentInProgress}
+                    onBuy={() => buy(pack, sheet.indexOf(pack.id))}
                   />
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            )}
           </div>
         )}
-      </div>
 
-      <div className="shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
-      <button
-        type="button"
-        onClick={onContinue}
-        disabled={selectedPackageId == null || paymentInProgress}
-        className="w-full rounded-full bg-gradient-to-r from-[#FF4B7A] via-[#FF5E4D] to-[#FF8A3D] py-3.5 text-base font-bold text-white shadow-lg shadow-[#FF5E4D]/30 transition-opacity hover:opacity-95 disabled:opacity-40"
-      >
-        {paymentInProgress
-          ? "Processing..."
-          : selectedPrice != null
-            ? `Continue Call for ${formatRupee(selectedPrice)}`
-            : "Continue Call"}
-      </button>
+        {onMorePlans != null && (
+          <button
+            type="button"
+            onClick={onMorePlans}
+            disabled={paymentInProgress}
+            className="min-h-11 w-full touch-manipulation py-3 text-center text-[14px] font-medium text-[#E9E7E9] underline decoration-white/30 underline-offset-4 disabled:opacity-40"
+          >
+            Check out more plans
+          </button>
+        )}
       </div>
     </div>
   );

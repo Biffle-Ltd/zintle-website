@@ -1,13 +1,13 @@
-import React, { Fragment, useEffect, useMemo, useState } from "react";
-import { COIN_ICON_CLASS, ZintleCoinIcon } from "./ZintleCoinIcon";
-import { StopwatchIcon } from "./UiIcons";
+import React, { useEffect, useMemo, useState } from "react";
+import { ZintleCoinIcon } from "./ZintleCoinIcon";
+import { getCoinStoreTimerEndMs } from "../utils/coinStoreTimer";
 import {
-  formatCountdown,
-  getCoinStoreTimerEndMs,
-} from "../utils/coinStoreTimer";
+  comparePackPrice,
+  packCardFigures,
+  splitCoinStoreOffers,
+} from "../utils/coinStoreOffer";
 import { weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
-import { FreeTrialOfferCard } from "./FreeTrialOfferCard";
-import type { VisibleFreeTrial } from "../utils/freeTrialOffer";
+import { freeTrialToStorePack, type VisibleFreeTrial } from "../utils/freeTrialOffer";
 
 export const TIMER_COIN_PRODUCT_ID = "coin_100";
 export const TIMER_COIN_FALLBACK_PRODUCT_ID = "coin_149";
@@ -16,6 +16,8 @@ const TIMER_COIN_PRODUCT_IDS = [
   TIMER_COIN_PRODUCT_ID,
   TIMER_COIN_FALLBACK_PRODUCT_ID,
 ] as const;
+
+const STORE_FONT = '"Instrument Sans", ui-sans-serif, system-ui, sans-serif';
 
 export function resolveTimerPack(packs: CoinStorePack[]): CoinStorePack | null {
   for (const productId of TIMER_COIN_PRODUCT_IDS) {
@@ -31,6 +33,10 @@ export type CoinStorePack = {
   price: number;
   bonus_coins?: number;
   bonus?: number;
+  /** Paid coins when the catalog separates them from `coins`. */
+  base_coins?: number;
+  /** Backend bonus percent. Displayed as sent. */
+  bonus_percent?: number;
   product_id?: string;
   name?: string;
   icon_url?: string | null;
@@ -52,8 +58,8 @@ export type SubscriptionPlan = {
 
 function formatRupee(amount: number): string {
   const n = Number(amount);
-  if (!Number.isFinite(n)) return "₹ 0";
-  return Number.isInteger(n) ? `₹ ${n}` : `₹ ${n.toFixed(2)}`;
+  if (!Number.isFinite(n)) return "₹0";
+  return Number.isInteger(n) ? `₹${n}` : `₹${n.toFixed(2)}`;
 }
 
 function formatCoins(n: number): string {
@@ -62,38 +68,9 @@ function formatCoins(n: number): string {
   return Number.isInteger(v) ? String(v) : String(Math.round(v));
 }
 
-function bonusCoins(pack: CoinStorePack): number {
-  const b = pack.bonus_coins ?? pack.bonus ?? 0;
-  return Number.isFinite(Number(b)) ? Number(b) : 0;
-}
-
-function bonusPercentLabel(pack: CoinStorePack): string | null {
-  const bonus = bonusCoins(pack);
-  const base = Number(pack.coins);
-  if (bonus <= 0 || base <= 0) return null;
-  const pct = Math.round((bonus / base) * 100);
-  if (pct <= 0) return null;
-  return `${pct}% Bonus`;
-}
-
-function BannerSparkleIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 32 32"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden
-    >
-      <path
-        d="M1 16H31M16 31V1M8.5 8.5L23.5 23.5M8.5 23.5L23.5 8.5"
-        stroke="white"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+function formatBalance(balance: number): string {
+  if (!Number.isFinite(balance)) return "0";
+  return Number.isInteger(balance) ? String(balance) : String(Math.round(balance));
 }
 
 type CoinStoreMobileProps = {
@@ -102,269 +79,183 @@ type CoinStoreMobileProps = {
   topPlans: CoinStorePack[];
   selectedPackageId: number | null;
   onPackSelect: (pkg: CoinStorePack, index: number) => void;
-  onRecharge: () => void;
+  onRecharge: (pkg?: CoinStorePack) => void;
   isMember: boolean;
   featuredWeeklyPlan: SubscriptionPlan | null;
   basicWeeklyPlan: SubscriptionPlan | null;
   freeTrial?: VisibleFreeTrial | null;
   paymentInProgress?: boolean;
+  /** Wallet balance. Rendered once, at the top left. */
+  coinBalance?: number | null;
+  /** Balance and Help both open coin history for now. */
+  onOpenCoinHistory?: (source: "coin_balance" | "help") => void;
 };
 
-function LimitedOfferCard({
+type PackTone = "starter" | "highlight" | "plain";
+
+function HelpIcon() {
+  return (
+    <svg
+      viewBox="0 0 18 18"
+      className="h-[18px] w-[18px] shrink-0"
+      fill="none"
+      aria-hidden
+    >
+      <circle cx="9" cy="9" r="7.25" stroke="white" strokeWidth="1.5" />
+      <path
+        d="M7.1 7.05a1.9 1.9 0 1 1 2.55 1.78c-.45.18-.75.5-.75.97V10.2"
+        stroke="white"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <circle cx="9" cy="12.35" r="0.75" fill="white" />
+    </svg>
+  );
+}
+
+function useOfferClock(): { hours: string; minutes: string } {
+  const [endMs] = useState(() => getCoinStoreTimerEndMs());
+  const [remainingMs, setRemainingMs] = useState(() =>
+    Math.max(0, endMs - Date.now()),
+  );
+
+  useEffect(() => {
+    const tick = () => setRemainingMs(Math.max(0, endMs - Date.now()));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [endMs]);
+
+  const total = Math.floor(remainingMs / 1000);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return { hours: pad(hours), minutes: pad(minutes) };
+}
+
+function PackRow({
   pack,
-  selected,
-  onSelect,
-  index,
+  tone,
+  disabled,
+  showOffer = true,
+  onBuy,
 }: {
   pack: CoinStorePack;
-  selected: boolean;
-  onSelect: () => void;
-  index: number;
+  tone: PackTone;
+  disabled: boolean;
+  showOffer?: boolean;
+  onBuy: () => void;
 }) {
-  const [endMs] = useState(() => getCoinStoreTimerEndMs());
-  const [remainingMs, setRemainingMs] = useState(() =>
-    Math.max(0, endMs - Date.now()),
-  );
-
-  useEffect(() => {
-    const tick = () => setRemainingMs(Math.max(0, endMs - Date.now()));
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [endMs]);
-
-  const bonus = bonusCoins(pack);
+  const figures = showOffer
+    ? packCardFigures(pack)
+    : { coins: pack.coins, free: 0, percent: null };
+  const bonus = figures.free;
+  const percent = figures.percent;
+  const starter = tone === "starter";
+  const plain = tone === "plain";
 
   return (
     <button
       type="button"
-      onClick={onSelect}
-      data-pack-index={index}
-      className={`relative w-full overflow-hidden rounded-[20px] text-left transition-transform active:scale-[0.99] ${
-        selected
-          ? "ring-2 ring-white/80 ring-offset-2 ring-offset-[#000D26]"
-          : ""
+      onClick={onBuy}
+      disabled={disabled}
+      className={`flex min-h-[52px] w-full touch-manipulation items-center justify-between text-left transition-transform active:scale-[0.99] disabled:opacity-60 ${
+        starter
+          ? "rounded-[16px] bg-[rgba(94,216,106,0.12)] px-3 pb-3 pt-2"
+          : tone === "highlight"
+            ? "rounded-[16px] bg-[rgba(255,112,0,0.11)] px-3 pb-3 pt-2"
+            : "rounded-[10px] bg-[rgba(10,37,72,0.3)] px-3 pb-3 pt-2"
       }`}
     >
-      <div className="relative bg-gradient-to-r from-[#FF5A3C] via-[#FF4D5E] to-[#FF7A52] px-4 pb-4 pt-4">
-        <div
-          className="pointer-events-none absolute right-3 top-3 flex items-start gap-0.5 opacity-40"
-          aria-hidden
-        >
-          <BannerSparkleIcon className="h-8 w-8 shrink-0" />
-          <BannerSparkleIcon className="h-6 w-6 shrink-0 -mt-0.5" />
-        </div>
-
-        <div className="relative z-[1] pr-12">
-          <p className="text-[13px] font-semibold tracking-wide text-white">
-            Limited offer
-          </p>
-          <div className="mt-2.5 inline-flex items-center gap-2.5 rounded-full bg-white px-4 py-2 shadow-sm">
-            <StopwatchIcon className="h-[15px] w-[15px] text-[#0B1121]" />
-            <span className="text-[15px] font-bold tabular-nums text-[#0B1121]">
-              {formatCountdown(remainingMs)}
-            </span>
-          </div>
-        </div>
-
-        <div className="relative z-[1] mt-4 flex items-center justify-between rounded-2xl bg-[#00000033] px-4 py-3.5">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex items-center gap-2.5 text-[28px] font-bold leading-none text-white">
-              <ZintleCoinIcon className={COIN_ICON_CLASS} />
-              <span>{formatCoins(pack.coins)}</span>
-            </div>
-            {bonus > 0 && (
-              <span className="shrink-0 rounded border border-white/70 px-2 py-0.5 text-[11px] font-medium leading-tight text-white">
-                Bonus +{formatCoins(bonus)}
-              </span>
-            )}
-          </div>
-          <span className="shrink-0 pl-2 text-xl font-bold text-white">
-            {formatRupee(pack.price)}
+      <span className={`flex min-w-0 flex-col ${plain ? "gap-1" : "gap-2"}`}>
+        {percent != null && (
+          <span
+            className={`inline-flex w-fit rounded-[3px] px-1.5 py-[5px] text-[10px] font-medium leading-[1.15] ${
+              starter
+                ? "bg-[#00201A] text-[#5ED86A]"
+                : "bg-[#191700] text-[#E6A433]"
+            }`}
+          >
+            {percent}% bonus
           </span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function WeeklyPlanLimitedOfferCard({
-  plan,
-  selected,
-  onSelect,
-}: {
-  plan: SubscriptionPlan;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const [endMs] = useState(() => getCoinStoreTimerEndMs());
-  const [remainingMs, setRemainingMs] = useState(() =>
-    Math.max(0, endMs - Date.now()),
-  );
-
-  useEffect(() => {
-    const tick = () => setRemainingMs(Math.max(0, endMs - Date.now()));
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [endMs]);
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`relative w-full overflow-hidden rounded-[20px] text-left transition-transform active:scale-[0.99] ${
-        selected
-          ? "ring-2 ring-white/80 ring-offset-2 ring-offset-[#000D26]"
-          : ""
-      }`}
-    >
-      <div className="relative bg-gradient-to-r from-[#FF5A3C] via-[#FF4D5E] to-[#FF7A52] px-4 pb-4 pt-4">
-        <div
-          className="pointer-events-none absolute right-3 top-3 flex items-start gap-0.5 opacity-40"
-          aria-hidden
+        )}
+        <span
+          className={`flex min-w-0 items-center ${plain ? "gap-[5px]" : "gap-[7px]"}`}
         >
-          <BannerSparkleIcon className="h-8 w-8 shrink-0" />
-          <BannerSparkleIcon className="h-6 w-6 shrink-0 -mt-0.5" />
-        </div>
-
-        <div className="relative z-[1] pr-12">
-          <p className="text-[13px] font-semibold tracking-wide text-white">
-            Weekly Plan
-          </p>
-          <div className="mt-2.5 inline-flex items-center gap-2.5 rounded-full bg-white px-4 py-2 shadow-sm">
-            <StopwatchIcon className="h-[15px] w-[15px] text-[#0B1121]" />
-            <span className="text-[15px] font-bold tabular-nums text-[#0B1121]">
-              {formatCountdown(remainingMs)}
+          <span className="flex shrink-0 items-center gap-0.5">
+            <ZintleCoinIcon size={24} className="h-6 w-6 shrink-0" />
+            <span className="whitespace-nowrap text-[16px] font-semibold leading-5 text-white">
+              {formatCoins(figures.coins)}
             </span>
-          </div>
-        </div>
-
-        <div className="relative z-[1] mt-4 flex items-center justify-between rounded-2xl bg-[#00000033] px-4 py-3.5">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex items-center gap-2.5 text-[28px] font-bold leading-none text-white">
-              <ZintleCoinIcon className={COIN_ICON_CLASS} />
-              <span>{plan.coin_value ?? 0}</span>
-            </div>
-          </div>
-          <span className="shrink-0 pl-2 text-xl font-bold text-white">
-            {formatRupee(plan.price)}
           </span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function WeeklyPlanCard({
-  plan,
-  selected,
-  onSelect,
-}: {
-  plan: SubscriptionPlan;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`flex w-full items-center justify-between rounded-2xl bg-[#0f1f3d] px-4 py-4 text-left transition-all active:scale-[0.99] ${
-        selected ? "ring-2 ring-[#3B82F6]/80" : "ring-1 ring-white/5"
-      }`}
-    >
-      <div className="flex items-center gap-2 text-xl font-bold leading-none text-white">
-        <ZintleCoinIcon className={COIN_ICON_CLASS} />
-        <span>{plan.coin_value ?? 0}</span>
-      </div>
-      <span className="text-base font-semibold text-white">
-        {formatRupee(plan.price)}
+          {bonus > 0 && (
+            <span
+              className={`truncate font-normal leading-[1.15] text-[#E6A433] ${
+                plain ? "text-[10px]" : "text-[10.2px]"
+              }`}
+            >
+              +{formatCoins(bonus)} Free coins
+            </span>
+          )}
+        </span>
+      </span>
+      <span
+        className={`ml-3 inline-flex h-7 min-w-[63px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[14px] font-semibold leading-[1.15] text-black ${
+          starter ? "bg-[#5ED86A]" : "bg-[#FEFFFF]"
+        }`}
+      >
+        {formatRupee(pack.price)}
       </span>
     </button>
   );
 }
 
-function ExclusiveDealCard({
-  pack,
-  selected,
-  onSelect,
-  index,
+function TrialBanner({
+  trial,
+  disabled,
+  onBuy,
 }: {
-  pack: CoinStorePack;
-  selected: boolean;
-  onSelect: () => void;
-  index: number;
+  trial: VisibleFreeTrial;
+  disabled: boolean;
+  onBuy: () => void;
 }) {
-  const bonus = bonusCoins(pack);
-  const badge = bonusPercentLabel(pack);
+  const clock = useOfferClock();
+  const coins = trial.trialCoins;
+  const title =
+    coins != null && coins > 0
+      ? `Trial Pack - ${formatCoins(coins)} Coins for ${formatRupee(trial.trialAmount)}`
+      : `Trial Pack for ${formatRupee(trial.trialAmount)}`;
 
   return (
     <button
       type="button"
-      onClick={onSelect}
-      data-pack-index={index}
-      className={`relative w-full rounded-2xl bg-[#0f1f3d] px-4 py-4 text-left transition-all active:scale-[0.99] ${
-        selected ? "ring-2 ring-[#3B82F6]/80" : "ring-1 ring-white/5"
-      }`}
+      onClick={onBuy}
+      disabled={disabled}
+      className="relative min-h-[72px] w-full touch-manipulation overflow-hidden rounded-[16px] bg-[linear-gradient(92.74deg,#F4486E_2.28%,#FF7000_94.35%)] px-4 pb-2 pt-[7px] text-center text-white transition-transform active:scale-[0.99] disabled:opacity-60"
     >
-      {badge && (
-        <span className="absolute left-3 top-3 rounded-md bg-[#22C55E] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-          {badge}
+      <ZintleCoinIcon
+        size={78}
+        className="pointer-events-none absolute -left-4 top-1 h-[78px] w-[74px] -rotate-[15deg] opacity-90"
+      />
+      <ZintleCoinIcon
+        size={90}
+        className="pointer-events-none absolute -right-3 -top-1 h-[96px] w-[90px] rotate-[20deg] opacity-90"
+      />
+      <span className="relative z-[1] mx-auto block max-w-[min(220px,62vw)] text-balance text-[16px] font-semibold leading-5">
+        {title}
+      </span>
+      <span className="relative z-[1] mt-1 block text-[12px] font-normal leading-[15px]">
+        A small token to get you started
+      </span>
+      <span className="relative z-[1] mt-2 inline-flex items-center gap-0.5 text-[10px] font-medium">
+        <span className="inline-flex h-[18px] min-w-5 items-center justify-center rounded-[5px] bg-white px-[3px] font-semibold text-[#011735]">
+          {clock.hours}
         </span>
-      )}
-      <div
-        className={`flex items-center justify-between ${badge ? "pt-6" : ""}`}
-      >
-        <div className="flex items-center gap-2 text-xl font-bold leading-none text-white">
-          <ZintleCoinIcon className={COIN_ICON_CLASS} />
-          <span>{formatCoins(pack.coins)}</span>
-          {bonus > 0 && (
-            <span className="text-sm font-semibold leading-none text-[#4ADE80]">
-              +{formatCoins(bonus)}
-            </span>
-          )}
-        </div>
-        <span className="text-base font-semibold text-white">
-          {formatRupee(pack.price)}
+        <span className="px-0.5 font-bold leading-none">:</span>
+        <span className="inline-flex h-[18px] min-w-5 items-center justify-center rounded-[5px] bg-white px-[3px] font-semibold text-[#011735]">
+          {clock.minutes}
         </span>
-      </div>
-    </button>
-  );
-}
-
-function TopPlanCard({
-  pack,
-  selected,
-  onSelect,
-  index,
-}: {
-  pack: CoinStorePack;
-  selected: boolean;
-  onSelect: () => void;
-  index: number;
-}) {
-  const bonus = bonusCoins(pack);
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      data-pack-index={index}
-      className={`flex w-full items-center justify-between rounded-2xl bg-[#0f1f3d] px-4 py-4 text-left transition-all active:scale-[0.99] ${
-        selected ? "ring-2 ring-[#3B82F6]/80" : "ring-1 ring-white/5"
-      }`}
-    >
-      <div className="flex items-center gap-2 text-xl font-bold leading-none text-white">
-        <ZintleCoinIcon className={COIN_ICON_CLASS} />
-        <span>{formatCoins(pack.coins)}</span>
-        {bonus > 0 && (
-          <span className="text-sm font-medium leading-none text-[#7DD3FC]">
-            +{formatCoins(bonus)}
-          </span>
-        )}
-      </div>
-      <span className="text-base font-semibold text-white">
-        {formatRupee(pack.price)}
+        <span className="pl-0.5">Hr</span>
       </span>
     </button>
   );
@@ -396,7 +287,6 @@ export const CoinStoreMobile = ({
   timerPack,
   exclusiveDeals,
   topPlans,
-  selectedPackageId,
   onPackSelect,
   onRecharge,
   isMember,
@@ -404,137 +294,186 @@ export const CoinStoreMobile = ({
   basicWeeklyPlan,
   freeTrial = null,
   paymentInProgress = false,
+  coinBalance = null,
+  onOpenCoinHistory,
 }: CoinStoreMobileProps) => {
-  const indexedPacks = useMemo(() => {
-    const rows: {
-      pack: CoinStorePack;
-      index: number;
-      kind: "timer" | "exclusive" | "top";
-    }[] = [];
-    let i = 0;
-    if (timerPack) rows.push({ pack: timerPack, index: i++, kind: "timer" });
-    exclusiveDeals.forEach((pack) =>
-      rows.push({ pack, index: i++, kind: "exclusive" }),
-    );
-    topPlans.forEach((pack) => rows.push({ pack, index: i++, kind: "top" }));
-    return rows;
+  useEffect(() => {
+    const id = "znw-instrument-sans";
+    if (document.getElementById(id)) return;
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap";
+    document.head.appendChild(link);
+  }, []);
+
+  const offers = useMemo(() => {
+    const packs: CoinStorePack[] = [];
+    if (timerPack) packs.push(timerPack);
+    const seen = new Set(packs.map((pack) => pack.id));
+    for (const pack of [...exclusiveDeals, ...topPlans]) {
+      if (seen.has(pack.id)) continue;
+      seen.add(pack.id);
+      packs.push(pack);
+    }
+    return splitCoinStoreOffers(packs);
   }, [timerPack, exclusiveDeals, topPlans]);
 
-  const selectedInList = selectedPackageId != null;
+  const weeklyPlans = useMemo(() => {
+    if (isMember) return [] as SubscriptionPlan[];
+    return [featuredWeeklyPlan, basicWeeklyPlan].filter(
+      (plan): plan is SubscriptionPlan => plan != null,
+    );
+  }, [isMember, featuredWeeklyPlan, basicWeeklyPlan]);
+
+  const buy = (pack: CoinStorePack, index: number) => {
+    if (paymentInProgress) return;
+    onPackSelect(pack, index);
+    onRecharge(pack);
+  };
+
+  const indexFor = (pack: CoinStorePack) =>
+    getCoinPackStoreIndex(pack.id, timerPack, exclusiveDeals, topPlans);
+
+  const hasRows =
+    offers.starter != null ||
+    offers.mostPurchased != null ||
+    offers.oneTime.length > 0 ||
+    weeklyPlans.length > 0 ||
+    freeTrial != null;
 
   return (
-    <div className="flex flex-col bg-[#000D26] md:hidden">
-      <main className="space-y-6 px-4 pt-4 pb-32">
-        {/* Limited Offer slot — member: timer card, non-member: featured weekly plan */}
-        {isMember && indexedPacks.some((r) => r.kind === "timer") && timerPack && (
-          <LimitedOfferCard
-            pack={timerPack}
-            selected={selectedPackageId === timerPack.id}
-            onSelect={() => {
-              const row = indexedPacks.find((r) => r.pack.id === timerPack.id);
-              onPackSelect(timerPack, row?.index ?? 0);
-            }}
-            index={0}
-          />
+    <div
+      className="relative min-h-dvh overflow-x-hidden bg-black md:hidden"
+      style={{ fontFamily: STORE_FONT }}
+    >
+      <div
+        className="pointer-events-none absolute left-1/2 top-0 h-[95px] w-[287px] -translate-x-1/2 -translate-y-[73px] rounded-full bg-[#1A95FA] opacity-60 blur-[47px]"
+        aria-hidden
+      />
+
+      <header className="relative flex items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] min-[390px]:px-6">
+        {coinBalance != null ? (
+          <button
+            type="button"
+            onClick={() => onOpenCoinHistory?.("coin_balance")}
+            disabled={paymentInProgress}
+            className="flex min-h-11 min-w-0 touch-manipulation items-center gap-[3px] disabled:opacity-40"
+            aria-label="Coin history"
+          >
+            <ZintleCoinIcon size={32} className="h-8 w-8 shrink-0" />
+            <span className="truncate text-[32px] font-semibold leading-[39px] text-[#E9E7E9]">
+              {formatBalance(coinBalance)}
+            </span>
+          </button>
+        ) : (
+          <span />
         )}
-        {!isMember && freeTrial && (
-          <FreeTrialOfferCard
+        <button
+          type="button"
+          onClick={() => onOpenCoinHistory?.("help")}
+          disabled={paymentInProgress}
+          className="inline-flex h-11 shrink-0 touch-manipulation items-center disabled:opacity-40"
+          aria-label="Help"
+        >
+          <span className="inline-flex h-[26px] items-center gap-[5px] rounded-[21px] bg-[#0A2548] py-1 pl-1.5 pr-2 text-[14px] font-normal leading-[17px] text-[#E9E7E9]">
+            <HelpIcon />
+            Help
+          </span>
+        </button>
+      </header>
+
+      <main className="relative flex flex-col gap-6 overflow-x-hidden px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 min-[390px]:px-6">
+        {!hasRows && (
+          <div className="rounded-[16px] bg-[rgba(10,37,72,0.3)] px-6 py-10 text-center">
+            <p className="text-sm text-white/70">
+              There are no coin packs available right now. Please try again
+              later.
+            </p>
+          </div>
+        )}
+
+        {freeTrial && (
+          <TrialBanner
             trial={freeTrial}
-            brand="zintle"
-            selected={selectedPackageId === freeTrial.planId}
-            onSelect={(pack) => onPackSelect(pack, 0)}
-          />
-        )}
-        {!isMember && featuredWeeklyPlan && (
-          <WeeklyPlanLimitedOfferCard
-            plan={featuredWeeklyPlan}
-            selected={selectedPackageId === featuredWeeklyPlan.id}
-            onSelect={() =>
-              onPackSelect(weeklyPlanToStorePack(featuredWeeklyPlan), 0)
-            }
+            disabled={paymentInProgress}
+            onBuy={() => buy(freeTrialToStorePack(freeTrial), 0)}
           />
         )}
 
-        {/* Weekly Plans section — non-members only, above Exclusive Deals */}
-        {!isMember && basicWeeklyPlan && (
-          <section>
-            <h2 className="mb-3 text-base font-bold text-white">Weekly Plans</h2>
-            <div className="space-y-3">
-              <WeeklyPlanCard
-                plan={basicWeeklyPlan}
-                selected={selectedPackageId === basicWeeklyPlan.id}
-                onSelect={() =>
-                  onPackSelect(weeklyPlanToStorePack(basicWeeklyPlan), 1)
-                }
-              />
+        {offers.starter && (
+          <section className="flex flex-col gap-2">
+            <h2 className="text-[16px] font-medium leading-5 text-white">
+              Starter Pack
+            </h2>
+            <PackRow
+              pack={offers.starter}
+              tone="starter"
+              disabled={paymentInProgress}
+              onBuy={() => buy(offers.starter!, indexFor(offers.starter!))}
+            />
+          </section>
+        )}
+
+        {offers.mostPurchased && (
+          <section className="flex flex-col gap-2">
+            <h2 className="text-[16px] font-medium leading-5 text-white">
+              Most Purchased
+            </h2>
+            <PackRow
+              pack={offers.mostPurchased}
+              tone="highlight"
+              disabled={paymentInProgress}
+              onBuy={() =>
+                buy(offers.mostPurchased!, indexFor(offers.mostPurchased!))
+              }
+            />
+          </section>
+        )}
+
+        {offers.oneTime.length > 0 && (
+          <section className="flex flex-col gap-4">
+            <h2 className="text-[16px] font-medium leading-5 text-white">
+              One Time Purchase
+            </h2>
+            <div className="flex flex-col gap-2">
+              {[...offers.oneTime].sort(comparePackPrice).map((pack) => (
+                <PackRow
+                  key={pack.id}
+                  pack={pack}
+                  tone="plain"
+                  disabled={paymentInProgress}
+                  onBuy={() => buy(pack, indexFor(pack))}
+                />
+              ))}
             </div>
           </section>
         )}
 
-        {/* Exclusive Deals — hide coin pack matching basic weekly plan price for non-members */}
-        {(() => {
-          const filteredDeals = !isMember && basicWeeklyPlan
-            ? exclusiveDeals.filter((p) => p.price !== basicWeeklyPlan.price)
-            : exclusiveDeals;
-          return filteredDeals.length > 0 && (
-            <section>
-              <h2 className="mb-3 text-base font-bold text-white">
-                Exclusive Deals
-              </h2>
-              <div className="space-y-3">
-                {filteredDeals.map((pack) => {
-                  const row = indexedPacks.find((r) => r.pack.id === pack.id);
-                  const idx = row?.index ?? 0;
-                  return (
-                    <Fragment key={pack.id}>
-                      <ExclusiveDealCard
-                        pack={pack}
-                        selected={selectedPackageId === pack.id}
-                        onSelect={() => onPackSelect(pack, idx)}
-                        index={idx}
-                      />
-                    </Fragment>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })()}
-
-        {/* Top Plans — always shown */}
-        {topPlans.length > 0 && (
-          <section>
-            <h2 className="mb-3 text-base font-bold text-white">Top Plans</h2>
-            <div className="space-y-3">
-              {topPlans.map((pack) => {
-                const row = indexedPacks.find((r) => r.pack.id === pack.id);
-                const idx = row?.index ?? 0;
+        {weeklyPlans.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <h2 className="text-[16px] font-medium leading-5 text-white">
+              Weekly Plan
+            </h2>
+            <div className="flex flex-col gap-2">
+              {weeklyPlans.map((plan) => {
+                const pack = weeklyPlanToStorePack(plan);
                 return (
-                  <Fragment key={pack.id}>
-                    <TopPlanCard
-                      pack={pack}
-                      selected={selectedPackageId === pack.id}
-                      onSelect={() => onPackSelect(pack, idx)}
-                      index={idx}
-                    />
-                  </Fragment>
+                  <PackRow
+                    key={plan.id}
+                    pack={pack}
+                    tone="plain"
+                    showOffer={false}
+                    disabled={paymentInProgress}
+                    onBuy={() => buy(pack, indexFor(pack))}
+                  />
                 );
               })}
             </div>
           </section>
         )}
       </main>
-
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-[#000D26]/95 px-4 pt-4 pb-4 backdrop-blur-md md:hidden">
-        <button
-          type="button"
-          onClick={onRecharge}
-          disabled={!selectedInList || paymentInProgress}
-          className="mb-5 w-full rounded-full bg-gradient-to-r from-[#FF4B7A] via-[#FF5E4D] to-[#FF8A3D] py-4 text-base font-bold text-white shadow-lg shadow-[#FF5E4D]/30 transition-opacity hover:opacity-95 disabled:opacity-40"
-        >
-          {paymentInProgress ? "Processing..." : "Recharge Now"}
-        </button>
-      </div>
     </div>
   );
 };

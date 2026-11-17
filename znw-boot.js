@@ -127,6 +127,7 @@
       "@keyframes znw-spin{to{transform:rotate(360deg)}}" +
       ".znw-skel-bone{background-image:linear-gradient(90deg,var(--znw-skel-a,rgba(255,255,255,.1)) 0%,var(--znw-skel-b,rgba(255,255,255,.22)) 50%,var(--znw-skel-a,rgba(255,255,255,.1)) 100%);background-size:200% 100%;animation:znw-skel 1.15s ease-in-out infinite}" +
       "html.znw-coins-webview,html.znw-coins-webview body,html.znw-coins-webview body.font-sans{background:#000d26;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif!important}" +
+      "html.znw-quick-recharge,html.znw-quick-recharge body,html.znw-quick-recharge body.font-sans{background:transparent!important}" +
       'html.znw-coins-webview[data-org="biffle"],html.znw-coins-webview[data-org="biffle"] body{background:#f5f5f5;--znw-skel-a:rgba(0,0,0,.06);--znw-skel-b:rgba(0,0,0,.12)}' +
       "html.znw-welcome-webview,html.znw-welcome-webview body,html.znw-welcome-webview body.font-sans{background:#fff;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif!important;--znw-skel-a:rgba(0,0,0,.06);--znw-skel-b:rgba(0,0,0,.12)}" +
       "html.znw-subs-webview,html.znw-subs-webview body,html.znw-subs-webview body.font-sans{background:#000;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif!important}" +
@@ -147,6 +148,9 @@
     );
     if (boot.coins) {
       document.documentElement.classList.add("znw-coins-webview");
+      if (boot.qr && !boot.biffle) {
+        document.documentElement.classList.add("znw-quick-recharge");
+      }
       document.documentElement.setAttribute(
         "data-org",
         boot.biffle ? "biffle" : "zintle",
@@ -432,21 +436,52 @@
       );
     }
     if (qr) {
+      var sheetRow =
+        '<div style="height:69px;border-radius:10px;background:rgba(10,37,72,.3)"></div>';
       return (
-        '<div role="status" aria-live="polite" aria-label="Loading coin packs" style="min-height:100dvh;background:#001A3D;padding:8px 20px 16px">' +
-        bone("height:16px;width:210px;border-radius:6px;margin-bottom:10px") +
-        offer +
-        tiles +
-        '<div style="margin-top:12px">' +
-        ctaButtonHtml(cta, btnBg, "height:52px") +
+        '<div role="status" aria-live="polite" aria-label="Loading coin packs" style="position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;background:rgba(255,255,255,.08);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)">' +
+        '<div style="width:min(388px,calc(100vw - 2px));margin-bottom:10px;background:#011735;border-radius:26px;padding:16px;display:flex;flex-direction:column;gap:24px">' +
+        '<div style="height:3px;width:41px;border-radius:100px;background:#E9E7E9;opacity:.4;margin:0 auto"></div>' +
+        '<div style="display:flex;flex-direction:column;gap:16px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        bone("height:24px;width:148px;border-radius:6px") +
+        bone("height:32px;width:59px;border-radius:21px") +
+        "</div>" +
+        bone("height:20px;width:92px;border-radius:6px") +
+        '<div style="height:73px;border-radius:16px;background:rgba(94,216,106,.12)"></div>' +
+        bone("height:20px;width:121px;border-radius:6px") +
+        '<div style="height:73px;border-radius:16px;background:rgba(255,112,0,.11)"></div>' +
+        sheetRow +
+        sheetRow +
+        "</div></div></div>"
+      );
+    }
+    if (!biffle) {
+      var zintleRow =
+        '<div style="height:69px;border-radius:10px;background:rgba(10,37,72,.3)"></div>';
+      return (
+        '<div role="status" aria-live="polite" aria-label="Loading coin store" style="min-height:100dvh;background:#000;padding:12px 24px 32px;position:relative;overflow:hidden">' +
+        '<div style="position:absolute;left:50%;top:-73px;width:287px;height:95px;transform:translateX(-50%);border-radius:999px;background:#1A95FA;opacity:.6;filter:blur(47px)"></div>' +
+        '<div style="position:relative;display:flex;justify-content:space-between;align-items:center">' +
+        bone("height:32px;width:96px;border-radius:8px") +
+        bone("height:26px;width:68px;border-radius:21px;background:#0A2548") +
+        "</div>" +
+        '<div style="height:81px;margin-top:16px;border-radius:16px;background:linear-gradient(92.74deg,#F4486E 2.28%,#FF7000 94.35%)"></div>' +
+        bone("height:20px;width:92px;border-radius:6px;margin:24px 0 8px;background:rgba(255,255,255,.15)") +
+        '<div style="height:73px;border-radius:16px;background:rgba(94,216,106,.12)"></div>' +
+        bone("height:20px;width:121px;border-radius:6px;margin:24px 0 8px;background:rgba(255,255,255,.15)") +
+        '<div style="height:73px;border-radius:16px;background:rgba(255,112,0,.11)"></div>' +
+        bone("height:20px;width:146px;border-radius:6px;margin:24px 0 8px;background:rgba(255,255,255,.15)") +
+        '<div style="display:flex;flex-direction:column;gap:8px">' +
+        zintleRow +
+        zintleRow +
+        zintleRow +
         "</div></div>"
       );
     }
-    var bg = biffle ? "#F5F5F5" : "#000D26";
-    var barBg = biffle ? "rgba(255,255,255,.95)" : "rgba(0,13,38,.95)";
-    var sectionLabel = biffle
-      ? "background:rgba(0,0,0,.08)"
-      : "background:rgba(255,255,255,.15)";
+    var bg = "#F5F5F5";
+    var barBg = "rgba(255,255,255,.95)";
+    var sectionLabel = "background:rgba(0,0,0,.08)";
     var gap = '<div style="height:12px"></div>';
     return (
       '<div role="status" aria-live="polite" aria-label="Loading coin store">' +

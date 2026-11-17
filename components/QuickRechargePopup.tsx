@@ -9,7 +9,7 @@ import {
   splitCoinStoreOffers,
 } from "../utils/coinStoreOffer";
 import type { VisibleFreeTrial } from "../utils/freeTrialOffer";
-import { CheckoutOpeningNotice, PressableCard } from "./PressableCard";
+import { PressableCard } from "./PressableCard";
 
 export type QuickRechargePack = {
   id: number;
@@ -153,7 +153,7 @@ type QuickRechargePopupProps = {
   onOpenCoinHistory?: () => void;
   paymentInProgress?: boolean;
   /** The card waiting on UPI or checkout. That card stays lit. */
-  pendingPurchase?: { id: number; label: string } | null;
+  pendingPurchase?: { id: number } | null;
   /** Opens the full coin store. */
   onMorePlans?: () => void;
   /** One-time rows under Most Purchased. Null shows every remaining pack. */
@@ -234,7 +234,7 @@ export const QuickRechargePopup = ({
     onContinue(pack);
   };
   const busyLabelFor = (id: number) =>
-    pendingPurchase?.id === id ? pendingPurchase.label : null;
+    pendingPurchase?.id === id ? "Loading" : null;
   const rowDisabled = (id: number) =>
     paymentInProgress && pendingPurchase?.id !== id;
 
@@ -290,8 +290,6 @@ export const QuickRechargePopup = ({
             </button>
           )}
         </div>
-
-        <CheckoutOpeningNotice label={pendingPurchase?.label} />
 
         {sheet.empty ? (
           <div className="rounded-[16px] bg-[rgba(10,37,72,0.3)] px-6 py-10 text-center">

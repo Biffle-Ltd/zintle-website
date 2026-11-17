@@ -25,9 +25,3 @@ export function getPaymentGatewayFromUrl(
 
 export const PAYMENT_GATEWAY: PaymentGateway = getPaymentGatewayFromUrl();
 export const COIN_ORDER_PAYMENT_GATEWAY = PAYMENT_GATEWAY_MAP[PAYMENT_GATEWAY];
-
-/** Shown on the tapped coin card while the checkout UI is still opening. */
-export function coinCheckoutOpeningLabel(gateway?: PaymentGateway): string {
-  const resolved = gateway ?? getPaymentGatewayFromUrl();
-  return resolved === "PhonePe" ? "Opening PhonePe…" : "Opening payment…";
-}

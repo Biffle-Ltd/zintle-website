@@ -68,31 +68,41 @@ export function buildAndroidUpiIntentUrl(
 
 /**
  * Keeps the tapped plan looking busy while Android draws the UPI chooser.
- * The webview often stays visible until an app is picked, so the wait also
- * ends on its own if the chooser never hides the page.
+ * If the webview is covered by a UPI app, the wait lasts until this page is
+ * visible again so a second plan cannot start underneath. If the chooser never
+ * hides the page, the wait ends on its own.
  */
-export function waitForUpiHandoff(timeoutMs = 2000): Promise<void> {
+export function waitForUpiHandoff(timeoutMs = 8_000): Promise<void> {
   if (typeof document === "undefined") return Promise.resolve();
   return new Promise((resolve) => {
     let settled = false;
+    let leftPage = false;
+    let timer = 0;
     const finish = () => {
       if (settled) return;
       settled = true;
       document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pagehide", finish);
+      window.removeEventListener("pagehide", onPageHide);
       window.clearTimeout(timer);
       resolve();
     };
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") finish();
+    const markLeft = () => {
+      if (settled || leftPage) return;
+      leftPage = true;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(finish, 60_000);
     };
-    const timer = window.setTimeout(finish, timeoutMs);
-    if (document.visibilityState === "hidden") {
-      finish();
-      return;
-    }
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") markLeft();
+      else if (leftPage) finish();
+    };
+    const onPageHide = () => {
+      if (document.visibilityState === "hidden") markLeft();
+    };
+    timer = window.setTimeout(finish, timeoutMs);
     document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("pagehide", finish);
+    window.addEventListener("pagehide", onPageHide);
+    if (document.visibilityState === "hidden") markLeft();
   });
 }
 

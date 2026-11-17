@@ -16,10 +16,7 @@ import {
   sendCoinPackSelected,
 } from "../utils/pixelEvents";
 import { toCoinPackForAnalytics } from "../utils/coinStoreVisiblePacks";
-import {
-  coinCheckoutOpeningLabel,
-  getPaymentGatewayFromUrl,
-} from "../utils/paymentGateway";
+import { getPaymentGatewayFromUrl } from "../utils/paymentGateway";
 import { retainLockUntilCheckoutSettles } from "../utils/paymentCheckoutIframeLoad";
 
 export function WebCallQuickRechargeOverlay({
@@ -142,6 +139,7 @@ export function WebCallQuickRechargeOverlay({
       getPaymentGatewayFromUrl() === "PhonePe" ? "phonepe" : "easebuzz",
       stopPaying,
     );
+    const slowStart = window.setTimeout(() => handoff.onClosed(), 45_000);
     try {
       const result = await createOrderAndInitiatePayment(
         target.id,
@@ -156,9 +154,11 @@ export function WebCallQuickRechargeOverlay({
         },
         organisationId,
       );
+      window.clearTimeout(slowStart);
       if (!result.checkoutLaunched) handoff.onClosed();
       else handoff.armGiveUp();
     } catch {
+      window.clearTimeout(slowStart);
       handoff.onClosed();
     }
   };
@@ -227,7 +227,7 @@ export function WebCallQuickRechargeOverlay({
     paymentInProgress: paying,
     pendingPurchase:
       pendingPackId != null
-        ? { id: pendingPackId, label: coinCheckoutOpeningLabel() }
+        ? { id: pendingPackId }
         : null,
   };
 

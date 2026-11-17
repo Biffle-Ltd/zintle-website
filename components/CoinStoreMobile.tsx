@@ -7,7 +7,7 @@ import {
 import { uniqueWeeklyPlans, weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
 import { freeTrialToStorePack, type VisibleFreeTrial } from "../utils/freeTrialOffer";
 import { ZINTLE_BALANCE_COIN_SRC, ZINTLE_HELP_ICON_SRC } from "../utils/coinStoreAssets";
-import { CheckoutOpeningNotice, PressableCard } from "./PressableCard";
+import { PressableCard } from "./PressableCard";
 
 export const TIMER_COIN_PRODUCT_ID = "coin_100";
 export const TIMER_COIN_FALLBACK_PRODUCT_ID = "coin_149";
@@ -90,7 +90,7 @@ type CoinStoreMobileProps = {
   /** Balance and Help both open coin history for now. */
   onOpenCoinHistory?: (source: "coin_balance" | "help") => void;
   /** The card that is waiting on UPI or checkout. Others stay dimmed. */
-  pendingPurchase?: { id: number; label: string } | null;
+  pendingPurchase?: { id: number } | null;
 };
 
 type PackTone = "starter" | "highlight" | "plain";
@@ -343,7 +343,7 @@ export const CoinStoreMobile = ({
   }, [timerPack, exclusiveDeals, topPlans, weeklyPlans]);
 
   const busyLabelFor = (id: number) =>
-    pendingPurchase?.id === id ? pendingPurchase.label : null;
+    pendingPurchase?.id === id ? "Loading" : null;
   const rowDisabled = (id: number) =>
     paymentInProgress && pendingPurchase?.id !== id;
 
@@ -412,7 +412,6 @@ export const CoinStoreMobile = ({
       </header>
 
       <main className="relative flex flex-col gap-4 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3">
-        <CheckoutOpeningNotice label={pendingPurchase?.label} />
         {!hasRows && (
           <div className="rounded-[16px] bg-[rgba(10,37,72,0.3)] px-6 py-10 text-center">
             <p className="text-sm text-white/70">

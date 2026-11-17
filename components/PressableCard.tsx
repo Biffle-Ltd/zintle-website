@@ -60,6 +60,7 @@ export function PressableCard({
     };
     setRipples((current) => [...current, ripple]);
     const timer = window.setTimeout(() => {
+      timers.current = timers.current.filter((item) => item !== timer);
       setRipples((current) => current.filter((item) => item.id !== id));
     }, 480);
     timers.current.push(timer);
@@ -79,49 +80,33 @@ export function PressableCard({
       onClick={onClick}
       disabled={blocked}
       aria-busy={busy || undefined}
-      className={`group relative cursor-pointer touch-manipulation select-none overflow-hidden transition-transform duration-100 ease-out enabled:active:scale-[0.96] data-[pressed]:scale-[0.96] data-[pressed]:brightness-125 disabled:cursor-default ${
+      className={`group relative cursor-pointer touch-manipulation select-none transition-transform duration-100 ease-out enabled:active:scale-[0.96] data-[pressed]:scale-[0.96] data-[pressed]:brightness-125 disabled:cursor-default ${
         disabled && !busy ? "opacity-60" : ""
       } ${className ?? ""}`}
     >
       {children}
-      <span className="pointer-events-none absolute inset-0 z-[2] bg-transparent transition-colors duration-100 group-active:bg-white/30" />
-      {ripples.map((ripple) => (
-        <span
-          key={ripple.id}
-          aria-hidden
-          className="pointer-events-none absolute z-[3] animate-tap-ripple rounded-full bg-white/70"
-          style={{
-            left: ripple.x,
-            top: ripple.y,
-            width: ripple.size,
-            height: ripple.size,
-          }}
-        />
-      ))}
+      <span className="pointer-events-none absolute inset-0 z-[2] overflow-hidden rounded-[inherit]">
+        <span className="absolute inset-0 bg-transparent transition-colors duration-100 group-active:bg-white/30" />
+        {ripples.map((ripple) => (
+          <span
+            key={ripple.id}
+            aria-hidden
+            className="absolute animate-tap-ripple rounded-full bg-white/70"
+            style={{
+              left: ripple.x,
+              top: ripple.y,
+              width: ripple.size,
+              height: ripple.size,
+            }}
+          />
+        ))}
+      </span>
       {busyLabel ? (
-        <span className="absolute inset-0 z-[4] flex items-center justify-center gap-2 bg-[#011735]/60 px-3 text-[13px] font-semibold text-white">
+        <span className="absolute inset-0 z-[4] flex items-center justify-center gap-2 rounded-[inherit] bg-[#011735]/60 px-3 text-[13px] font-semibold text-white">
           <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white" />
           <span className="truncate">{busyLabel}</span>
         </span>
       ) : null}
     </button>
-  );
-}
-
-/** Readable status while PhonePe or the UPI chooser is still opening. */
-export function CheckoutOpeningNotice({
-  label,
-}: {
-  label?: string | null;
-}) {
-  if (!label) return null;
-  return (
-    <p
-      role="status"
-      className="sticky top-0 z-10 flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#0A2548] px-3 text-[14px] font-semibold text-white"
-    >
-      <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-      <span className="truncate">{label}</span>
-    </p>
   );
 }

@@ -149,7 +149,6 @@ import {
   MANDATE_STATUS_POLL_INTERVAL_MS,
 } from "./utils/mandateStatus";
 import {
-  coinCheckoutOpeningLabel,
   getPaymentGatewayFromUrl,
   PAYMENT_GATEWAY,
   PAYMENT_GATEWAY_MAP,
@@ -2206,26 +2205,29 @@ const CoinsPage = ({
   const [isPaymentInProgress, setIsPaymentInProgress] = useState(false);
   const [pendingPurchase, setPendingPurchase] = useState<{
     id: number;
-    label: string;
   } | null>(null);
   const paymentInProgressRef = useRef(false);
+  const paymentEpochRef = useRef(0);
   // One epoch cancels every poll on unmount. Each mandate keeps its own token
   // so a weekly poll cannot abandon the trial poll that is allowed to re-enable
   // the card.
   const mandatePollEpochRef = useRef(0);
   const mandatePollTokenRef = useRef(new Map<number, number>());
 
-  const releasePaymentLock = useCallback(() => {
+  const releasePaymentLock = useCallback((epoch?: number) => {
+    if (epoch != null && epoch !== paymentEpochRef.current) return;
+    paymentEpochRef.current += 1;
     paymentInProgressRef.current = false;
     setIsPaymentInProgress(false);
     setPendingPurchase(null);
   }, []);
 
   const acquirePaymentLock = useCallback(() => {
-    if (paymentInProgressRef.current) return false;
+    if (paymentInProgressRef.current) return 0;
+    paymentEpochRef.current += 1;
     paymentInProgressRef.current = true;
     setIsPaymentInProgress(true);
-    return true;
+    return paymentEpochRef.current;
   }, []);
 
   // Membership state — seed from session cache / is_member URL so the skeleton can skip
@@ -3080,15 +3082,14 @@ const CoinsPage = ({
       return;
     }
 
-    if (!acquirePaymentLock()) return;
-    setPendingPurchase({
-      id: packageToUse.id,
-      label: coinCheckoutOpeningLabel(),
-    });
+    const epoch = acquirePaymentLock();
+    if (!epoch) return;
+    setPendingPurchase({ id: packageToUse.id });
     const handoff = retainLockUntilCheckoutSettles(
       getPaymentGatewayFromUrl() === "PhonePe" ? "phonepe" : "easebuzz",
-      releasePaymentLock,
+      () => releasePaymentLock(epoch),
     );
+    const slowStart = window.setTimeout(() => handoff.onClosed(), 45_000);
 
     try {
       const result = await createOrderAndInitiatePayment(
@@ -3108,9 +3109,12 @@ const CoinsPage = ({
         },
         organisationId,
       );
+      window.clearTimeout(slowStart);
+      if (paymentEpochRef.current !== epoch) return;
       if (!result.checkoutLaunched) handoff.onClosed();
       else handoff.armGiveUp();
     } catch (e) {
+      window.clearTimeout(slowStart);
       console.error("Failed to create coin order from CoinsPage", e);
       handoff.onClosed();
     }
@@ -3154,23 +3158,32 @@ const CoinsPage = ({
     );
 
     if (isSubscriptionPlan) {
-      if (!acquirePaymentLock()) return;
-      setPendingPurchase({ id: target.id, label: "Opening UPI…" });
+      const epoch = acquirePaymentLock();
+      if (!epoch) return;
+      setPendingPurchase({ id: target.id });
       const planId = target.id;
       const purchasingTrial = freeTrial?.planId === planId;
       void (async () => {
+        const slowStart = window.setTimeout(
+          () => releasePaymentLock(epoch),
+          45_000,
+        );
         try {
           if (purchasingTrial && isLoggedIn) {
             const gate = await readTrialPurchaseGateRef.current();
-            if (gate !== "open") return;
+            if (gate !== "open" || paymentEpochRef.current !== epoch) return;
           }
+          if (paymentEpochRef.current !== epoch) return;
           const launched = await handleSubscriptionMandateInit(planId);
+          window.clearTimeout(slowStart);
+          if (paymentEpochRef.current !== epoch) return;
           // The mandate request can finish before Android shows the app
           // chooser. Keep this card busy until the webview is covered or the
           // chooser has had time to appear.
           if (launched) await waitForUpiHandoff();
         } finally {
-          releasePaymentLock();
+          window.clearTimeout(slowStart);
+          releasePaymentLock(epoch);
         }
       })();
     } else {

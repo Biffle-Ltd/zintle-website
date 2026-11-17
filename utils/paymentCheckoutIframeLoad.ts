@@ -160,12 +160,31 @@ export function retainLockUntilCheckoutSettles(
   let released = false;
   let stopWatch = () => {};
   let timer = 0;
+  let iframeMisses = 0;
   const onClosed = () => {
     if (released) return;
     released = true;
     if (typeof window !== "undefined") window.clearTimeout(timer);
     stopWatch();
     release();
+  };
+  // Checkout can dismiss the iframe without firing its close callback.
+  // Two misses avoid releasing during a one-frame src swap.
+  const releaseWhenIframeIsGone = () => {
+    timer = window.setTimeout(() => {
+      if (released) return;
+      if (checkoutIframeIsOpen(gateway)) {
+        iframeMisses = 0;
+        releaseWhenIframeIsGone();
+        return;
+      }
+      iframeMisses += 1;
+      if (iframeMisses < 2) {
+        releaseWhenIframeIsGone();
+        return;
+      }
+      onClosed();
+    }, 1000);
   };
   return {
     onClosed,
@@ -175,11 +194,13 @@ export function retainLockUntilCheckoutSettles(
       }
       stopWatch = watchPaymentCheckoutIframeLoad(gateway, () => {
         window.clearTimeout(timer);
+        if (checkoutIframeIsOpen(gateway)) releaseWhenIframeIsGone();
+        else onClosed();
       });
       timer = window.setTimeout(() => {
         stopWatch();
-        if (checkoutIframeIsOpen(gateway)) return;
-        onClosed();
+        if (checkoutIframeIsOpen(gateway)) releaseWhenIframeIsGone();
+        else onClosed();
       }, giveUpMs);
     },
   };

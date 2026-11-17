@@ -4,9 +4,9 @@ import {
   packCardFigures,
   splitCoinStoreOffers,
 } from "../utils/coinStoreOffer";
-import { comparePlanPrice, weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
+import { uniqueWeeklyPlans, weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
 import { freeTrialToStorePack, type VisibleFreeTrial } from "../utils/freeTrialOffer";
-import { ZINTLE_BALANCE_COIN_SRC, ZINTLE_CHEVRON_SRC, ZINTLE_HELP_ICON_SRC } from "../utils/coinStoreAssets";
+import { ZINTLE_BALANCE_COIN_SRC, ZINTLE_HELP_ICON_SRC } from "../utils/coinStoreAssets";
 
 export const TIMER_COIN_PRODUCT_ID = "coin_100";
 export const TIMER_COIN_FALLBACK_PRODUCT_ID = "coin_149";
@@ -84,7 +84,7 @@ type CoinStoreMobileProps = {
   basicWeeklyPlan: SubscriptionPlan | null;
   freeTrial?: VisibleFreeTrial | null;
   paymentInProgress?: boolean;
-  /** Wallet balance. Centered under the store title, with a chevron. */
+  /** Wallet balance. Top-left pill. The native header already shows the title. */
   coinBalance?: number | null;
   /** Balance and Help both open coin history for now. */
   onOpenCoinHistory?: (source: "coin_balance" | "help") => void;
@@ -249,12 +249,13 @@ function TrialBanner({
       <span className="relative z-[1] mt-1 block text-[12px] font-normal leading-[15px]">
         A small token to get you started
       </span>
-      <span className="relative z-[1] mt-[9px] inline-flex items-center gap-0.5 whitespace-nowrap text-[10px]">
+      <span className="relative z-[1] mt-[9px] inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-medium">
         <TimeBox value={clock.hours} />
-        <span className="px-0.5 font-bold leading-[9px]">:</span>
+        <span>hrs</span>
         <TimeBox value={clock.minutes} />
-        <span className="px-0.5 font-bold leading-[9px]">:</span>
+        <span>mins</span>
         <TimeBox value={clock.seconds} />
+        <span>sec</span>
       </span>
     </button>
   );
@@ -315,24 +316,23 @@ export const CoinStoreMobile = ({
     document.head.appendChild(link);
   }, []);
 
+  const weeklyPlans = useMemo(
+    () => uniqueWeeklyPlans(isMember, featuredWeeklyPlan, basicWeeklyPlan),
+    [isMember, featuredWeeklyPlan, basicWeeklyPlan],
+  );
+
   const offers = useMemo(() => {
+    const weeklyIds = new Set(weeklyPlans.map((plan) => plan.id));
     const packs: CoinStorePack[] = [];
-    if (timerPack) packs.push(timerPack);
+    if (timerPack && !weeklyIds.has(timerPack.id)) packs.push(timerPack);
     const seen = new Set(packs.map((pack) => pack.id));
     for (const pack of [...exclusiveDeals, ...topPlans]) {
-      if (seen.has(pack.id)) continue;
+      if (seen.has(pack.id) || weeklyIds.has(pack.id)) continue;
       seen.add(pack.id);
       packs.push(pack);
     }
     return splitCoinStoreOffers(packs);
-  }, [timerPack, exclusiveDeals, topPlans]);
-
-  const weeklyPlans = useMemo(() => {
-    if (isMember) return [] as SubscriptionPlan[];
-    return [featuredWeeklyPlan, basicWeeklyPlan]
-      .filter((plan): plan is SubscriptionPlan => plan != null)
-      .sort(comparePlanPrice);
-  }, [isMember, featuredWeeklyPlan, basicWeeklyPlan]);
+  }, [timerPack, exclusiveDeals, topPlans, weeklyPlans]);
 
   const buy = (pack: CoinStorePack, index: number) => {
     if (paymentInProgress) return;
@@ -360,53 +360,45 @@ export const CoinStoreMobile = ({
         aria-hidden
       />
 
-      <header className="relative flex flex-col items-center px-6 pt-[max(0.5rem,env(safe-area-inset-top))]">
-        <div className="flex w-full items-center justify-end py-2">
-          <button
-            type="button"
-            onClick={() => onOpenCoinHistory?.("help")}
-            disabled={paymentInProgress}
-            className="inline-flex min-h-11 touch-manipulation items-center disabled:opacity-40"
-          >
-            <span className="inline-flex items-center gap-[5px] rounded-[21px] bg-[#0A2548] py-1 pl-1.5 pr-2 text-[14px] font-normal text-[#E9E7E9]">
-              <img
-                src={ZINTLE_HELP_ICON_SRC}
-                alt=""
-                width={18}
-                height={18}
-                draggable={false}
-              />
-              Help
-            </span>
-          </button>
-        </div>
-        <p className="text-[12px] font-normal leading-normal text-white">
-          Coin Store
-        </p>
+      <header className="relative flex items-center justify-between gap-3 px-6 pt-2">
         {coinBalance != null ? (
           <button
             type="button"
             onClick={() => onOpenCoinHistory?.("coin_balance")}
             disabled={paymentInProgress}
-            className="inline-flex min-h-11 touch-manipulation items-center gap-[3px] disabled:opacity-40"
-            aria-label="Coin history"
+            className="inline-flex min-h-11 min-w-0 touch-manipulation items-center disabled:opacity-40"
+            aria-label={`${formatBalance(coinBalance)} coins`}
           >
-            <FigmaCoin className="h-8 w-8 shrink-0" />
-            <span className="text-[32px] font-semibold leading-none text-[#E9E7E9]">
-              {formatBalance(coinBalance)}
+            <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-white/80 py-0.5 pl-0.5 pr-3">
+              <FigmaCoin className="h-8 w-8 shrink-0" />
+              <span className="truncate text-[20px] font-semibold leading-none text-[#E9E7E9]">
+                {formatBalance(coinBalance)}
+              </span>
             </span>
+          </button>
+        ) : (
+          <span />
+        )}
+        <button
+          type="button"
+          onClick={() => onOpenCoinHistory?.("help")}
+          disabled={paymentInProgress}
+          className="inline-flex min-h-11 shrink-0 touch-manipulation items-center disabled:opacity-40"
+        >
+          <span className="inline-flex items-center gap-[5px] rounded-[21px] bg-[#0A2548] py-1 pl-1.5 pr-2 text-[14px] font-normal text-[#E9E7E9]">
             <img
-              src={ZINTLE_CHEVRON_SRC}
+              src={ZINTLE_HELP_ICON_SRC}
               alt=""
-              width={20}
-              height={20}
+              width={18}
+              height={18}
               draggable={false}
             />
-          </button>
-        ) : null}
+            Help
+          </span>
+        </button>
       </header>
 
-      <main className="relative flex flex-col gap-4 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[15px]">
+      <main className="relative flex flex-col gap-4 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3">
         {!hasRows && (
           <div className="rounded-[16px] bg-[rgba(10,37,72,0.3)] px-6 py-10 text-center">
             <p className="text-sm text-white/70">

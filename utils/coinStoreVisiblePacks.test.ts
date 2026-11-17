@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { CoinStorePack, SubscriptionPlan } from "../components/CoinStoreMobile";
 import {
   comparePlanPrice,
+  getZintleQuickRechargeSheetPacks,
   getZintleVisibleStorePacks,
 } from "./coinStoreVisiblePacks.ts";
 
@@ -61,6 +62,103 @@ describe("getZintleVisibleStorePacks", () => {
     assert.deepEqual(
       rows.map((row) => row.id),
       [21, 50],
+    );
+  });
+});
+
+describe("getZintleQuickRechargeSheetPacks", () => {
+  it("shows weeklies after most purchased and keeps two one-time packs", () => {
+    const rows = getZintleQuickRechargeSheetPacks({
+      isMember: false,
+      timerPack: null,
+      micropacks: [
+        starter,
+        value,
+        pack({ id: 48, coins: 300, price: 49, name: "Value plus" }),
+        pack({ id: 23, coins: 480, price: 79, name: "Generic" }),
+        recommended,
+      ],
+      featuredWeeklyPlan: plan(10, 100),
+      basicWeeklyPlan: plan(9, 29),
+    });
+    assert.deepEqual(
+      rows.map((row) => row.id),
+      [21, 50, 9, 10, 49, 48],
+    );
+  });
+
+  it("keeps a cheaper weekly out of the starter slot", () => {
+    const rows = getZintleQuickRechargeSheetPacks({
+      isMember: false,
+      timerPack: null,
+      micropacks: [pack({ id: 49, coins: 200, price: 39, name: "Value" })],
+      featuredWeeklyPlan: {
+        ...plan(9, 29),
+        plan_name: "Recommended starter weekly",
+      },
+      basicWeeklyPlan: null,
+    });
+    assert.deepEqual(
+      rows.map((row) => row.id),
+      [49, 9],
+    );
+  });
+
+  it("drops a coin that shares an id with a weekly", () => {
+    const rows = getZintleQuickRechargeSheetPacks({
+      isMember: false,
+      timerPack: null,
+      micropacks: [
+        pack({ id: 9, coins: 200, price: 19, name: "Starter pack" }),
+        recommended,
+        value,
+      ],
+      featuredWeeklyPlan: plan(9, 29),
+      basicWeeklyPlan: plan(10, 100),
+    });
+    assert.deepEqual(
+      rows.map((row) => row.id),
+      [49, 50, 9, 10],
+    );
+  });
+
+  it("shows a repeated weekly once and hides one with no price", () => {
+    const repeated = getZintleQuickRechargeSheetPacks({
+      isMember: false,
+      timerPack: null,
+      micropacks: [starter],
+      featuredWeeklyPlan: plan(9, 100),
+      basicWeeklyPlan: plan(9, 29),
+    });
+    assert.deepEqual(
+      repeated.map((row) => row.id),
+      [21, 9],
+    );
+
+    const unpriced = getZintleQuickRechargeSheetPacks({
+      isMember: false,
+      timerPack: null,
+      micropacks: [starter],
+      featuredWeeklyPlan: { ...plan(10, 100), price: Number.NaN },
+      basicWeeklyPlan: plan(9, 29),
+    });
+    assert.deepEqual(
+      unpriced.map((row) => row.id),
+      [21, 9],
+    );
+  });
+
+  it("hides weeklies for a member", () => {
+    const rows = getZintleQuickRechargeSheetPacks({
+      isMember: true,
+      timerPack: null,
+      micropacks: [starter, recommended, value],
+      featuredWeeklyPlan: plan(10, 100),
+      basicWeeklyPlan: plan(9, 29),
+    });
+    assert.deepEqual(
+      rows.map((row) => row.id),
+      [21, 50, 49],
     );
   });
 });

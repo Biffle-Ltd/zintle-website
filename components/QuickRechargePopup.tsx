@@ -153,6 +153,8 @@ type QuickRechargePopupProps = {
   onMorePlans?: () => void;
   /** One-time rows under Most Purchased. Null shows every remaining pack. */
   oneTimeLimit?: number | null;
+  /** Weekly plans, cheapest first. Shown after Most Purchased. */
+  weeklyPacks?: QuickRechargePack[];
   /**
    * `page` fills the webview. The native coin-store sheet already draws the
    * handle and the rounded frame. `sheet` is the in-call card.
@@ -168,6 +170,7 @@ export const QuickRechargePopup = ({
   onContinue,
   onMorePlans,
   oneTimeLimit = SHEET_ONE_TIME_PREVIEW,
+  weeklyPacks = [],
   layout = "sheet",
   callContext = null,
   coinBalance = null,
@@ -186,23 +189,37 @@ export const QuickRechargePopup = ({
   }, []);
 
   const sheet = useMemo(() => {
-    const split = splitCoinStoreOffers(packs as CoinStorePack[]);
+    const seenWeekly = new Set<number>();
+    const weeklies = weeklyPacks.filter((pack) => {
+      if (seenWeekly.has(pack.id)) return false;
+      seenWeekly.add(pack.id);
+      return true;
+    });
+    // Split coins only. A weekly mixed into `packs` is often the cheapest row,
+    // and its name can match "starter" or "recommended", so it would take
+    // those headings and show up a second time below.
+    const coins = (packs as CoinStorePack[]).filter(
+      (pack) => !seenWeekly.has(pack.id),
+    );
+    const split = splitCoinStoreOffers(coins);
     const oneTime = [...split.oneTime].sort(comparePackPrice);
+    const preview = oneTimeLimit == null ? oneTime : oneTime.slice(0, oneTimeLimit);
     const ordered = [
       ...(split.starter ? [split.starter] : []),
       ...(split.mostPurchased ? [split.mostPurchased] : []),
+      ...weeklies,
       ...oneTime,
     ];
     const indexOf = (id: number) => ordered.findIndex((pack) => pack.id === id);
     return {
       starter: split.starter,
       mostPurchased: split.mostPurchased,
-      preview:
-        oneTimeLimit == null ? oneTime : oneTime.slice(0, oneTimeLimit),
+      weeklies,
+      preview,
       indexOf,
       empty: ordered.length === 0,
     };
-  }, [packs, oneTimeLimit]);
+  }, [packs, oneTimeLimit, weeklyPacks]);
   const balance = coinBalance ?? callContext?.walletBalance ?? null;
 
   const buy = (pack: QuickRechargePack, index: number) => {
@@ -305,6 +322,25 @@ export const QuickRechargePopup = ({
                     )
                   }
                 />
+              </section>
+            )}
+
+            {sheet.weeklies.length > 0 && (
+              <section className="flex flex-col gap-2">
+                <h3 className="text-[16px] font-medium leading-5 text-white">
+                  Weekly Plan
+                </h3>
+                <div className="flex flex-col gap-2">
+                  {sheet.weeklies.map((pack) => (
+                    <PackRow
+                      key={pack.id}
+                      pack={{ ...pack, showOffer: false }}
+                      tone="plain"
+                      disabled={paymentInProgress}
+                      onBuy={() => buy(pack, sheet.indexOf(pack.id))}
+                    />
+                  ))}
+                </div>
               </section>
             )}
 

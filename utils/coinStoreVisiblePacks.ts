@@ -1,7 +1,6 @@
 import type { CoinStorePack, SubscriptionPlan } from "../components/CoinStoreMobile";
 import {
   comparePackPrice,
-  orderedOfferPacks,
   packCardFigures,
   splitCoinStoreOffers,
 } from "./coinStoreOffer.ts";
@@ -26,6 +25,29 @@ export function comparePlanPrice(
     return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
   };
   return price(a) - price(b) || a.id - b.id;
+}
+
+/**
+ * Weeklies for a non-member, cheapest first. The same plan can arrive in both
+ * slots, and a non-finite price would render as ₹0 while still starting a
+ * mandate, so both are dropped.
+ */
+export function uniqueWeeklyPlans(
+  isMember: boolean,
+  featured?: SubscriptionPlan | null,
+  basic?: SubscriptionPlan | null,
+): SubscriptionPlan[] {
+  if (isMember) return [];
+  const seen = new Set<number>();
+  return [featured, basic]
+    .filter((plan): plan is SubscriptionPlan => plan != null)
+    .filter((plan) => Number.isFinite(Number(plan.price)))
+    .sort(comparePlanPrice)
+    .filter((plan) => {
+      if (seen.has(plan.id)) return false;
+      seen.add(plan.id);
+      return true;
+    });
 }
 
 export function analyticsFlagsForStorePack(
@@ -214,16 +236,34 @@ export function getZintleQuickRechargePacks(options: {
 
 const ZINTLE_SHEET_ONE_TIME_PREVIEW = 2;
 
-/** Cards actually on the Zintle quick-recharge sheet, in on-screen order. */
+/** Zintle quick recharge is a short sheet: starter, most purchased, weeklies, then two one-time packs. */
 export function getZintleQuickRechargeSheetPacks(options: {
   isMember: boolean;
   timerPack: CoinStorePack | null;
   micropacks: CoinStorePack[];
+  featuredWeeklyPlan?: SubscriptionPlan | null;
+  basicWeeklyPlan?: SubscriptionPlan | null;
 }): CoinStorePack[] {
-  return orderedOfferPacks(
-    getZintleQuickRechargePacks(options),
-    ZINTLE_SHEET_ONE_TIME_PREVIEW,
+  const weeklies = uniqueWeeklyPlans(
+    options.isMember,
+    options.featuredWeeklyPlan,
+    options.basicWeeklyPlan,
+  ).map(weeklyPlanToStorePack);
+  // A weekly that shares an id with a coin, or is cheaper than the coins, must
+  // not be classified as Starter or Most Purchased.
+  const weeklyIds = new Set(weeklies.map((pack) => pack.id));
+  const offers = splitCoinStoreOffers(
+    getZintleQuickRechargePacks(options).filter((pack) => !weeklyIds.has(pack.id)),
   );
+  const oneTime = [...offers.oneTime]
+    .sort(comparePackPrice)
+    .slice(0, ZINTLE_SHEET_ONE_TIME_PREVIEW);
+  return [
+    ...(offers.starter ? [offers.starter] : []),
+    ...(offers.mostPurchased ? [offers.mostPurchased] : []),
+    ...weeklies,
+    ...oneTime,
+  ];
 }
 
 /**
@@ -248,10 +288,16 @@ export function getZintleVisibleStorePacks(options: {
     topPlans,
     freeTrialPack,
   } = options;
+  const weeklies = uniqueWeeklyPlans(
+    isMember,
+    featuredWeeklyPlan,
+    basicWeeklyPlan,
+  );
+  const weeklyIds = new Set(weeklies.map((plan) => plan.id));
   const coins: CoinStorePack[] = [];
   const seen = new Set<number>();
   const pushCoin = (pack: CoinStorePack | null | undefined) => {
-    if (pack == null || seen.has(pack.id)) return;
+    if (pack == null || seen.has(pack.id) || weeklyIds.has(pack.id)) return;
     seen.add(pack.id);
     coins.push(pack);
   };
@@ -270,12 +316,7 @@ export function getZintleVisibleStorePacks(options: {
   if (!isMember) pushRow(freeTrialPack);
   pushRow(offers.starter);
   pushRow(offers.mostPurchased);
-  if (!isMember) {
-    const weeklies = [featuredWeeklyPlan, basicWeeklyPlan]
-      .filter((plan): plan is SubscriptionPlan => plan != null)
-      .sort(comparePlanPrice);
-    for (const plan of weeklies) pushRow(weeklyPlanToStorePack(plan));
-  }
+  for (const plan of weeklies) pushRow(weeklyPlanToStorePack(plan));
   for (const pack of [...offers.oneTime].sort(comparePackPrice)) pushRow(pack);
   return rows;
 }

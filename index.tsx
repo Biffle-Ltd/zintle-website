@@ -160,6 +160,7 @@ import {
   getZintleVisibleStorePacks,
   toCoinPackForAnalytics,
   weeklyPlanToStorePack,
+  uniqueWeeklyPlans,
 } from "./utils/coinStoreVisiblePacks";
 import {
   freeTrialToStorePack,
@@ -2578,14 +2579,24 @@ const CoinsPage = ({
     };
   }, [pollMandateStatus]);
 
+  const zintleQuickRechargeWeeklies = useMemo(
+    () =>
+      uniqueWeeklyPlans(isMember, featuredWeeklyPlan, basicWeeklyPlan).map(
+        weeklyPlanToStorePack,
+      ),
+    [isMember, featuredWeeklyPlan, basicWeeklyPlan],
+  );
+
   const zintleQuickRechargePacks = useMemo(
     () =>
       getZintleQuickRechargeSheetPacks({
         isMember,
         timerPack,
         micropacks: displayedPacks,
+        featuredWeeklyPlan,
+        basicWeeklyPlan,
       }),
-    [isMember, timerPack, displayedPacks],
+    [isMember, timerPack, displayedPacks, featuredWeeklyPlan, basicWeeklyPlan],
   );
 
   const visibleAnalyticsPacks = useMemo(() => {
@@ -3295,6 +3306,7 @@ const CoinsPage = ({
         <QuickRechargePopup
           layout="page"
           packs={zintleQuickRechargePacks}
+          weeklyPacks={zintleQuickRechargeWeeklies}
           onMorePlans={openFullCoinStore}
           onOpenCoinHistory={() => openCoinHistory("coin_balance")}
           selectedPackageId={selectedPackage?.id ?? null}

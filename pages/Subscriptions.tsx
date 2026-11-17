@@ -44,12 +44,14 @@ import {
   enrichCampaignPixelContext,
   parseCampaignPixelContext,
   parseIsCampaignParam,
+  sendCampaignInitiateCheckout,
   sendCampaignStartTrial,
   sendCampaignTrialPurchaseInitiated,
 } from "../utils/campaignPixelEvents";
 import {
   copyShareChatVerifyParams,
   mergeRememberedShareChatVerifySearch,
+  readShareChatClick,
   rememberShareChatVerifySearch,
   sendShareChatInitiateCheckout,
   sendShareChatStartTrial,
@@ -732,9 +734,19 @@ export const Subscriptions = ({
   const startTrialEventSentRef = useRef(false);
   const initiateCheckoutSentRef = useRef(false);
   const campaignLanguageGateCheckedRef = useRef(false);
-  const [campaignLanguageGateReady, setCampaignLanguageGateReady] = useState(
-    () => !isCampaign || !isLoggedIn || !isBiffleOrganisationId(organisationId),
+  const languageGateRequired =
+    isCampaign && isLoggedIn && isBiffleOrganisationId(organisationId);
+  const [languageGateRequiredSeen, setLanguageGateRequiredSeen] = useState(
+    languageGateRequired,
   );
+  const [campaignLanguageGateReady, setCampaignLanguageGateReady] = useState(
+    () => !languageGateRequired,
+  );
+  if (languageGateRequired !== languageGateRequiredSeen) {
+    setLanguageGateRequiredSeen(languageGateRequired);
+    setCampaignLanguageGateReady(!languageGateRequired);
+    campaignLanguageGateCheckedRef.current = false;
+  }
 
   useEffect(() => {
     if (
@@ -750,6 +762,7 @@ export const Subscriptions = ({
     setCampaignLanguageGateReady(false);
 
     let cancelled = false;
+    let settled = false;
     const shareChatSearch =
       mergeRememberedShareChatVerifySearch(location.search) ?? location.search;
     const checkoutPath = `${location.pathname}${shareChatSearch}`;
@@ -757,7 +770,10 @@ export const Subscriptions = ({
     void (async () => {
       const authToken = headerSafeToken(token);
       if (!authToken) {
-        if (!cancelled) setCampaignLanguageGateReady(true);
+        if (!cancelled) {
+          settled = true;
+          setCampaignLanguageGateReady(true);
+        }
         return;
       }
 
@@ -770,28 +786,15 @@ export const Subscriptions = ({
       });
 
       if (cancelled || result === "redirecting") return;
+      settled = true;
       setCampaignLanguageGateReady(true);
     })();
 
     return () => {
       cancelled = true;
+      if (!settled) campaignLanguageGateCheckedRef.current = false;
     };
   }, [isCampaign, isLoggedIn, location.pathname, location.search, navigate, organisationId, token]);
-
-  useEffect(() => {
-    if (initiateCheckoutSentRef.current) return;
-    if (!isCampaign || !isLoggedIn || !campaignLanguageGateReady) return;
-    if (!planId || planDetailsState.loading || !planDetailsState.data) return;
-    initiateCheckoutSentRef.current = true;
-    sendShareChatInitiateCheckout();
-  }, [
-    isCampaign,
-    isLoggedIn,
-    campaignLanguageGateReady,
-    planId,
-    planDetailsState.loading,
-    planDetailsState.data,
-  ]);
 
   useLayoutEffect(() => {
     if (!isCampaign) return;
@@ -828,6 +831,30 @@ export const Subscriptions = ({
     });
     return enrichCampaignPixelContext(base, organisationId);
   }, [location.pathname, location.search, organisationId, planId, token]);
+
+  useEffect(() => {
+    if (initiateCheckoutSentRef.current) return;
+    if (!isCampaign || !isLoggedIn || !campaignLanguageGateReady) return;
+    if (!planId || planDetailsState.loading || !planDetailsState.data) return;
+    initiateCheckoutSentRef.current = true;
+    const shareChatClick = readShareChatClick(location.search, organisationId);
+    sendCampaignInitiateCheckout(
+      buildCampaignEventContext(),
+      planDetailsState.data,
+      shareChatClick,
+    );
+    sendShareChatInitiateCheckout();
+  }, [
+    isCampaign,
+    isLoggedIn,
+    campaignLanguageGateReady,
+    planId,
+    planDetailsState.loading,
+    planDetailsState.data,
+    location.search,
+    organisationId,
+    buildCampaignEventContext,
+  ]);
 
   const promptCampaignReLogin = useCallback(() => {
     clearJwtForOrganisation(organisationId);
@@ -1072,6 +1099,10 @@ export const Subscriptions = ({
       buildCampaignEventContext(),
       planDetailsState.data,
       method,
+      readShareChatClick(
+        typeof window !== "undefined" ? window.location.search : location.search,
+        organisationId,
+      ),
     );
     const targetAppOverride =
       method === "phonepe"
@@ -1186,6 +1217,10 @@ export const Subscriptions = ({
             {
               mandate_id: result.id,
               mandate_state: result.mandate_state,
+              shareChatClick: readShareChatClick(
+                typeof window !== "undefined" ? window.location.search : "",
+                organisationId,
+              ),
             },
           );
           sendShareChatStartTrial();

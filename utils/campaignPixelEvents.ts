@@ -9,6 +9,7 @@ import { getLoginPhoneForOrganisation } from "./loginContactStorage";
 import { sendUserCenterAnalyticsEvent } from "./coinAnalyticsApi";
 import { getOrganisationIdFromSearch } from "./organisationIdFromUrl";
 import { headerSafeToken } from "./headerSafeToken";
+import type { ShareChatClick } from "./shareChatPixel";
 import { isWhaleLoginPath, readWebCallLoginOption } from "./webCampaign";
 
 export type CampaignPixelEventName =
@@ -17,6 +18,7 @@ export type CampaignPixelEventName =
   | "campaign_login_successful"
   | "campaign_language_saved"
   | "campaign_trial_purchase_initiated"
+  | "campaign_initiate_checkout"
   | "campaign_start_trial";
 
 export type ParsedCampaignPixelContext = {
@@ -214,6 +216,26 @@ function buildBaseEventParams(
   };
 }
 
+function shareChatEventFields(
+  click: ShareChatClick | null | undefined,
+): Record<string, unknown> {
+  if (!click) return {};
+  return {
+    sharechat: true,
+    ...(click.campaignId
+      ? { sharechat_campaign_id: click.campaignId }
+      : {}),
+    ...(click.creativeId
+      ? { sharechat_creative_id: click.creativeId }
+      : {}),
+    ...(click.adsUuid ? { sharechat_ads_uuid: click.adsUuid } : {}),
+    ...(click.advertiserId
+      ? { sharechat_advertiser_id: click.advertiserId }
+      : {}),
+    ...(click.verify ? { sharechat_verify: true } : {}),
+  };
+}
+
 function planToEventInfo(plan: CampaignPlanEventInfo | null | undefined) {
   if (!plan) return {};
   return {
@@ -312,9 +334,11 @@ export function sendCampaignTrialPurchaseInitiated(
   ctx: ParsedCampaignPixelContext,
   plan: CampaignPlanEventInfo | null | undefined,
   paymentMethod: string,
+  shareChatClick?: ShareChatClick | null,
 ): void {
   const eventParams = {
     ...buildBaseEventParams(ctx),
+    ...shareChatEventFields(shareChatClick),
     event_info: {
       ...planToEventInfo(plan),
       payment_method: paymentMethod,
@@ -323,13 +347,31 @@ export function sendCampaignTrialPurchaseInitiated(
   sendCampaignEvent(ctx, "campaign_trial_purchase_initiated", eventParams);
 }
 
-export function sendCampaignStartTrial(
+export function sendCampaignInitiateCheckout(
   ctx: ParsedCampaignPixelContext,
   plan: CampaignPlanEventInfo | null | undefined,
-  args: { mandate_id: number; mandate_state: string },
+  shareChatClick?: ShareChatClick | null,
 ): void {
   const eventParams = {
     ...buildBaseEventParams(ctx),
+    ...shareChatEventFields(shareChatClick),
+    event_info: planToEventInfo(plan),
+  };
+  sendCampaignEvent(ctx, "campaign_initiate_checkout", eventParams);
+}
+
+export function sendCampaignStartTrial(
+  ctx: ParsedCampaignPixelContext,
+  plan: CampaignPlanEventInfo | null | undefined,
+  args: {
+    mandate_id: number;
+    mandate_state: string;
+    shareChatClick?: ShareChatClick | null;
+  },
+): void {
+  const eventParams = {
+    ...buildBaseEventParams(ctx),
+    ...shareChatEventFields(args.shareChatClick),
     event_info: {
       ...planToEventInfo(plan),
       mandate_id: args.mandate_id,

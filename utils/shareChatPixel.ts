@@ -50,6 +50,74 @@ export function fillMissingShareChatVerifyParams(
   return changed;
 }
 
+const SHARE_CHAT_CLICK_ID_KEYS = [
+  "campaignId",
+  "creativeId",
+  "adsUuid",
+  "advertiserId",
+] as const;
+
+export type ShareChatClick = {
+  campaignId: string;
+  creativeId: string;
+  adsUuid: string;
+  advertiserId: string;
+  verify: boolean;
+};
+
+function clickFromParams(params: URLSearchParams): ShareChatClick | null {
+  const campaignId = params.get("campaignId")?.trim() ?? "";
+  const creativeId = params.get("creativeId")?.trim() ?? "";
+  const adsUuid = params.get("adsUuid")?.trim() ?? "";
+  const advertiserId = params.get("advertiserId")?.trim() ?? "";
+  if (!campaignId || !creativeId || !adsUuid || !advertiserId) return null;
+  return {
+    campaignId,
+    creativeId,
+    adsUuid,
+    advertiserId,
+    verify: (params.get("verify")?.trim() ?? "") === "true",
+  };
+}
+
+function rememberedShareChatParams(): URLSearchParams | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(SHARE_CHAT_VERIFY_STORAGE_KEY) || "";
+    return raw ? new URLSearchParams(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A full ShareChat click from this page. A URL that already has any click id
+ * is used on its own, so an older tab cannot fill in the missing ones.
+ * A URL with none of them can use this tab's saved click for the same brand.
+ * `verify` is their test link.
+ */
+export function readShareChatClick(
+  search: string,
+  organisationId?: string,
+): ShareChatClick | null {
+  const params = searchParamsFrom(search);
+  const fromUrl = clickFromParams(params);
+  if (fromUrl) return fromUrl;
+
+  const urlHasClickId = SHARE_CHAT_CLICK_ID_KEYS.some(
+    (key) => (params.get(key)?.trim() ?? "") !== "",
+  );
+  if (urlHasClickId) return null;
+
+  const remembered = rememberedShareChatParams();
+  if (!remembered) return null;
+  const storedOrg = remembered.get("organisation_id")?.trim() ?? "";
+  const pageOrg =
+    organisationId?.trim() || params.get("organisation_id")?.trim() || "";
+  if (storedOrg && pageOrg && storedOrg !== pageOrg) return null;
+  return clickFromParams(remembered);
+}
+
 export function shareChatVerifySearchHasParams(search: string): boolean {
   const params = searchParamsFrom(search);
   return SHARE_CHAT_VERIFY_QUERY_KEYS.some(
@@ -60,8 +128,11 @@ export function shareChatVerifySearchHasParams(search: string): boolean {
 export function rememberShareChatVerifySearch(search: string): void {
   if (typeof sessionStorage === "undefined") return;
   if (!shareChatVerifySearchHasParams(search)) return;
+  const source = searchParamsFrom(search);
   const kept = new URLSearchParams();
-  copyShareChatVerifyParams(searchParamsFrom(search), kept);
+  copyShareChatVerifyParams(source, kept);
+  const organisationId = source.get("organisation_id")?.trim() ?? "";
+  if (organisationId) kept.set("organisation_id", organisationId);
   try {
     sessionStorage.setItem(SHARE_CHAT_VERIFY_STORAGE_KEY, kept.toString());
   } catch {

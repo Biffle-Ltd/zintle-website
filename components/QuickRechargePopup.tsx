@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from "react";
-import { ZintleCoinIcon } from "./ZintleCoinIcon";
+import { ZINTLE_BALANCE_COIN_SRC } from "../utils/coinStoreAssets";
 import type { CoinStorePack, SubscriptionPlan } from "./CoinStoreMobile";
 import type { QuickRechargeCallContext } from "../utils/quickRecharge";
 import type { CoinPurchaseSurface } from "../utils/pixelEvents";
@@ -94,7 +94,16 @@ function PackRow({
           className={`flex min-w-0 items-center ${plain ? "gap-[5px]" : "gap-[7px]"}`}
         >
           <span className="flex shrink-0 items-center gap-0.5">
-            <ZintleCoinIcon size={24} className="h-6 w-6 shrink-0" />
+            <img
+              src={ZINTLE_BALANCE_COIN_SRC}
+              alt=""
+              width={96}
+              height={96}
+              decoding="async"
+              fetchPriority="high"
+              draggable={false}
+              className="h-6 w-6 shrink-0"
+            />
             <span className="whitespace-nowrap text-[16px] font-semibold leading-[1.15] text-white">
               {formatCoinAmount(figures.coins)}
             </span>
@@ -144,6 +153,11 @@ type QuickRechargePopupProps = {
   onMorePlans?: () => void;
   /** One-time rows under Most Purchased. Null shows every remaining pack. */
   oneTimeLimit?: number | null;
+  /**
+   * `page` fills the webview. The native coin-store sheet already draws the
+   * handle and the rounded frame. `sheet` is the in-call card.
+   */
+  layout?: "page" | "sheet";
 };
 
 const SHEET_ONE_TIME_PREVIEW = 2;
@@ -154,6 +168,7 @@ export const QuickRechargePopup = ({
   onContinue,
   onMorePlans,
   oneTimeLimit = SHEET_ONE_TIME_PREVIEW,
+  layout = "sheet",
   callContext = null,
   coinBalance = null,
   onOpenCoinHistory,
@@ -196,16 +211,30 @@ export const QuickRechargePopup = ({
     onContinue(pack);
   };
 
+  const page = layout === "page";
+
   return (
     <div
-      className="flex max-h-full min-h-0 w-full touch-manipulation flex-col items-center gap-6 overflow-hidden rounded-[26px] bg-[#011735] p-4"
+      className={
+        page
+          ? "flex min-h-dvh w-full touch-manipulation flex-col bg-[#011735] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] min-[390px]:px-6"
+          : "flex max-h-full min-h-0 w-full touch-manipulation flex-col items-center gap-6 overflow-hidden rounded-[26px] bg-[#011735] p-4"
+      }
       style={{ fontFamily: SHEET_FONT }}
-      role="dialog"
+      role={page ? "main" : "dialog"}
       aria-label="Quick recharge"
     >
-      <div className="h-[3px] w-[41px] shrink-0 rounded-full bg-[#E9E7E9] opacity-40" />
+      {!page && (
+        <div className="h-[3px] w-[41px] shrink-0 rounded-full bg-[#E9E7E9] opacity-40" />
+      )}
 
-      <div className="flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div
+        className={
+          page
+            ? "flex w-full flex-col gap-4"
+            : "flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        }
+      >
         <div className="flex items-center justify-between gap-3">
           <h2 className="min-w-0 text-[20px] font-medium leading-6 text-[#E9E7E9]">
             Quick Recharge
@@ -215,10 +244,19 @@ export const QuickRechargePopup = ({
               type="button"
               onClick={() => onOpenCoinHistory?.()}
               disabled={paymentInProgress}
-              className="inline-flex min-h-11 shrink-0 touch-manipulation items-center gap-[3px] rounded-[21px] border border-white/20 bg-[#0A2548] py-1 pl-1.5 pr-2 disabled:opacity-40"
+              className="inline-flex min-h-11 shrink-0 touch-manipulation items-center gap-1 rounded-full border border-white/80 bg-transparent py-1 pl-1 pr-2.5 disabled:opacity-40"
               aria-label="Coin history"
             >
-              <ZintleCoinIcon size={24} className="h-6 w-6 shrink-0" />
+              <img
+                src={ZINTLE_BALANCE_COIN_SRC}
+                alt=""
+                width={96}
+                height={96}
+                decoding="async"
+                fetchPriority="high"
+                draggable={false}
+                className="h-6 w-6 shrink-0"
+              />
               <span className="text-[16px] font-semibold leading-5 text-[#E9E7E9]">
                 {formatBalance(balance)}
               </span>

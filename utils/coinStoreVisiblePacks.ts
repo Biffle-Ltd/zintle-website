@@ -1,6 +1,11 @@
 import type { CoinStorePack, SubscriptionPlan } from "../components/CoinStoreMobile";
-import { orderedOfferPacks, packCardFigures } from "./coinStoreOffer";
-import type { CoinPackForAnalytics } from "./pixelEvents";
+import {
+  comparePackPrice,
+  orderedOfferPacks,
+  packCardFigures,
+  splitCoinStoreOffers,
+} from "./coinStoreOffer.ts";
+import type { CoinPackForAnalytics } from "./pixelEvents.ts";
 
 export function weeklyPlanToStorePack(plan: SubscriptionPlan): CoinStorePack {
   return {
@@ -9,6 +14,18 @@ export function weeklyPlanToStorePack(plan: SubscriptionPlan): CoinStorePack {
     price: plan.price,
     name: plan.plan_name,
   };
+}
+
+/** Cheapest weekly first. A missing price sorts last, then by id. */
+export function comparePlanPrice(
+  a: SubscriptionPlan,
+  b: SubscriptionPlan,
+): number {
+  const price = (plan: SubscriptionPlan) => {
+    const n = Number(plan.price);
+    return Number.isFinite(n) ? n : Number.POSITIVE_INFINITY;
+  };
+  return price(a) - price(b) || a.id - b.id;
 }
 
 export function analyticsFlagsForStorePack(
@@ -211,7 +228,7 @@ export function getZintleQuickRechargeSheetPacks(options: {
 
 /**
  * Full Zintle store in the order the screen renders it: trial, starter,
- * most purchased, one-time by price, then weekly plans.
+ * most purchased, weekly plans cheapest first, then one-time by price.
  */
 export function getZintleVisibleStorePacks(options: {
   isMember: boolean;
@@ -249,13 +266,16 @@ export function getZintleVisibleStorePacks(options: {
     seenRows.add(pack.id);
     rows.push(pack);
   };
+  const offers = splitCoinStoreOffers(coins);
   if (!isMember) pushRow(freeTrialPack);
-  for (const pack of orderedOfferPacks(coins, null)) pushRow(pack);
-  if (!isMember && featuredWeeklyPlan) {
-    pushRow(weeklyPlanToStorePack(featuredWeeklyPlan));
+  pushRow(offers.starter);
+  pushRow(offers.mostPurchased);
+  if (!isMember) {
+    const weeklies = [featuredWeeklyPlan, basicWeeklyPlan]
+      .filter((plan): plan is SubscriptionPlan => plan != null)
+      .sort(comparePlanPrice);
+    for (const plan of weeklies) pushRow(weeklyPlanToStorePack(plan));
   }
-  if (!isMember && basicWeeklyPlan) {
-    pushRow(weeklyPlanToStorePack(basicWeeklyPlan));
-  }
+  for (const pack of [...offers.oneTime].sort(comparePackPrice)) pushRow(pack);
   return rows;
 }

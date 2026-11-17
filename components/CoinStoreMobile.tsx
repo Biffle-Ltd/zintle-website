@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ZintleCoinIcon } from "./ZintleCoinIcon";
-import { getCoinStoreTimerEndMs } from "../utils/coinStoreTimer";
 import {
   comparePackPrice,
   packCardFigures,
   splitCoinStoreOffers,
 } from "../utils/coinStoreOffer";
-import { weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
+import { comparePlanPrice, weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
 import { freeTrialToStorePack, type VisibleFreeTrial } from "../utils/freeTrialOffer";
+import { ZINTLE_BALANCE_COIN_SRC, ZINTLE_CHEVRON_SRC, ZINTLE_HELP_ICON_SRC } from "../utils/coinStoreAssets";
 
 export const TIMER_COIN_PRODUCT_ID = "coin_100";
 export const TIMER_COIN_FALLBACK_PRODUCT_ID = "coin_149";
@@ -85,7 +84,7 @@ type CoinStoreMobileProps = {
   basicWeeklyPlan: SubscriptionPlan | null;
   freeTrial?: VisibleFreeTrial | null;
   paymentInProgress?: boolean;
-  /** Wallet balance. Rendered once, at the top left. */
+  /** Wallet balance. Centered under the store title, with a chevron. */
   coinBalance?: number | null;
   /** Balance and Help both open coin history for now. */
   onOpenCoinHistory?: (source: "coin_balance" | "help") => void;
@@ -93,44 +92,52 @@ type CoinStoreMobileProps = {
 
 type PackTone = "starter" | "highlight" | "plain";
 
-function HelpIcon() {
-  return (
-    <svg
-      viewBox="0 0 18 18"
-      className="h-[18px] w-[18px] shrink-0"
-      fill="none"
-      aria-hidden
-    >
-      <circle cx="9" cy="9" r="7.25" stroke="white" strokeWidth="1.5" />
-      <path
-        d="M7.1 7.05a1.9 1.9 0 1 1 2.55 1.78c-.45.18-.75.5-.75.97V10.2"
-        stroke="white"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-      <circle cx="9" cy="12.35" r="0.75" fill="white" />
-    </svg>
-  );
+function msUntilNextMidnight(now: number): number {
+  const end = new Date(now);
+  end.setHours(24, 0, 0, 0);
+  return Math.max(0, end.getTime() - now);
 }
 
-function useOfferClock(): { hours: string; minutes: string } {
-  const [endMs] = useState(() => getCoinStoreTimerEndMs());
-  const [remainingMs, setRemainingMs] = useState(() =>
-    Math.max(0, endMs - Date.now()),
-  );
+/** Time left in the local day: 24:00 minus the current clock, ticking every second. */
+function useDayCountdown(): { hours: string; minutes: string; seconds: string } {
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const tick = () => setRemainingMs(Math.max(0, endMs - Date.now()));
+    const tick = () => setNow(Date.now());
     tick();
     const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [endMs]);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
-  const total = Math.floor(remainingMs / 1000);
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
+  const total = Math.floor(msUntilNextMidnight(now) / 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return { hours: pad(hours), minutes: pad(minutes) };
+  return {
+    hours: pad(Math.floor(total / 3600)),
+    minutes: pad(Math.floor((total % 3600) / 60)),
+    seconds: pad(total % 60),
+  };
+}
+
+function FigmaCoin({ className }: { className?: string }) {
+  return (
+    <img
+      src={ZINTLE_BALANCE_COIN_SRC}
+      alt=""
+      width={96}
+      height={96}
+      decoding="async"
+      fetchPriority="high"
+      draggable={false}
+      className={className}
+    />
+  );
 }
 
 function PackRow({
@@ -183,7 +190,7 @@ function PackRow({
           className={`flex min-w-0 items-center ${plain ? "gap-[5px]" : "gap-[7px]"}`}
         >
           <span className="flex shrink-0 items-center gap-0.5">
-            <ZintleCoinIcon size={24} className="h-6 w-6 shrink-0" />
+            <FigmaCoin className="h-6 w-6 shrink-0" />
             <span className="whitespace-nowrap text-[16px] font-semibold leading-5 text-white">
               {formatCoins(figures.coins)}
             </span>
@@ -219,45 +226,45 @@ function TrialBanner({
   disabled: boolean;
   onBuy: () => void;
 }) {
-  const clock = useOfferClock();
+  const clock = useDayCountdown();
   const coins = trial.trialCoins;
   const title =
     coins != null && coins > 0
-      ? `Trial Pack - ${formatCoins(coins)} Coins for ${formatRupee(trial.trialAmount)}`
-      : `Trial Pack for ${formatRupee(trial.trialAmount)}`;
+      ? `Trail Pack - ${formatCoins(coins)} Coins for ${formatRupee(trial.trialAmount)}`
+      : `Trail Pack for ${formatRupee(trial.trialAmount)}`;
 
   return (
     <button
       type="button"
       onClick={onBuy}
       disabled={disabled}
-      className="relative min-h-[72px] w-full touch-manipulation overflow-hidden rounded-[16px] bg-[linear-gradient(92.74deg,#F4486E_2.28%,#FF7000_94.35%)] px-4 pb-2 pt-[7px] text-center text-white transition-transform active:scale-[0.99] disabled:opacity-60"
+      className="relative min-h-[81px] w-full touch-manipulation overflow-hidden rounded-[16px] bg-[linear-gradient(101.45deg,#F4486E_2.28%,#FF7000_94.35%)] px-4 pb-2 pt-[7px] text-center text-white transition-transform active:scale-[0.99] disabled:opacity-60"
     >
-      <ZintleCoinIcon
-        size={78}
-        className="pointer-events-none absolute -left-4 top-1 h-[78px] w-[74px] -rotate-[15deg] opacity-90"
-      />
-      <ZintleCoinIcon
-        size={90}
-        className="pointer-events-none absolute -right-3 -top-1 h-[96px] w-[90px] rotate-[20deg] opacity-90"
-      />
-      <span className="relative z-[1] mx-auto block max-w-[min(220px,62vw)] text-balance text-[16px] font-semibold leading-5">
+      <FigmaCoin className="pointer-events-none absolute -left-10 top-2 h-8 w-8 -rotate-[15deg]" />
+      <FigmaCoin className="pointer-events-none absolute -left-6 top-1/2 h-[78px] w-[74px] -translate-y-1/2 -rotate-[15deg]" />
+      <FigmaCoin className="pointer-events-none absolute -right-4 top-0 h-[96px] w-[90px] rotate-[20deg]" />
+      <span className="relative z-[1] mx-auto block max-w-[230px] text-balance text-[16px] font-semibold leading-5">
         {title}
       </span>
       <span className="relative z-[1] mt-1 block text-[12px] font-normal leading-[15px]">
         A small token to get you started
       </span>
-      <span className="relative z-[1] mt-2 inline-flex items-center gap-0.5 text-[10px] font-medium">
-        <span className="inline-flex h-[18px] min-w-5 items-center justify-center rounded-[5px] bg-white px-[3px] font-semibold text-[#011735]">
-          {clock.hours}
-        </span>
-        <span className="px-0.5 font-bold leading-none">:</span>
-        <span className="inline-flex h-[18px] min-w-5 items-center justify-center rounded-[5px] bg-white px-[3px] font-semibold text-[#011735]">
-          {clock.minutes}
-        </span>
-        <span className="pl-0.5">Hr</span>
+      <span className="relative z-[1] mt-[9px] inline-flex items-center gap-0.5 whitespace-nowrap text-[10px]">
+        <TimeBox value={clock.hours} />
+        <span className="px-0.5 font-bold leading-[9px]">:</span>
+        <TimeBox value={clock.minutes} />
+        <span className="px-0.5 font-bold leading-[9px]">:</span>
+        <TimeBox value={clock.seconds} />
       </span>
     </button>
+  );
+}
+
+function TimeBox({ value }: { value: string }) {
+  return (
+    <span className="inline-flex h-[18px] min-w-5 items-center justify-center rounded-[5px] bg-white px-[3px] text-[10px] font-semibold leading-none text-[#011735]">
+      {value}
+    </span>
   );
 }
 
@@ -322,9 +329,9 @@ export const CoinStoreMobile = ({
 
   const weeklyPlans = useMemo(() => {
     if (isMember) return [] as SubscriptionPlan[];
-    return [featuredWeeklyPlan, basicWeeklyPlan].filter(
-      (plan): plan is SubscriptionPlan => plan != null,
-    );
+    return [featuredWeeklyPlan, basicWeeklyPlan]
+      .filter((plan): plan is SubscriptionPlan => plan != null)
+      .sort(comparePlanPrice);
   }, [isMember, featuredWeeklyPlan, basicWeeklyPlan]);
 
   const buy = (pack: CoinStorePack, index: number) => {
@@ -345,7 +352,7 @@ export const CoinStoreMobile = ({
 
   return (
     <div
-      className="relative min-h-dvh overflow-x-hidden bg-black md:hidden"
+      className="relative min-h-dvh overflow-x-hidden bg-[#011735] md:hidden"
       style={{ fontFamily: STORE_FONT }}
     >
       <div
@@ -353,38 +360,53 @@ export const CoinStoreMobile = ({
         aria-hidden
       />
 
-      <header className="relative flex items-center justify-between gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] min-[390px]:px-6">
+      <header className="relative flex flex-col items-center px-6 pt-[max(0.5rem,env(safe-area-inset-top))]">
+        <div className="flex w-full items-center justify-end py-2">
+          <button
+            type="button"
+            onClick={() => onOpenCoinHistory?.("help")}
+            disabled={paymentInProgress}
+            className="inline-flex min-h-11 touch-manipulation items-center disabled:opacity-40"
+          >
+            <span className="inline-flex items-center gap-[5px] rounded-[21px] bg-[#0A2548] py-1 pl-1.5 pr-2 text-[14px] font-normal text-[#E9E7E9]">
+              <img
+                src={ZINTLE_HELP_ICON_SRC}
+                alt=""
+                width={18}
+                height={18}
+                draggable={false}
+              />
+              Help
+            </span>
+          </button>
+        </div>
+        <p className="text-[12px] font-normal leading-normal text-white">
+          Coin Store
+        </p>
         {coinBalance != null ? (
           <button
             type="button"
             onClick={() => onOpenCoinHistory?.("coin_balance")}
             disabled={paymentInProgress}
-            className="flex min-h-11 min-w-0 touch-manipulation items-center gap-[3px] disabled:opacity-40"
+            className="inline-flex min-h-11 touch-manipulation items-center gap-[3px] disabled:opacity-40"
             aria-label="Coin history"
           >
-            <ZintleCoinIcon size={32} className="h-8 w-8 shrink-0" />
-            <span className="truncate text-[32px] font-semibold leading-[39px] text-[#E9E7E9]">
+            <FigmaCoin className="h-8 w-8 shrink-0" />
+            <span className="text-[32px] font-semibold leading-none text-[#E9E7E9]">
               {formatBalance(coinBalance)}
             </span>
+            <img
+              src={ZINTLE_CHEVRON_SRC}
+              alt=""
+              width={20}
+              height={20}
+              draggable={false}
+            />
           </button>
-        ) : (
-          <span />
-        )}
-        <button
-          type="button"
-          onClick={() => onOpenCoinHistory?.("help")}
-          disabled={paymentInProgress}
-          className="inline-flex h-11 shrink-0 touch-manipulation items-center disabled:opacity-40"
-          aria-label="Help"
-        >
-          <span className="inline-flex h-[26px] items-center gap-[5px] rounded-[21px] bg-[#0A2548] py-1 pl-1.5 pr-2 text-[14px] font-normal leading-[17px] text-[#E9E7E9]">
-            <HelpIcon />
-            Help
-          </span>
-        </button>
+        ) : null}
       </header>
 
-      <main className="relative flex flex-col gap-6 overflow-x-hidden px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 min-[390px]:px-6">
+      <main className="relative flex flex-col gap-4 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[15px]">
         {!hasRows && (
           <div className="rounded-[16px] bg-[rgba(10,37,72,0.3)] px-6 py-10 text-center">
             <p className="text-sm text-white/70">
@@ -432,25 +454,6 @@ export const CoinStoreMobile = ({
           </section>
         )}
 
-        {offers.oneTime.length > 0 && (
-          <section className="flex flex-col gap-4">
-            <h2 className="text-[16px] font-medium leading-5 text-white">
-              One Time Purchase
-            </h2>
-            <div className="flex flex-col gap-2">
-              {[...offers.oneTime].sort(comparePackPrice).map((pack) => (
-                <PackRow
-                  key={pack.id}
-                  pack={pack}
-                  tone="plain"
-                  disabled={paymentInProgress}
-                  onBuy={() => buy(pack, indexFor(pack))}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
         {weeklyPlans.length > 0 && (
           <section className="flex flex-col gap-2">
             <h2 className="text-[16px] font-medium leading-5 text-white">
@@ -470,6 +473,25 @@ export const CoinStoreMobile = ({
                   />
                 );
               })}
+            </div>
+          </section>
+        )}
+
+        {offers.oneTime.length > 0 && (
+          <section className="flex flex-col gap-4">
+            <h2 className="text-[16px] font-medium leading-5 text-white">
+              One Time Purchase
+            </h2>
+            <div className="flex flex-col gap-2">
+              {[...offers.oneTime].sort(comparePackPrice).map((pack) => (
+                <PackRow
+                  key={pack.id}
+                  pack={pack}
+                  tone="plain"
+                  disabled={paymentInProgress}
+                  onBuy={() => buy(pack, indexFor(pack))}
+                />
+              ))}
             </div>
           </section>
         )}

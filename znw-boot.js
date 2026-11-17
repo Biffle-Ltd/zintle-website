@@ -8,7 +8,7 @@
  * Keep token sanitizing in sync with utils/headerSafeToken.ts.
  * Keep JWT storage keys in sync with utils/authStorage.ts.
  * Keep /coins prefetch URLs in sync with coinPacksApi, userProfileApi,
- *   and subscriptionPlansApi.
+ *   subscriptionPlansApi, and fetchWalletBalance.
  */
 (function (window) {
   var HOST = "https://prod.biffle.ai";
@@ -127,7 +127,7 @@
       "@keyframes znw-spin{to{transform:rotate(360deg)}}" +
       ".znw-skel-bone{background-image:linear-gradient(90deg,var(--znw-skel-a,rgba(255,255,255,.1)) 0%,var(--znw-skel-b,rgba(255,255,255,.22)) 50%,var(--znw-skel-a,rgba(255,255,255,.1)) 100%);background-size:200% 100%;animation:znw-skel 1.15s ease-in-out infinite}" +
       "html.znw-coins-webview,html.znw-coins-webview body,html.znw-coins-webview body.font-sans{background:#000d26;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif!important}" +
-      "html.znw-quick-recharge,html.znw-quick-recharge body,html.znw-quick-recharge body.font-sans{background:transparent!important}" +
+      "html.znw-quick-recharge,html.znw-quick-recharge body,html.znw-quick-recharge body.font-sans{background:#011735!important}" +
       'html.znw-coins-webview[data-org="biffle"],html.znw-coins-webview[data-org="biffle"] body{background:#f5f5f5;--znw-skel-a:rgba(0,0,0,.06);--znw-skel-b:rgba(0,0,0,.12)}' +
       "html.znw-welcome-webview,html.znw-welcome-webview body,html.znw-welcome-webview body.font-sans{background:#fff;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif!important;--znw-skel-a:rgba(0,0,0,.06);--znw-skel-b:rgba(0,0,0,.12)}" +
       "html.znw-subs-webview,html.znw-subs-webview body,html.znw-subs-webview body.font-sans{background:#000;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif!important}" +
@@ -155,6 +155,52 @@
         "data-org",
         boot.biffle ? "biffle" : "zintle",
       );
+      if (!boot.biffle) {
+        /* Same path as utils/coinStoreAssets.ts. Starts before the app bundle. */
+        var coinPreload = document.createElement("link");
+        coinPreload.rel = "preload";
+        coinPreload.as = "image";
+        coinPreload.href = "/coin-store/zintle-balance-coin.png";
+        coinPreload.setAttribute("fetchpriority", "high");
+        document.head.appendChild(coinPreload);
+
+        var fontPreconnect = document.createElement("link");
+        fontPreconnect.rel = "preconnect";
+        fontPreconnect.href = "https://fonts.gstatic.com";
+        fontPreconnect.crossOrigin = "anonymous";
+        document.head.appendChild(fontPreconnect);
+        if (!document.getElementById("znw-instrument-sans")) {
+          var fontCss = document.createElement("link");
+          fontCss.id = "znw-instrument-sans";
+          fontCss.rel = "stylesheet";
+          fontCss.href =
+            "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap";
+          fontCss.media = "print";
+          fontCss.onload = function () {
+            fontCss.media = "all";
+          };
+          document.head.appendChild(fontCss);
+        }
+        if (token) {
+          try {
+            window.__ZNW_WALLET = {
+              organisationId: org,
+              hasAuth: true,
+              promise: fetch(
+                HOST + "/api/v1/user_center/details/get-wallet-balance/",
+                {
+                  headers: {
+                    Authorization: "Bearer " + token,
+                    "X-Organisation-ID": org,
+                  },
+                },
+              ),
+            };
+          } catch (e) {
+            /* invalid headers must not abort boot */
+          }
+        }
+      }
     }
     if (boot.welcome)
       document.documentElement.classList.add("znw-welcome-webview");
@@ -439,21 +485,19 @@
       var sheetRow =
         '<div style="height:69px;border-radius:10px;background:rgba(10,37,72,.3)"></div>';
       return (
-        '<div role="status" aria-live="polite" aria-label="Loading coin packs" style="position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;background:rgba(255,255,255,.08);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)">' +
-        '<div style="width:min(388px,calc(100vw - 2px));margin-bottom:10px;background:#011735;border-radius:26px;padding:16px;display:flex;flex-direction:column;gap:24px">' +
-        '<div style="height:3px;width:41px;border-radius:100px;background:#E9E7E9;opacity:.4;margin:0 auto"></div>' +
-        '<div style="display:flex;flex-direction:column;gap:16px">' +
+        '<div role="status" aria-live="polite" aria-label="Loading coin packs" style="min-height:100dvh;background:#011735;padding:12px 24px 32px">' +
         '<div style="display:flex;justify-content:space-between;align-items:center">' +
         bone("height:24px;width:148px;border-radius:6px") +
         bone("height:32px;width:59px;border-radius:21px") +
         "</div>" +
+        '<div style="display:flex;flex-direction:column;gap:16px;margin-top:16px">' +
         bone("height:20px;width:92px;border-radius:6px") +
         '<div style="height:73px;border-radius:16px;background:rgba(94,216,106,.12)"></div>' +
         bone("height:20px;width:121px;border-radius:6px") +
         '<div style="height:73px;border-radius:16px;background:rgba(255,112,0,.11)"></div>' +
         sheetRow +
         sheetRow +
-        "</div></div></div>"
+        "</div></div>"
       );
     }
     if (!biffle) {
@@ -462,9 +506,12 @@
       return (
         '<div role="status" aria-live="polite" aria-label="Loading coin store" style="min-height:100dvh;background:#000;padding:12px 24px 32px;position:relative;overflow:hidden">' +
         '<div style="position:absolute;left:50%;top:-73px;width:287px;height:95px;transform:translateX(-50%);border-radius:999px;background:#1A95FA;opacity:.6;filter:blur(47px)"></div>' +
-        '<div style="position:relative;display:flex;justify-content:space-between;align-items:center">' +
-        bone("height:32px;width:96px;border-radius:8px") +
+        '<div style="position:relative;display:flex;justify-content:flex-end;align-items:center">' +
         bone("height:26px;width:68px;border-radius:21px;background:#0A2548") +
+        "</div>" +
+        '<div style="position:relative;display:flex;justify-content:center;align-items:center;gap:4px;margin-top:4px">' +
+        bone("height:32px;width:32px;border-radius:99px") +
+        bone("height:32px;width:48px;border-radius:8px") +
         "</div>" +
         '<div style="height:81px;margin-top:16px;border-radius:16px;background:linear-gradient(92.74deg,#F4486E 2.28%,#FF7000 94.35%)"></div>' +
         bone("height:20px;width:92px;border-radius:6px;margin:24px 0 8px;background:rgba(255,255,255,.15)") +

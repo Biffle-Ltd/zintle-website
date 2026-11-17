@@ -9,6 +9,7 @@ import {
 } from "./userProfileApi";
 import { persistWebCallLoginOption, readPackIdFromSearch } from "./webCampaign";
 import { formatIncomingDisplayName } from "./webCallPreviewCreators";
+import { takeBootPrefetchJson } from "./webviewApiCache";
 
 export type WebCallOffer = {
   pack_configured: boolean;
@@ -846,20 +847,33 @@ export async function fetchWebCallCreators(opts: {
   };
 }
 
+type WalletBalanceResponse = {
+  data?: { user_wallet?: { balance?: number | string } };
+};
+
+function walletBalanceFromJson(json: WalletBalanceResponse | null): number | null {
+  const balance = Number(json?.data?.user_wallet?.balance);
+  return Number.isFinite(balance) ? balance : null;
+}
+
 export async function fetchWalletBalance(opts: {
   organisationId: string;
   authToken: string;
 }): Promise<number | null> {
+  const boot = await takeBootPrefetchJson<WalletBalanceResponse>(
+    typeof window !== "undefined" ? window.__ZNW_WALLET : undefined,
+    opts.organisationId,
+    true,
+  );
+  if (boot?.ok) return walletBalanceFromJson(boot.json);
+
   const r = await fetch(
     `${HOST}/api/v1/user_center/details/get-wallet-balance/`,
     { headers: authHeaders(opts.organisationId, opts.authToken) },
   );
-  const json = (await r.json().catch(() => null)) as {
-    data?: { user_wallet?: { balance?: number | string } };
-  } | null;
+  const json = (await r.json().catch(() => null)) as WalletBalanceResponse | null;
   if (!r.ok) return null;
-  const balance = Number(json?.data?.user_wallet?.balance);
-  return Number.isFinite(balance) ? balance : null;
+  return walletBalanceFromJson(json);
 }
 
 export const CREATOR_FALLBACK_ERROR_CODES = new Set([

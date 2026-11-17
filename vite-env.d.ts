@@ -116,6 +116,12 @@ interface Window {
     consumed?: boolean;
     hasAuth?: boolean;
   };
+  __ZNW_WALLET?: {
+    organisationId: string;
+    promise: Promise<Response>;
+    consumed?: boolean;
+    hasAuth?: boolean;
+  };
   __ZNW_PLAN_DETAILS?: {
     organisationId: string;
     planId: string;

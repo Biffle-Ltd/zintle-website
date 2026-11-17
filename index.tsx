@@ -26,6 +26,7 @@ import {
   type CoinStorePack,
   type SubscriptionPlan,
 } from "./components/CoinStoreMobile";
+import { QuickRechargePopup } from "./components/QuickRechargePopup";
 import { CoinStoreSkeleton } from "./components/CoinStoreSkeleton";
 import { WelcomeBackOfferSkeleton } from "./components/WelcomeBackOfferSkeleton";
 import { SubscriptionsSkeleton } from "./components/SubscriptionsSkeleton";
@@ -238,11 +239,6 @@ const WelcomeBackOffer = lazyWithRetry(() =>
 const PaymentStatus = lazyWithRetry(() =>
   import("./pages/PaymentStatus").then((m) => ({ default: m.PaymentStatus })),
 );
-const QuickRechargePopup = lazyWithRetry(() =>
-  import("./components/QuickRechargePopup").then((m) => ({
-    default: m.QuickRechargePopup,
-  })),
-);
 const QuickRechargePopupBiffle = lazyWithRetry(() =>
   import("./components/QuickRechargePopupBiffle").then((m) => ({
     default: m.QuickRechargePopupBiffle,
@@ -253,6 +249,21 @@ const CoinStoreMobileBiffle = lazyWithRetry(() =>
     default: m.CoinStoreMobileBiffle,
   })),
 );
+
+// Biffle's store is a separate chunk. Start it with the document so it overlaps
+// the catalog request instead of waiting until React asks for it.
+if (typeof window !== "undefined") {
+  const bootPath = (window.location.pathname || "/").replace(/\/+$/, "") || "/";
+  if (
+    bootPath === "/coins" &&
+    isBiffleOrganisationId(
+      getOrganisationIdFromSearch(window.location.search, bootPath),
+    )
+  ) {
+    void import("./components/QuickRechargePopupBiffle");
+    void import("./components/CoinStoreMobileBiffle");
+  }
+}
 
 export { PAYMENT_GATEWAY };
 
@@ -2086,7 +2097,11 @@ const CoinsPage = ({
     [location.search, location.pathname],
   );
 
-  const quickRecharge = isQuickRechargeFromSearch(location.search);
+  const quickRechargeFromUrl = isQuickRechargeFromSearch(location.search);
+  // Stay on this document. A route change restarts the webview and the store
+  // sits on the skeleton until packs and plans load again.
+  const [openedFullStore, setOpenedFullStore] = useState(false);
+  const quickRecharge = quickRechargeFromUrl && !openedFullStore;
   const quickRechargeSurface = useMemo(
     () => coinPurchaseSurfaceFromSearch(location.search),
     [location.search],
@@ -3001,9 +3016,7 @@ const CoinsPage = ({
 
   const openFullCoinStore = () => {
     sendCoinCtaClicked(pixelContext, { cta: "more_plans" });
-    const params = new URLSearchParams(location.search);
-    params.delete("quick_recharge");
-    navigate({ pathname: "/coins", search: params.toString() });
+    setOpenedFullStore(true);
   };
 
   const openCoinHistory = (source: "coin_balance" | "help") => {
@@ -3072,8 +3085,11 @@ const CoinsPage = ({
     }
   };
 
+  // Zintle paints packs as soon as the catalog is ready. Trial and weekly rows
+  // fill in when subscription plans land. Biffle's Continue pays the selected
+  // plan, so that sheet still waits.
   const waitForNonMemberPlans =
-    isMemberQuery === false && membershipLoading;
+    isBiffle && isMemberQuery === false && membershipLoading;
 
   if (coinPacksLoading || waitForNonMemberPlans) {
     return (
@@ -3274,54 +3290,27 @@ const CoinsPage = ({
   };
 
   if (quickRecharge) {
-    const popup = isBiffle ? (
-      <QuickRechargePopupBiffle
-        packs={displayedPacks}
-        selectedPackageId={selectedPackage?.id ?? null}
-        onPackSelect={handlePackSelect}
-        onContinue={handleMobileRecharge}
-        isMember={isMember}
-        featuredWeeklyPlan={featuredWeeklyPlan}
-        basicWeeklyPlan={basicWeeklyPlan}
-        freeTrial={freeTrial}
-        timerPack={timerPack}
-        callContext={quickRechargeCallContext}
-        surface={quickRechargeSurface}
-        headerPack={quickRechargeHeaderPack}
-        paymentInProgress={isPaymentInProgress}
-      />
-    ) : (
-      <QuickRechargePopup
-        packs={zintleQuickRechargePacks}
-        onMorePlans={openFullCoinStore}
-        onOpenCoinHistory={() => openCoinHistory("coin_balance")}
-        selectedPackageId={selectedPackage?.id ?? null}
-        onPackSelect={handlePackSelect}
-        onContinue={handleMobileRecharge}
-        isMember={isMember}
-        featuredWeeklyPlan={featuredWeeklyPlan}
-        basicWeeklyPlan={basicWeeklyPlan}
-        freeTrial={freeTrial}
-        timerPack={timerPack}
-        callContext={quickRechargeCallContext}
-        surface={quickRechargeSurface}
-        headerPack={quickRechargeHeaderPack}
-        coinBalance={coinBalance}
-        paymentInProgress={isPaymentInProgress}
-      />
-    );
-
     if (!isBiffle) {
       return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(255,255,255,0.08)] backdrop-blur-[10px]">
-          <div className="mb-[max(10px,env(safe-area-inset-bottom))] flex max-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-16px)] w-[min(388px,calc(100vw-16px))] min-h-0 flex-col">
-            <Suspense
-              fallback={<CoinStoreSkeleton isBiffle={false} quickRecharge />}
-            >
-              {popup}
-            </Suspense>
-          </div>
-        </div>
+        <QuickRechargePopup
+          layout="page"
+          packs={zintleQuickRechargePacks}
+          onMorePlans={openFullCoinStore}
+          onOpenCoinHistory={() => openCoinHistory("coin_balance")}
+          selectedPackageId={selectedPackage?.id ?? null}
+          onPackSelect={handlePackSelect}
+          onContinue={handleMobileRecharge}
+          isMember={isMember}
+          featuredWeeklyPlan={featuredWeeklyPlan}
+          basicWeeklyPlan={basicWeeklyPlan}
+          freeTrial={freeTrial}
+          timerPack={timerPack}
+          callContext={quickRechargeCallContext}
+          surface={quickRechargeSurface}
+          headerPack={quickRechargeHeaderPack}
+          coinBalance={coinBalance}
+          paymentInProgress={isPaymentInProgress}
+        />
       );
     }
 
@@ -3332,7 +3321,21 @@ const CoinsPage = ({
             <CoinStoreSkeleton isBiffle={isBiffle} quickRecharge />
           }
         >
-          {popup}
+          <QuickRechargePopupBiffle
+            packs={displayedPacks}
+            selectedPackageId={selectedPackage?.id ?? null}
+            onPackSelect={handlePackSelect}
+            onContinue={handleMobileRecharge}
+            isMember={isMember}
+            featuredWeeklyPlan={featuredWeeklyPlan}
+            basicWeeklyPlan={basicWeeklyPlan}
+            freeTrial={freeTrial}
+            timerPack={timerPack}
+            callContext={quickRechargeCallContext}
+            surface={quickRechargeSurface}
+            headerPack={quickRechargeHeaderPack}
+            paymentInProgress={isPaymentInProgress}
+          />
         </Suspense>
       </div>
     );
@@ -3896,8 +3899,11 @@ const Layout = () => {
           ? "h-full max-h-full overflow-hidden overscroll-none"
           : isWelcomeBackOfferPage
             ? "flex h-dvh max-h-dvh flex-col overflow-hidden sm:h-auto sm:max-h-none sm:min-h-dvh sm:overflow-y-auto"
-            : isQuickRechargeCoinsPage
-            ? "h-dvh max-h-dvh overflow-hidden bg-transparent"
+            : isQuickRechargeCoinsPage &&
+                !isBiffleOrganisationId(organisationId)
+              ? ""
+              : isQuickRechargeCoinsPage
+                ? "h-dvh max-h-dvh overflow-hidden bg-transparent"
             : isCoinsPage || isCoinHistoryPage
               ? ""
               : "min-h-screen"

@@ -488,7 +488,7 @@
     }
     if (qr) {
       var sheetRow =
-        '<div style="height:78px;border-radius:16px;background:rgba(10,37,72,.3)"></div>';
+        '<div style="height:69px;border-radius:10px;background:rgba(10,37,72,.3)"></div>';
       return (
         '<div role="status" aria-live="polite" aria-label="Loading coin packs" style="min-height:100dvh;background:#011735;padding:12px 24px 32px">' +
         '<div style="display:flex;justify-content:space-between;align-items:center">' +
@@ -497,9 +497,9 @@
         "</div>" +
         '<div style="display:flex;flex-direction:column;gap:16px;margin-top:16px">' +
         bone("height:20px;width:92px;border-radius:6px") +
-        '<div style="height:78px;border-radius:16px;background:rgba(94,216,106,.12)"></div>' +
+        '<div style="height:73px;border-radius:16px;background:rgba(94,216,106,.12)"></div>' +
         bone("height:20px;width:121px;border-radius:6px") +
-        '<div style="height:78px;border-radius:16px;background:rgba(255,112,0,.11)"></div>' +
+        '<div style="height:73px;border-radius:16px;background:rgba(255,112,0,.11)"></div>' +
         sheetRow +
         sheetRow +
         "</div></div>"
@@ -507,7 +507,7 @@
     }
     if (!biffle) {
       var zintleRow =
-        '<div style="height:78px;border-radius:16px;background:rgba(10,37,72,.3)"></div>';
+        '<div style="height:69px;border-radius:10px;background:rgba(10,37,72,.3)"></div>';
       return (
         '<div role="status" aria-live="polite" aria-label="Loading coin store" style="min-height:100dvh;background:#011735;padding:8px 24px 32px;position:relative;overflow:hidden">' +
         '<div style="position:relative;display:flex;justify-content:center;align-items:center;min-height:44px">' +
@@ -516,9 +516,9 @@
         "</div>" +
         '<div style="height:81px;margin-top:16px;border-radius:16px;background:linear-gradient(90deg,#FF7000,#F4486E)"></div>' +
         bone("height:20px;width:92px;border-radius:6px;margin:24px 0 8px;background:rgba(255,255,255,.15)") +
-        '<div style="height:78px;border-radius:16px;background:rgba(94,216,106,.12)"></div>' +
+        '<div style="height:73px;border-radius:16px;background:rgba(94,216,106,.12)"></div>' +
         bone("height:20px;width:121px;border-radius:6px;margin:24px 0 8px;background:rgba(255,255,255,.15)") +
-        '<div style="height:78px;border-radius:16px;background:rgba(255,112,0,.11)"></div>' +
+        '<div style="height:73px;border-radius:16px;background:rgba(255,112,0,.11)"></div>' +
         bone("height:20px;width:146px;border-radius:6px;margin:24px 0 8px;background:rgba(255,255,255,.15)") +
         '<div style="display:flex;flex-direction:column;gap:8px">' +
         zintleRow +

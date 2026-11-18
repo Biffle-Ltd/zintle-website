@@ -69,13 +69,18 @@ function PackRow({
       ? { coins: pack.coins, free: 0, percent: null }
       : packCardFigures(pack);
   const starter = tone === "starter";
+  const featured = starter || tone === "highlight";
 
   return (
     <PressableCard
       onClick={onBuy}
       disabled={disabled}
       busyLabel={busyLabel}
-      className={`flex h-[78px] w-full items-center justify-between rounded-2xl px-4 text-left ${
+      className={`flex w-full items-center justify-between px-3 pb-3 pt-2 text-left ${
+        featured
+          ? "h-[73px] rounded-[16px]"
+          : "h-[69px] rounded-[10px]"
+      } ${
         starter
           ? "bg-[rgba(94,216,106,0.12)]"
           : tone === "highlight"
@@ -83,10 +88,10 @@ function PackRow({
             : "bg-[rgba(10,37,72,0.3)]"
       }`}
     >
-      <span className="flex min-w-0 flex-col justify-center gap-1.5">
+      <span className={`flex min-w-0 flex-col ${featured ? "gap-2" : "gap-1"}`}>
         {figures.percent != null && (
           <span
-            className={`inline-flex w-fit rounded-[6px] px-1.5 py-0.5 text-[12px] font-medium leading-[1.15] ${
+            className={`inline-flex h-[21px] w-fit items-center rounded-[3px] px-1.5 text-[10px] font-medium leading-[1.15] ${
               starter
                 ? "bg-[#00201A] text-[#5ED86A]"
                 : "bg-[#191700] text-[#E6A433]"
@@ -95,8 +100,8 @@ function PackRow({
             {figures.percent}% bonus
           </span>
         )}
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="flex shrink-0 items-center gap-1">
+        <span className={`flex min-w-0 items-center ${featured ? "gap-[7px]" : "gap-[5px]"}`}>
+          <span className="flex shrink-0 items-center gap-0.5">
             <img
               src={ZINTLE_BALANCE_COIN_SRC}
               alt=""
@@ -107,19 +112,23 @@ function PackRow({
               draggable={false}
               className="h-6 w-6 shrink-0"
             />
-            <span className="whitespace-nowrap text-[20px] font-semibold leading-none text-white">
+            <span className="whitespace-nowrap text-[16px] font-semibold leading-5 text-white">
               {formatCoinAmount(figures.coins)}
             </span>
           </span>
           {figures.free > 0 && (
-            <span className="truncate text-[13px] font-normal leading-[1.15] text-[#E6A433]">
+            <span
+              className={`truncate font-normal leading-[1.15] text-[#E6A433] ${
+                featured ? "text-[10.2px]" : "text-[10px]"
+              }`}
+            >
               +{formatCoinAmount(figures.free)} Free coins
             </span>
           )}
         </span>
       </span>
       <span
-        className={`ml-3 inline-flex h-9 min-w-[72px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[16px] font-semibold leading-none text-black ${
+        className={`ml-3 inline-flex h-7 min-w-[63px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[14px] font-semibold leading-[1.15] text-black ${
           starter ? "bg-[#5ED86A]" : "bg-[#FEFFFF]"
         }`}
       >

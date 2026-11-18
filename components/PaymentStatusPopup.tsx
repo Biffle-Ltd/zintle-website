@@ -12,9 +12,12 @@ import {
 export const PaymentStatusPopup = ({
   status,
   onClose,
+  presentation = "dialog",
 }: {
   status: string;
   onClose: () => void;
+  /** Zintle recharge success and failure slide up from the bottom. */
+  presentation?: "dialog" | "sheet";
 }) => {
   const getStatusConfig = () => {
     switch (status) {
@@ -83,6 +86,83 @@ export const PaymentStatusPopup = ({
   };
 
   const config = getStatusConfig();
+  const resultSheet =
+    presentation === "sheet" && (status === "SUCCESS" || status === "FAILED");
+
+  React.useEffect(() => {
+    if (!resultSheet) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [resultSheet]);
+
+  if (resultSheet) {
+    const success = status === "SUCCESS";
+    return (
+      <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50">
+        <button
+          type="button"
+          className="absolute inset-0"
+          aria-label="Close"
+          onClick={onClose}
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="recharge-status-title"
+          className="animate-sheet-up relative z-10 w-full max-w-md rounded-t-[28px] bg-[#011735] px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 text-center"
+        >
+          <div className="mx-auto mb-6 h-1 w-10 rounded-full bg-white/30" aria-hidden />
+          <span
+            className={`mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-full text-white ${
+              success ? "bg-[#3DDC84]" : "bg-[#F04444]"
+            }`}
+            style={{
+              boxShadow: success
+                ? "0 0 28px rgba(61,220,132,0.55)"
+                : "0 0 28px rgba(240,68,68,0.55)",
+            }}
+          >
+            {success ? (
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path
+                  d="M5 12.5l4.2 4.2L19 7"
+                  stroke="white"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            ) : (
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path
+                  d="M7 7l10 10M17 7L7 17"
+                  stroke="white"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                />
+              </svg>
+            )}
+          </span>
+          <h3
+            id="recharge-status-title"
+            className="mt-6 text-[22px] font-medium text-white"
+          >
+            {success ? "Recharge Successfully" : "Recharge Failed"}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="mt-8 h-12 w-full rounded-full bg-[linear-gradient(90deg,#F4486E,#FF7000)] text-[16px] font-semibold text-white"
+          >
+            {success ? "Got it" : "Recharge Again"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">

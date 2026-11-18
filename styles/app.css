@@ -26,6 +26,7 @@
   --animate-slide-up: slide-up 0.5s ease-out forwards;
   --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-tap-ripple: tap-ripple 480ms ease-out forwards;
+  --animate-sheet-up: sheet-up 280ms ease-out forwards;
 }
 
 @keyframes float {
@@ -55,6 +56,15 @@
   100% {
     transform: translate(-50%, -50%) scale(1);
     opacity: 0;
+  }
+}
+
+@keyframes sheet-up {
+  0% {
+    transform: translateY(100%);
+  }
+  100% {
+    transform: translateY(0);
   }
 }
 

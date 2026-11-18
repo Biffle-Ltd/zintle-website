@@ -236,7 +236,7 @@ export function getZintleQuickRechargePacks(options: {
 
 const ZINTLE_SHEET_ONE_TIME_PREVIEW = 2;
 
-/** Zintle quick recharge is a short sheet: starter, most purchased, weeklies, then two one-time packs. */
+/** Zintle quick recharge is a short sheet: starter, most purchased, then two one-time packs. */
 export function getZintleQuickRechargeSheetPacks(options: {
   isMember: boolean;
   timerPack: CoinStorePack | null;
@@ -261,14 +261,13 @@ export function getZintleQuickRechargeSheetPacks(options: {
   return [
     ...(offers.starter ? [offers.starter] : []),
     ...(offers.mostPurchased ? [offers.mostPurchased] : []),
-    ...weeklies,
     ...oneTime,
   ];
 }
 
 /**
  * Full Zintle store in the order the screen renders it: trial, starter,
- * most purchased, weekly plans cheapest first, then one-time by price.
+ * most purchased, one-time by price, then weekly plans cheapest first.
  */
 export function getZintleVisibleStorePacks(options: {
   isMember: boolean;
@@ -316,7 +315,7 @@ export function getZintleVisibleStorePacks(options: {
   if (!isMember) pushRow(freeTrialPack);
   pushRow(offers.starter);
   pushRow(offers.mostPurchased);
-  for (const plan of weeklies) pushRow(weeklyPlanToStorePack(plan));
   for (const pack of [...offers.oneTime].sort(comparePackPrice)) pushRow(pack);
+  for (const plan of weeklies) pushRow(weeklyPlanToStorePack(plan));
   return rows;
 }

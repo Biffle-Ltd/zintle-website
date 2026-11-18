@@ -213,14 +213,12 @@ export const QuickRechargePopup = ({
     const ordered = [
       ...(split.starter ? [split.starter] : []),
       ...(split.mostPurchased ? [split.mostPurchased] : []),
-      ...weeklies,
       ...oneTime,
     ];
     const indexOf = (id: number) => ordered.findIndex((pack) => pack.id === id);
     return {
       starter: split.starter,
       mostPurchased: split.mostPurchased,
-      weeklies,
       preview,
       indexOf,
       empty: ordered.length === 0,
@@ -337,31 +335,8 @@ export const QuickRechargePopup = ({
               </section>
             )}
 
-            {sheet.weeklies.length > 0 && (
-              <section className="flex flex-col gap-2">
-                <h3 className="text-[16px] font-medium leading-5 text-white">
-                  Weekly Plan
-                </h3>
-                <div className="flex flex-col gap-2">
-                  {sheet.weeklies.map((pack) => (
-                    <PackRow
-                      key={pack.id}
-                      pack={{ ...pack, showOffer: false }}
-                      tone="plain"
-                      disabled={rowDisabled(pack.id)}
-                      busyLabel={busyLabelFor(pack.id)}
-                      onBuy={() => buy(pack, sheet.indexOf(pack.id))}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-
             {sheet.preview.length > 0 && (
               <section className="flex flex-col gap-2">
-                <h3 className="text-[16px] font-medium leading-5 text-white">
-                  One Time Purchase
-                </h3>
                 <div className="flex flex-col gap-2">
                   {sheet.preview.map((pack) => (
                     <PackRow

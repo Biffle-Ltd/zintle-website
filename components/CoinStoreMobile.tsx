@@ -6,7 +6,12 @@ import {
 } from "../utils/coinStoreOffer";
 import { uniqueWeeklyPlans, weeklyPlanToStorePack } from "../utils/coinStoreVisiblePacks";
 import { freeTrialToStorePack, type VisibleFreeTrial } from "../utils/freeTrialOffer";
-import { ZINTLE_BALANCE_COIN_SRC, ZINTLE_HELP_ICON_SRC } from "../utils/coinStoreAssets";
+import {
+  ZINTLE_BALANCE_COIN_SRC,
+  ZINTLE_CHEVRON_SRC,
+  ZINTLE_HELP_ICON_SRC,
+  ZINTLE_TRIAL_BANNER_SRC,
+} from "../utils/coinStoreAssets";
 import { PressableCard } from "./PressableCard";
 
 export const TIMER_COIN_PRODUCT_ID = "coin_100";
@@ -85,7 +90,7 @@ type CoinStoreMobileProps = {
   basicWeeklyPlan: SubscriptionPlan | null;
   freeTrial?: VisibleFreeTrial | null;
   paymentInProgress?: boolean;
-  /** Wallet balance. Top-left pill. The native header already shows the title. */
+  /** Wallet balance, centered. The native header already shows the title. */
   coinBalance?: number | null;
   /** Balance and Help both open coin history for now. */
   onOpenCoinHistory?: (source: "coin_balance" | "help") => void;
@@ -101,20 +106,26 @@ function msUntilNextMidnight(now: number): number {
   return Math.max(0, end.getTime() - now);
 }
 
-/** Time left in the local day: 24:00 minus the current clock, ticking every second. */
-function useDayCountdown(): { hours: string; minutes: string; seconds: string } {
+/** Time left in the local day. The label only changes each minute. */
+function useDayCountdown(): { hours: string; minutes: string } {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const tick = () => setNow(Date.now());
+    let timer = 0;
+    const tick = () => {
+      window.clearTimeout(timer);
+      const next = Date.now();
+      setNow(next);
+      const msIntoMinute = next % 60_000;
+      timer = window.setTimeout(tick, Math.max(250, 60_000 - msIntoMinute));
+    };
     tick();
-    const id = window.setInterval(tick, 1000);
     const onVisible = () => {
       if (document.visibilityState === "visible") tick();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      window.clearInterval(id);
+      window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
@@ -124,7 +135,6 @@ function useDayCountdown(): { hours: string; minutes: string; seconds: string } 
   return {
     hours: pad(Math.floor(total / 3600)),
     minutes: pad(Math.floor((total % 3600) / 60)),
-    seconds: pad(total % 60),
   };
 }
 
@@ -245,34 +255,28 @@ function TrialBanner({
       onClick={onBuy}
       disabled={disabled}
       busyLabel={busyLabel}
-      className="min-h-[81px] w-full rounded-[16px] bg-[linear-gradient(101.45deg,#F4486E_2.28%,#FF7000_94.35%)] px-4 pb-2 pt-[7px] text-center text-white"
+      className="flex aspect-[686/162] w-full flex-col items-center justify-center rounded-[16px] bg-[linear-gradient(101.45deg,#F4486E_2.28%,#FF7000_94.35%)] px-6 py-1.5 text-center text-white"
     >
-      <FigmaCoin className="pointer-events-none absolute -left-10 top-2 h-8 w-8 -rotate-[15deg]" />
-      <FigmaCoin className="pointer-events-none absolute -left-6 top-1/2 h-[78px] w-[74px] -translate-y-1/2 -rotate-[15deg]" />
-      <FigmaCoin className="pointer-events-none absolute -right-4 top-0 h-[96px] w-[90px] rotate-[20deg]" />
-      <span className="relative z-[1] mx-auto block max-w-[230px] text-balance text-[16px] font-semibold leading-5">
+      <img
+        src={ZINTLE_TRIAL_BANNER_SRC}
+        alt=""
+        width={686}
+        height={162}
+        decoding="async"
+        fetchPriority="high"
+        draggable={false}
+        className="pointer-events-none absolute inset-0 h-full w-full rounded-[16px] object-cover"
+      />
+      <span className="relative z-[1] mx-auto block text-balance text-[16px] font-semibold leading-5">
         {title}
       </span>
       <span className="relative z-[1] mt-1 block text-[12px] font-normal leading-[15px]">
         A small token to get you started
       </span>
-      <span className="relative z-[1] mt-[9px] inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-medium">
-        <TimeBox value={clock.hours} />
-        <span>hrs</span>
-        <TimeBox value={clock.minutes} />
-        <span>mins</span>
-        <TimeBox value={clock.seconds} />
-        <span>sec</span>
+      <span className="relative z-[1] mt-1.5 inline-flex items-center rounded-full bg-[#1A1208]/55 px-2.5 py-1 text-[11px] font-semibold leading-none tracking-wide text-white">
+        {clock.hours} H : {clock.minutes} M
       </span>
     </PressableCard>
-  );
-}
-
-function TimeBox({ value }: { value: string }) {
-  return (
-    <span className="inline-flex h-[18px] min-w-5 items-center justify-center rounded-[5px] bg-white px-[3px] text-[10px] font-semibold leading-none text-[#011735]">
-      {value}
-    </span>
   );
 }
 
@@ -368,35 +372,34 @@ export const CoinStoreMobile = ({
       className="relative min-h-dvh overflow-x-hidden bg-[#011735] md:hidden"
       style={{ fontFamily: STORE_FONT }}
     >
-      <div
-        className="pointer-events-none absolute left-1/2 top-0 h-[95px] w-[287px] -translate-x-1/2 -translate-y-[73px] rounded-full bg-[#1A95FA] opacity-60 blur-[47px]"
-        aria-hidden
-      />
-
-      <header className="relative flex items-center justify-between gap-3 px-6 pt-2">
+      <header className="relative flex min-h-11 items-center justify-center px-6 pt-2">
         {coinBalance != null ? (
           <button
             type="button"
             onClick={() => onOpenCoinHistory?.("coin_balance")}
             disabled={paymentInProgress}
-            className="inline-flex min-h-11 min-w-0 touch-manipulation items-center disabled:opacity-40"
+            className="inline-flex min-h-11 max-w-[calc(100%-12rem)] touch-manipulation items-center gap-1.5 disabled:opacity-40"
             aria-label={`${formatBalance(coinBalance)} coins`}
           >
-            <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-white/80 py-0.5 pl-0.5 pr-3">
-              <FigmaCoin className="h-8 w-8 shrink-0" />
-              <span className="truncate text-[20px] font-semibold leading-none text-[#E9E7E9]">
-                {formatBalance(coinBalance)}
-              </span>
+            <FigmaCoin className="h-9 w-9 shrink-0" />
+            <span className="truncate text-[28px] font-semibold leading-none text-white">
+              {formatBalance(coinBalance)}
             </span>
+            <img
+              src={ZINTLE_CHEVRON_SRC}
+              alt=""
+              width={20}
+              height={20}
+              draggable={false}
+              className="h-5 w-5 shrink-0"
+            />
           </button>
-        ) : (
-          <span />
-        )}
+        ) : null}
         <button
           type="button"
           onClick={() => onOpenCoinHistory?.("help")}
           disabled={paymentInProgress}
-          className="inline-flex min-h-11 shrink-0 touch-manipulation items-center disabled:opacity-40"
+          className="absolute right-6 top-1/2 inline-flex min-h-11 -translate-y-1/2 touch-manipulation items-center disabled:opacity-40"
         >
           <span className="inline-flex items-center gap-[5px] rounded-[21px] bg-[#0A2548] py-1 pl-1.5 pr-2 text-[14px] font-normal text-[#E9E7E9]">
             <img
@@ -462,6 +465,26 @@ export const CoinStoreMobile = ({
           </section>
         )}
 
+        {offers.oneTime.length > 0 && (
+          <section className="flex flex-col gap-4">
+            <h2 className="text-[16px] font-medium leading-5 text-white">
+              One Time Purchase
+            </h2>
+            <div className="flex flex-col gap-2">
+              {[...offers.oneTime].sort(comparePackPrice).map((pack) => (
+                <PackRow
+                  key={pack.id}
+                  pack={pack}
+                  tone="plain"
+                  disabled={rowDisabled(pack.id)}
+                  busyLabel={busyLabelFor(pack.id)}
+                  onBuy={() => buy(pack, indexFor(pack))}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         {weeklyPlans.length > 0 && (
           <section className="flex flex-col gap-2">
             <h2 className="text-[16px] font-medium leading-5 text-white">
@@ -482,26 +505,6 @@ export const CoinStoreMobile = ({
                   />
                 );
               })}
-            </div>
-          </section>
-        )}
-
-        {offers.oneTime.length > 0 && (
-          <section className="flex flex-col gap-4">
-            <h2 className="text-[16px] font-medium leading-5 text-white">
-              One Time Purchase
-            </h2>
-            <div className="flex flex-col gap-2">
-              {[...offers.oneTime].sort(comparePackPrice).map((pack) => (
-                <PackRow
-                  key={pack.id}
-                  pack={pack}
-                  tone="plain"
-                  disabled={rowDisabled(pack.id)}
-                  busyLabel={busyLabelFor(pack.id)}
-                  onBuy={() => buy(pack, indexFor(pack))}
-                />
-              ))}
             </div>
           </section>
         )}

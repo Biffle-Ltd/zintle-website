@@ -164,7 +164,6 @@ import {
   getZintleVisibleStorePacks,
   toCoinPackForAnalytics,
   weeklyPlanToStorePack,
-  uniqueWeeklyPlans,
 } from "./utils/coinStoreVisiblePacks";
 import {
   freeTrialToStorePack,
@@ -2594,14 +2593,6 @@ const CoinsPage = ({
     };
   }, [pollMandateStatus]);
 
-  const zintleQuickRechargeWeeklies = useMemo(
-    () =>
-      uniqueWeeklyPlans(isMember, featuredWeeklyPlan, basicWeeklyPlan).map(
-        weeklyPlanToStorePack,
-      ),
-    [isMember, featuredWeeklyPlan, basicWeeklyPlan],
-  );
-
   const zintleQuickRechargePacks = useMemo(
     () =>
       getZintleQuickRechargeSheetPacks({
@@ -3348,7 +3339,6 @@ const CoinsPage = ({
         <QuickRechargePopup
           layout="page"
           packs={zintleQuickRechargePacks}
-          weeklyPacks={zintleQuickRechargeWeeklies}
           onMorePlans={openFullCoinStore}
           onOpenCoinHistory={() => openCoinHistory("coin_balance")}
           selectedPackageId={selectedPackage?.id ?? null}
@@ -4178,6 +4168,12 @@ const Layout = () => {
         <PaymentStatusPopup
           status={paymentStatus}
           onClose={() => setPaymentStatus(null)}
+          presentation={
+            !isBiffleOrganisationId(organisationId) &&
+            (paymentStatus === "SUCCESS" || paymentStatus === "FAILED")
+              ? "sheet"
+              : "dialog"
+          }
         />
       )}
     </div>

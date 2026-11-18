@@ -33,7 +33,7 @@ const recommended = pack({
 });
 
 describe("getZintleVisibleStorePacks", () => {
-  it("puts the cheaper weekly between most purchased and one-time packs", () => {
+  it("puts one-time packs above the weekly plans", () => {
     const rows = getZintleVisibleStorePacks({
       isMember: false,
       featuredWeeklyPlan: plan(10, 100),
@@ -45,7 +45,7 @@ describe("getZintleVisibleStorePacks", () => {
     });
     assert.deepEqual(
       rows.map((row) => row.id),
-      [7, 21, 50, 9, 10, 49],
+      [7, 21, 50, 49, 9, 10],
     );
   });
 
@@ -67,7 +67,7 @@ describe("getZintleVisibleStorePacks", () => {
 });
 
 describe("getZintleQuickRechargeSheetPacks", () => {
-  it("shows weeklies after most purchased and keeps two one-time packs", () => {
+  it("keeps two one-time packs and leaves weeklies off the sheet", () => {
     const rows = getZintleQuickRechargeSheetPacks({
       isMember: false,
       timerPack: null,
@@ -83,7 +83,7 @@ describe("getZintleQuickRechargeSheetPacks", () => {
     });
     assert.deepEqual(
       rows.map((row) => row.id),
-      [21, 50, 9, 10, 49, 48],
+      [21, 50, 49, 48],
     );
   });
 
@@ -100,7 +100,7 @@ describe("getZintleQuickRechargeSheetPacks", () => {
     });
     assert.deepEqual(
       rows.map((row) => row.id),
-      [49, 9],
+      [49],
     );
   });
 
@@ -118,7 +118,7 @@ describe("getZintleQuickRechargeSheetPacks", () => {
     });
     assert.deepEqual(
       rows.map((row) => row.id),
-      [49, 50, 9, 10],
+      [49, 50],
     );
   });
 
@@ -132,7 +132,7 @@ describe("getZintleQuickRechargeSheetPacks", () => {
     });
     assert.deepEqual(
       repeated.map((row) => row.id),
-      [21, 9],
+      [21],
     );
 
     const unpriced = getZintleQuickRechargeSheetPacks({
@@ -144,7 +144,7 @@ describe("getZintleQuickRechargeSheetPacks", () => {
     });
     assert.deepEqual(
       unpriced.map((row) => row.id),
-      [21, 9],
+      [21],
     );
   });
 

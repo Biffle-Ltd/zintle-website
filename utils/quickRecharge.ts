@@ -1,5 +1,5 @@
 import type { CoinStorePack, SubscriptionPlan } from "../components/CoinStoreMobile";
-import { packCardFigures } from "./coinStoreOffer";
+import { creditedCoinCount } from "./coinStoreOffer";
 import {
   TIMER_COIN_FALLBACK_PRODUCT_ID,
   TIMER_COIN_PRODUCT_ID,
@@ -33,7 +33,7 @@ type PackLike = {
 
 /** Coins that land in the wallet. `total_coins` when the catalog sends it. */
 function coverageCoins(pack: PackLike): number {
-  return packCardFigures(pack).coins;
+  return creditedCoinCount(pack);
 }
 
 function parsePositiveNumberParam(

@@ -155,7 +155,7 @@ import {
   type PaymentGateway,
 } from "./utils/paymentGateway";
 import type { CreateOrderPixelOptions as BaseCreateOrderPixelOptions } from "./utils/coinCheckoutOptions";
-import { packCardFigures } from "./utils/coinStoreOffer";
+import { creditedCoinCount, packCardFigures } from "./utils/coinStoreOffer";
 import {
   analyticsFlagsForStorePack,
   enrichStorePackWithWeeklyPlan,
@@ -1914,7 +1914,7 @@ const CoinStore = ({
                 Payment Successful!
               </h3>
               <p className="text-brand-muted mb-8">
-                Your {selectedPack ? packCardFigures(selectedPack).coins : 0} coins have been added to your wallet.
+                Your {selectedPack ? creditedCoinCount(selectedPack) : 0} coins have been added to your wallet.
               </p>
               <button
                 type="button"
@@ -2771,7 +2771,7 @@ const CoinsPage = ({
           };
           setSelectedPackage(initial);
           setQuickRechargeHeaderPack({
-            coins: packCardFigures(source).coins,
+            coins: creditedCoinCount(source),
             price: recommended.price,
           });
           fireDefaultCoinPackSelected(
@@ -2807,7 +2807,7 @@ const CoinsPage = ({
           if (!quickRechargeHeaderLockedRef.current) {
             quickRechargeHeaderLockedRef.current = true;
             setQuickRechargeHeaderPack({
-              coins: packCardFigures(inCallPack).coins,
+              coins: creditedCoinCount(inCallPack),
               price: inCallPack.price,
             });
           }
@@ -2883,7 +2883,7 @@ const CoinsPage = ({
           }
           setQuickRechargeHeaderPack((prev) =>
             prev ?? {
-              coins: packCardFigures(timerPack).coins,
+              coins: creditedCoinCount(timerPack),
               price: timerPack.price,
             },
           );
@@ -2908,7 +2908,7 @@ const CoinsPage = ({
           }
           setQuickRechargeHeaderPack((prev) =>
             prev ?? {
-              coins: packCardFigures(initial).coins,
+              coins: creditedCoinCount(initial),
               price: initial.price,
             },
           );

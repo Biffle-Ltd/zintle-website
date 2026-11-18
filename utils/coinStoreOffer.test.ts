@@ -44,7 +44,7 @@ describe("packCardFigures", () => {
     );
   });
 
-  it("uses total coins as the main number when the catalog sends it", () => {
+  it("shows coin value as the main number and keeps the bonus beside it", () => {
     assert.deepEqual(
       packCardFigures({
         coins: 100,
@@ -52,7 +52,7 @@ describe("packCardFigures", () => {
         bonus_coins: 25,
         bonus_percent: 25,
       }),
-      { coins: 125, free: 25, percent: 25 },
+      { coins: 100, free: 25, percent: 25 },
     );
   });
 
@@ -89,7 +89,7 @@ describe("mapCatalogCoinPack", () => {
     assert.equal(pack.highlight, true);
     assert.equal(pack.tag, undefined);
     assert.deepEqual(packCardFigures(pack), {
-      coins: 125,
+      coins: 100,
       free: 25,
       percent: 25,
     });

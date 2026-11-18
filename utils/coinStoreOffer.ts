@@ -44,7 +44,7 @@ export type CatalogCoinPackRow = {
   isTrialPack?: boolean;
 };
 
-/** Catalog row → store pack. `coins` stays the paid `coin_value`; the card uses `total_coins`. */
+/** Catalog row → store pack. `coins` is the paid `coin_value` shown on the card. */
 export function mapCatalogCoinPack(p: CatalogCoinPackRow): CoinStorePack {
   const coinValue = apiNumber(p.coin_value) ?? 0;
   const totalCoins = apiNumber(p.total_coins);
@@ -115,27 +115,30 @@ export function coinBonusAmount(pack: Pick<CoinStorePack, "bonus_coins" | "bonus
 
 /**
  * Labels for the coin card.
- * Main number is `total_coins`. `bonus_coins` is the free-coin line.
- * `bonus_percentage` is the badge. Each one is omitted when the catalog
- * does not send a positive value. Without `total_coins`, the main number
- * stays `coin_value`.
+ * The main number is `coin_value`. `bonus_coins` is the free-coin line.
+ * `bonus_percentage` is the badge. Bonus lines are omitted when the catalog
+ * does not send a positive value.
  */
 export function packCardFigures(pack: BonusPack): {
   coins: number;
   free: number;
   percent: number | null;
 } {
-  const total = positiveNumber(pack.total_coins);
   const catalogCoins = Number(pack.coins);
   const givenPercent = positiveNumber(pack.bonus_percent);
   return {
-    coins:
-      total ??
-      (Number.isFinite(catalogCoins) && catalogCoins > 0 ? catalogCoins : 0),
+    coins: Number.isFinite(catalogCoins) && catalogCoins > 0 ? catalogCoins : 0,
     free: coinBonusAmount(pack),
     percent:
       givenPercent != null ? Math.round(givenPercent * 100) / 100 : null,
   };
+}
+
+/** Coins credited to the wallet. `total_coins` when the catalog sends it. */
+export function creditedCoinCount(pack: BonusPack): number {
+  const total = positiveNumber(pack.total_coins);
+  if (total != null) return total;
+  return packCardFigures(pack).coins;
 }
 
 function packPrice(pack: CoinStorePack): number {

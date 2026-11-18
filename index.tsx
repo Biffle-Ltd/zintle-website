@@ -3340,7 +3340,6 @@ const CoinsPage = ({
           layout="page"
           packs={zintleQuickRechargePacks}
           onMorePlans={openFullCoinStore}
-          onOpenCoinHistory={() => openCoinHistory("coin_balance")}
           selectedPackageId={selectedPackage?.id ?? null}
           onPackSelect={handlePackSelect}
           onContinue={handleMobileRecharge}

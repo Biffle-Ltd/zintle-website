@@ -173,18 +173,6 @@ export function WebCallQuickRechargeOverlay({
     return parseCoinPixelContext(params.toString(), "/coins");
   };
 
-  const openHistory = () => {
-    sendCoinCtaClicked(pixelContext(), { cta: "coin_balance" });
-    // Leaving this route hangs up the live call. Native owns the history screen.
-    try {
-      window.ReactNativeWebView?.postMessage(
-        JSON.stringify({ action: "open_coin_history" }),
-      );
-    } catch {
-      // Native history screen is not available in the browser.
-    }
-  };
-
   const openMorePacks = () => {
     sendCoinCtaClicked(pixelContext(), { cta: "more_plans" });
     setShowAllPacks(true);
@@ -259,7 +247,6 @@ export function WebCallQuickRechargeOverlay({
               oneTimeLimit={showAllPacks ? null : 2}
               coinBalance={walletBalance}
               onMorePlans={showAllPacks ? undefined : openMorePacks}
-              onOpenCoinHistory={openHistory}
             />
           )}
         </div>

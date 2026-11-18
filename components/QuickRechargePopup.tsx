@@ -147,10 +147,8 @@ type QuickRechargePopupProps = {
   surface?: CoinPurchaseSurface | null;
   /** Kept so existing callers still compile. The sheet title is fixed. */
   headerPack?: { coins: number; price: number } | null;
-  /** Account balance from get-wallet-balance. Zintle only. */
+  /** Account balance from get-wallet-balance. Display only. */
   coinBalance?: number | null;
-  /** Balance chip opens coin history. The destination can change later. */
-  onOpenCoinHistory?: () => void;
   paymentInProgress?: boolean;
   /** The card waiting on UPI or checkout. That card stays lit. */
   pendingPurchase?: { id: number } | null;
@@ -179,7 +177,6 @@ export const QuickRechargePopup = ({
   layout = "sheet",
   callContext = null,
   coinBalance = null,
-  onOpenCoinHistory,
   paymentInProgress = false,
   pendingPurchase = null,
 }: QuickRechargePopupProps) => {
@@ -242,7 +239,7 @@ export const QuickRechargePopup = ({
     <div
       className={
         page
-          ? "flex min-h-dvh w-full touch-manipulation flex-col bg-[#011735] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] min-[390px]:px-6"
+          ? "flex h-dvh w-full touch-manipulation flex-col overflow-hidden bg-[#011735] px-4 pt-[max(0.75rem,env(safe-area-inset-top))] min-[390px]:px-6"
           : "flex max-h-full min-h-0 w-full touch-manipulation flex-col items-center gap-6 overflow-hidden rounded-[26px] bg-[#011735] p-4"
       }
       style={{ fontFamily: SHEET_FONT }}
@@ -256,8 +253,8 @@ export const QuickRechargePopup = ({
       <div
         className={
           page
-            ? "flex w-full flex-col gap-4"
-            : "flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            ? "flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            : "flex min-h-0 w-full flex-col gap-4 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         }
       >
         <div className="flex items-center justify-between gap-3">
@@ -265,12 +262,9 @@ export const QuickRechargePopup = ({
             Quick Recharge
           </h2>
           {balance != null && (
-            <button
-              type="button"
-              onClick={() => onOpenCoinHistory?.()}
-              disabled={paymentInProgress}
-              className="inline-flex min-h-11 shrink-0 touch-manipulation items-center gap-1 rounded-full border border-white/80 bg-transparent py-1 pl-1 pr-2.5 disabled:opacity-40"
-              aria-label="Coin history"
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/80 bg-transparent py-1 pl-1 pr-2.5"
+              aria-label={`${formatBalance(balance)} coins`}
             >
               <img
                 src={ZINTLE_BALANCE_COIN_SRC}
@@ -285,7 +279,7 @@ export const QuickRechargePopup = ({
               <span className="text-[16px] font-semibold leading-5 text-[#E9E7E9]">
                 {formatBalance(balance)}
               </span>
-            </button>
+            </span>
           )}
         </div>
 
@@ -354,28 +348,37 @@ export const QuickRechargePopup = ({
           </div>
         )}
 
-        {onMorePlans != null && (
-          <div className="flex w-full flex-col items-center gap-4 pt-1">
-            <div className="h-px w-full bg-[#E9E7E9]/40" aria-hidden />
-            <button
-              type="button"
-              onClick={onMorePlans}
-              disabled={paymentInProgress}
-              className="inline-flex min-h-11 touch-manipulation items-center justify-center gap-[11px] text-[14px] font-semibold text-white transition-transform active:scale-95 disabled:opacity-40"
-            >
-              See More Plans
-              <img
-                src={ZINTLE_CHEVRONS_RIGHT_SRC}
-                alt=""
-                width={24}
-                height={24}
-                draggable={false}
-                className="h-6 w-6 shrink-0"
-              />
-            </button>
-          </div>
-        )}
       </div>
+      {onMorePlans != null && (
+        <div
+          className={`relative z-10 w-full shrink-0 ${
+            page
+              ? "bg-[#011735] pb-[max(1rem,env(safe-area-inset-bottom))] pt-2"
+              : "bg-[#011735] pt-2"
+          }`}
+        >
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-full h-16 bg-gradient-to-t from-[#011735] to-transparent"
+          />
+          <button
+            type="button"
+            onClick={onMorePlans}
+            disabled={paymentInProgress}
+            className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-[11px] text-[14px] font-semibold text-white transition-transform active:scale-95 disabled:opacity-40"
+          >
+            See More Plans
+            <img
+              src={ZINTLE_CHEVRONS_RIGHT_SRC}
+              alt=""
+              width={24}
+              height={24}
+              draggable={false}
+              className="h-6 w-6 shrink-0"
+            />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -2603,8 +2603,16 @@ const CoinsPage = ({
         micropacks: displayedPacks,
         featuredWeeklyPlan,
         basicWeeklyPlan,
+        freeTrialPlanId: freeTrial?.planId,
       }),
-    [isMember, timerPack, displayedPacks, featuredWeeklyPlan, basicWeeklyPlan],
+    [
+      isMember,
+      timerPack,
+      displayedPacks,
+      featuredWeeklyPlan,
+      basicWeeklyPlan,
+      freeTrial,
+    ],
   );
 
   const visibleAnalyticsPacks = useMemo(() => {
@@ -2619,7 +2627,12 @@ const CoinsPage = ({
             micropacks: displayedPacks,
             freeTrialPack,
           })
-        : zintleQuickRechargePacks;
+        : [
+            ...(freeTrialPack ? [freeTrialPack] : []),
+            ...zintleQuickRechargePacks.filter(
+              (pack) => pack.id !== freeTrialPack?.id,
+            ),
+          ];
     }
     if (isBiffle) {
       return getVisibleCoinStorePacks({
@@ -2709,6 +2722,37 @@ const CoinsPage = ({
     }
 
     if (quickRecharge) {
+      // The trial banner is the first card. Don't report a coin as the
+      // default while it is on screen. An in-session popup still defaults
+      // to a coin, because that sheet is there to cover the live call.
+      if (
+        !isBiffle &&
+        !isMember &&
+        freeTrial &&
+        !quickRechargeManualSelectRef.current &&
+        !isInSessionCoinPopupSurface(quickRechargeSurface)
+      ) {
+        const initial = freeTrialToStorePack(freeTrial);
+        const next = preferFreeTrialSelection(selectedPackage, initial, [
+          featuredWeeklyPlan?.id,
+          basicWeeklyPlan?.id,
+        ]);
+        if (next.id === initial.id) {
+          if (next.id !== selectedPackage?.id) setSelectedPackage(next);
+          fireDefaultCoinPackSelected(
+            pixelContext,
+            initial,
+            visibleAnalyticsPacks,
+            defaultPackSelectedRef,
+            featuredWeeklyPlan,
+            basicWeeklyPlan,
+            freeTrial.planId,
+            true,
+          );
+          return;
+        }
+      }
+
       if (
         isStartSessionCoinPopupSurface(quickRechargeSurface) &&
         !quickRechargeManualSelectRef.current

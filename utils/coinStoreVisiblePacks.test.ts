@@ -49,6 +49,25 @@ describe("getZintleVisibleStorePacks", () => {
     );
   });
 
+  it("does not keep a coin row that uses the trial plan id", () => {
+    const rows = getZintleVisibleStorePacks({
+      isMember: false,
+      featuredWeeklyPlan: plan(10, 100),
+      basicWeeklyPlan: null,
+      timerPack: null,
+      exclusiveDeals: [
+        pack({ id: 7, coins: 50, price: 2, name: "Starter decoy" }),
+        starter,
+      ],
+      topPlans: [recommended],
+      freeTrialPack: pack({ id: 7, coins: 50, price: 2, name: "Trail" }),
+    });
+    assert.deepEqual(
+      rows.map((row) => row.id),
+      [7, 21, 50, 10],
+    );
+  });
+
   it("hides the trial and weeklies for a member", () => {
     const rows = getZintleVisibleStorePacks({
       isMember: true,
@@ -145,6 +164,27 @@ describe("getZintleQuickRechargeSheetPacks", () => {
     assert.deepEqual(
       unpriced.map((row) => row.id),
       [21],
+    );
+  });
+
+  it("drops a coin that shares the trial plan id and still fills two one-time rows", () => {
+    const rows = getZintleQuickRechargeSheetPacks({
+      isMember: false,
+      timerPack: null,
+      micropacks: [
+        pack({ id: 7, coins: 50, price: 2, name: "Starter decoy" }),
+        starter,
+        value,
+        pack({ id: 48, coins: 300, price: 49, name: "Value plus" }),
+        recommended,
+      ],
+      featuredWeeklyPlan: plan(10, 100),
+      basicWeeklyPlan: null,
+      freeTrialPlanId: 7,
+    });
+    assert.deepEqual(
+      rows.map((row) => row.id),
+      [21, 50, 49, 48],
     );
   });
 

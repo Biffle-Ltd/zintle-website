@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from "react";
 import { ZINTLE_BALANCE_COIN_SRC, ZINTLE_CHEVRONS_RIGHT_SRC } from "../utils/coinStoreAssets";
-import type { CoinStorePack, SubscriptionPlan } from "./CoinStoreMobile";
+import { TrialBanner, type CoinStorePack, type SubscriptionPlan } from "./CoinStoreMobile";
 import type { QuickRechargeCallContext } from "../utils/quickRecharge";
 import type { CoinPurchaseSurface } from "../utils/pixelEvents";
 import {
@@ -8,7 +8,7 @@ import {
   packCardFigures,
   splitCoinStoreOffers,
 } from "../utils/coinStoreOffer";
-import type { VisibleFreeTrial } from "../utils/freeTrialOffer";
+import { freeTrialToStorePack, type VisibleFreeTrial } from "../utils/freeTrialOffer";
 import { PressableCard } from "./PressableCard";
 
 export type QuickRechargePack = {
@@ -184,6 +184,7 @@ export const QuickRechargePopup = ({
   coinBalance = null,
   paymentInProgress = false,
   pendingPurchase = null,
+  freeTrial = null,
 }: QuickRechargePopupProps) => {
   useEffect(() => {
     const id = "znw-instrument-sans";
@@ -206,8 +207,9 @@ export const QuickRechargePopup = ({
     // Split coins only. A weekly mixed into `packs` is often the cheapest row,
     // and its name can match "starter" or "recommended", so it would take
     // those headings and show up a second time below.
+    const trialId = freeTrial?.planId ?? null;
     const coins = (packs as CoinStorePack[]).filter(
-      (pack) => !seenWeekly.has(pack.id),
+      (pack) => !seenWeekly.has(pack.id) && pack.id !== trialId,
     );
     const split = splitCoinStoreOffers(coins);
     const oneTime = [...split.oneTime].sort(comparePackPrice);
@@ -217,7 +219,13 @@ export const QuickRechargePopup = ({
       ...(split.mostPurchased ? [split.mostPurchased] : []),
       ...oneTime,
     ];
-    const indexOf = (id: number) => ordered.findIndex((pack) => pack.id === id);
+    // The banner is the first card, so coin positions start at 1.
+    const trialOffset = trialId == null ? 0 : 1;
+    const indexOf = (id: number) => {
+      if (trialId != null && id === trialId) return 0;
+      const found = ordered.findIndex((pack) => pack.id === id);
+      return found < 0 ? found : found + trialOffset;
+    };
     return {
       starter: split.starter,
       mostPurchased: split.mostPurchased,
@@ -225,7 +233,7 @@ export const QuickRechargePopup = ({
       indexOf,
       empty: ordered.length === 0,
     };
-  }, [packs, oneTimeLimit, weeklyPacks]);
+  }, [packs, oneTimeLimit, weeklyPacks, freeTrial]);
   const balance = coinBalance ?? callContext?.walletBalance ?? null;
 
   const buy = (pack: QuickRechargePack, index: number) => {
@@ -288,7 +296,7 @@ export const QuickRechargePopup = ({
           )}
         </div>
 
-        {sheet.empty ? (
+        {sheet.empty && !freeTrial ? (
           <div className="rounded-[16px] bg-[rgba(10,37,72,0.3)] px-6 py-10 text-center">
             <p className="text-sm text-white/70">
               There are no coin packs available right now. Please try again
@@ -297,6 +305,16 @@ export const QuickRechargePopup = ({
           </div>
         ) : (
           <div className="flex flex-col gap-4">
+            {freeTrial && (
+              <TrialBanner
+                trial={freeTrial}
+                disabled={rowDisabled(freeTrial.planId)}
+                busyLabel={busyLabelFor(freeTrial.planId)}
+                onBuy={() =>
+                  buy(freeTrialToStorePack(freeTrial), sheet.indexOf(freeTrial.planId))
+                }
+              />
+            )}
             {sheet.starter && (
               <section className="flex flex-col gap-2">
                 <h3 className="text-[16px] font-medium leading-5 text-white">

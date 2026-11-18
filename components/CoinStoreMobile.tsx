@@ -278,7 +278,7 @@ function PackRow({
   );
 }
 
-function TrialBanner({
+export function TrialBanner({
   trial,
   disabled,
   busyLabel = null,
@@ -380,17 +380,18 @@ export const CoinStoreMobile = ({
   );
 
   const offers = useMemo(() => {
-    const weeklyIds = new Set(weeklyPlans.map((plan) => plan.id));
+    const hiddenIds = new Set(weeklyPlans.map((plan) => plan.id));
+    if (freeTrial) hiddenIds.add(freeTrial.planId);
     const packs: CoinStorePack[] = [];
-    if (timerPack && !weeklyIds.has(timerPack.id)) packs.push(timerPack);
+    if (timerPack && !hiddenIds.has(timerPack.id)) packs.push(timerPack);
     const seen = new Set(packs.map((pack) => pack.id));
     for (const pack of [...exclusiveDeals, ...topPlans]) {
-      if (seen.has(pack.id) || weeklyIds.has(pack.id)) continue;
+      if (seen.has(pack.id) || hiddenIds.has(pack.id)) continue;
       seen.add(pack.id);
       packs.push(pack);
     }
     return splitCoinStoreOffers(packs);
-  }, [timerPack, exclusiveDeals, topPlans, weeklyPlans]);
+  }, [timerPack, exclusiveDeals, topPlans, weeklyPlans, freeTrial]);
 
   const busyLabelFor = (id: number) =>
     pendingPurchase?.id === id ? "Loading" : null;

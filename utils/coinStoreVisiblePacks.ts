@@ -217,7 +217,7 @@ export function getVisibleQuickRechargePacks(options: {
   return packs;
 }
 
-/** Zintle quick recharge is coin packs only. Trial and weekly stay on the full store. */
+/** Zintle quick recharge coin rows. The trial banner is rendered separately. */
 export function getZintleQuickRechargePacks(options: {
   isMember: boolean;
   timerPack: CoinStorePack | null;
@@ -243,17 +243,20 @@ export function getZintleQuickRechargeSheetPacks(options: {
   micropacks: CoinStorePack[];
   featuredWeeklyPlan?: SubscriptionPlan | null;
   basicWeeklyPlan?: SubscriptionPlan | null;
+  /** Drop a coin row that would checkout as the trial mandate. */
+  freeTrialPlanId?: number | null;
 }): CoinStorePack[] {
   const weeklies = uniqueWeeklyPlans(
     options.isMember,
     options.featuredWeeklyPlan,
     options.basicWeeklyPlan,
   ).map(weeklyPlanToStorePack);
-  // A weekly that shares an id with a coin, or is cheaper than the coins, must
-  // not be classified as Starter or Most Purchased.
-  const weeklyIds = new Set(weeklies.map((pack) => pack.id));
+  // A weekly or the trial plan can share an id with a coin. That coin must
+  // not take Starter or Most Purchased, and it must not sit beside the banner.
+  const hiddenIds = new Set(weeklies.map((pack) => pack.id));
+  if (options.freeTrialPlanId != null) hiddenIds.add(options.freeTrialPlanId);
   const offers = splitCoinStoreOffers(
-    getZintleQuickRechargePacks(options).filter((pack) => !weeklyIds.has(pack.id)),
+    getZintleQuickRechargePacks(options).filter((pack) => !hiddenIds.has(pack.id)),
   );
   const oneTime = [...offers.oneTime]
     .sort(comparePackPrice)
@@ -297,6 +300,7 @@ export function getZintleVisibleStorePacks(options: {
   const seen = new Set<number>();
   const pushCoin = (pack: CoinStorePack | null | undefined) => {
     if (pack == null || seen.has(pack.id) || weeklyIds.has(pack.id)) return;
+    if (!isMember && freeTrialPack != null && pack.id === freeTrialPack.id) return;
     seen.add(pack.id);
     coins.push(pack);
   };

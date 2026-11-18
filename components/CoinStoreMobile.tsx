@@ -8,8 +8,6 @@ import { uniqueWeeklyPlans, weeklyPlanToStorePack } from "../utils/coinStoreVisi
 import { freeTrialToStorePack, type VisibleFreeTrial } from "../utils/freeTrialOffer";
 import {
   ZINTLE_BALANCE_COIN_SRC,
-  ZINTLE_CHEVRON_SRC,
-  ZINTLE_HELP_ICON_SRC,
   ZINTLE_TRIAL_BANNER_SRC,
 } from "../utils/coinStoreAssets";
 import { PressableCard } from "./PressableCard";
@@ -40,6 +38,8 @@ export type CoinStorePack = {
   bonus?: number;
   /** Paid coins when the catalog separates them from `coins`. */
   base_coins?: number;
+  /** Coins the buyer receives. Shown as the card's main number. */
+  total_coins?: number;
   /** Backend bonus percent. Displayed as sent. */
   bonus_percent?: number;
   product_id?: string;
@@ -70,7 +70,9 @@ function formatRupee(amount: number): string {
 function formatCoins(n: number): string {
   const v = Number(n);
   if (!Number.isFinite(v)) return "0";
-  return Number.isInteger(v) ? String(v) : String(Math.round(v));
+  if (Number.isInteger(v)) return String(v);
+  const cents = Math.round(v * 100) / 100;
+  return Number.isInteger(cents) ? String(cents) : String(cents);
 }
 
 function formatBalance(balance: number): string {
@@ -138,6 +140,48 @@ function useDayCountdown(): { hours: string; minutes: string } {
   };
 }
 
+function BalanceChevron() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden
+      className="h-5 w-5 shrink-0"
+    >
+      <path
+        d="M7.5 5L12.5 10L7.5 15"
+        stroke="white"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function HelpMark() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 18 18"
+      fill="none"
+      aria-hidden
+      className="h-[18px] w-[18px] shrink-0"
+    >
+      <path
+        d="M9 12V12.0075M9 9.74982C9.33731 9.75084 9.66512 9.63813 9.93049 9.4299C10.1959 9.22166 10.3833 8.93007 10.4625 8.60219C10.5418 8.27432 10.5082 7.9293 10.3672 7.62287C10.2262 7.31643 9.98605 7.06646 9.6855 6.91332C9.38713 6.76048 9.04583 6.71309 8.71711 6.77886C8.38839 6.84463 8.09159 7.0197 7.875 7.27557M9.60158 1.62383L13.7828 3.41558C14.1428 3.57008 14.4301 3.85733 14.5853 4.21808L16.3763 8.39858C16.5413 8.78258 16.5413 9.21758 16.3763 9.60158L14.5846 13.7828C14.4301 14.1428 14.1428 14.4301 13.7821 14.5853L9.60158 16.3763C9.21758 16.5413 8.78258 16.5413 8.39858 16.3763L4.21733 14.5846C3.85666 14.4301 3.56929 14.1427 3.41483 13.7821L1.62383 9.60158C1.54237 9.4115 1.50037 9.20687 1.50037 9.00008C1.50037 8.79328 1.54237 8.58865 1.62383 8.39858L3.41558 4.21733C3.57008 3.85733 3.85733 3.57008 4.21808 3.41483L8.39858 1.62383C8.58865 1.54237 8.79328 1.50037 9.00008 1.50037C9.20687 1.50037 9.4115 1.54237 9.60158 1.62383Z"
+        stroke="white"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function FigmaCoin({ className }: { className?: string }) {
   return (
     <img
@@ -181,18 +225,18 @@ function PackRow({
       onClick={onBuy}
       disabled={disabled}
       busyLabel={busyLabel}
-      className={`flex min-h-[52px] w-full items-center justify-between text-left ${
+      className={`flex w-full items-center justify-between text-left ${
         starter
-          ? "rounded-[16px] bg-[rgba(94,216,106,0.12)] px-3 pb-3 pt-2"
+          ? "min-h-[96px] rounded-[18px] bg-[rgba(94,216,106,0.12)] px-4 py-3.5"
           : tone === "highlight"
-            ? "rounded-[16px] bg-[rgba(255,112,0,0.11)] px-3 pb-3 pt-2"
-            : "rounded-[10px] bg-[rgba(10,37,72,0.3)] px-3 pb-3 pt-2"
+            ? "min-h-[96px] rounded-[18px] bg-[rgba(255,112,0,0.11)] px-4 py-3.5"
+            : "min-h-[76px] rounded-[14px] bg-[rgba(10,37,72,0.3)] px-4 py-3"
       }`}
     >
-      <span className={`flex min-w-0 flex-col ${plain ? "gap-1" : "gap-2"}`}>
+      <span className={`flex min-w-0 flex-col ${plain ? "gap-1.5" : "gap-2.5"}`}>
         {percent != null && (
           <span
-            className={`inline-flex w-fit rounded-[3px] px-1.5 py-[5px] text-[10px] font-medium leading-[1.15] ${
+            className={`inline-flex w-fit rounded-[6px] px-2 py-1 text-[13px] font-medium leading-[1.15] ${
               starter
                 ? "bg-[#00201A] text-[#5ED86A]"
                 : "bg-[#191700] text-[#E6A433]"
@@ -202,18 +246,22 @@ function PackRow({
           </span>
         )}
         <span
-          className={`flex min-w-0 items-center ${plain ? "gap-[5px]" : "gap-[7px]"}`}
+          className={`flex min-w-0 items-center ${plain ? "gap-1.5" : "gap-2"}`}
         >
-          <span className="flex shrink-0 items-center gap-0.5">
-            <FigmaCoin className="h-6 w-6 shrink-0" />
-            <span className="whitespace-nowrap text-[16px] font-semibold leading-5 text-white">
+          <span className="flex shrink-0 items-center gap-1">
+            <FigmaCoin className={plain ? "h-7 w-7 shrink-0" : "h-8 w-8 shrink-0"} />
+            <span
+              className={`whitespace-nowrap font-semibold leading-none text-white ${
+                plain ? "text-[20px]" : "text-[24px]"
+              }`}
+            >
               {formatCoins(figures.coins)}
             </span>
           </span>
           {bonus > 0 && (
             <span
               className={`truncate font-normal leading-[1.15] text-[#E6A433] ${
-                plain ? "text-[10px]" : "text-[10.2px]"
+                plain ? "text-[13px]" : "text-[15px]"
               }`}
             >
               +{formatCoins(bonus)} Free coins
@@ -222,7 +270,7 @@ function PackRow({
         </span>
       </span>
       <span
-        className={`ml-3 inline-flex h-7 min-w-[63px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[14px] font-semibold leading-[1.15] text-black ${
+        className={`ml-3 inline-flex h-11 min-w-[76px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-5 text-[18px] font-semibold leading-none text-black ${
           starter ? "bg-[#5ED86A]" : "bg-[#FEFFFF]"
         }`}
       >
@@ -385,14 +433,7 @@ export const CoinStoreMobile = ({
             <span className="truncate text-[28px] font-semibold leading-none text-white">
               {formatBalance(coinBalance)}
             </span>
-            <img
-              src={ZINTLE_CHEVRON_SRC}
-              alt=""
-              width={20}
-              height={20}
-              draggable={false}
-              className="h-5 w-5 shrink-0"
-            />
+            <BalanceChevron />
           </button>
         ) : null}
         <button
@@ -402,13 +443,7 @@ export const CoinStoreMobile = ({
           className="absolute right-6 top-1/2 inline-flex min-h-11 -translate-y-1/2 touch-manipulation items-center disabled:opacity-40"
         >
           <span className="inline-flex items-center gap-[5px] rounded-[21px] bg-[#0A2548] py-1 pl-1.5 pr-2 text-[14px] font-normal text-[#E9E7E9]">
-            <img
-              src={ZINTLE_HELP_ICON_SRC}
-              alt=""
-              width={18}
-              height={18}
-              draggable={false}
-            />
+            <HelpMark />
             Help
           </span>
         </button>

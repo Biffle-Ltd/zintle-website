@@ -155,6 +155,7 @@ import {
   type PaymentGateway,
 } from "./utils/paymentGateway";
 import type { CreateOrderPixelOptions as BaseCreateOrderPixelOptions } from "./utils/coinCheckoutOptions";
+import { packCardFigures } from "./utils/coinStoreOffer";
 import {
   analyticsFlagsForStorePack,
   enrichStorePackWithWeeklyPlan,
@@ -1913,7 +1914,7 @@ const CoinStore = ({
                 Payment Successful!
               </h3>
               <p className="text-brand-muted mb-8">
-                Your {selectedPack?.coins} coins have been added to your wallet.
+                Your {selectedPack ? packCardFigures(selectedPack).coins : 0} coins have been added to your wallet.
               </p>
               <button
                 type="button"
@@ -2067,7 +2068,7 @@ const CoinSection = ({
                   onClick={() => handleRechargeClick(pkg)}
                 >
                   <ZintleCoinIcon className={COIN_ICON_CLASS} />
-                  <span>{pkg.coins} coins</span>
+                  <span>{packCardFigures(pkg).coins} coins</span>
                   <strong>₹{pkg.price}</strong>
                 </button>
               ))}
@@ -2759,15 +2760,18 @@ const CoinsPage = ({
               )
             : null);
         if (recommended) {
+          const source =
+            displayedPacks.find((pack) => pack.id === recommended.id) ??
+            recommended;
           const initial: CoinStorePack = {
+            ...source,
             id: recommended.id,
-            coins: recommended.coins,
             price: recommended.price,
-            name: recommended.name,
+            name: recommended.name ?? source.name,
           };
           setSelectedPackage(initial);
           setQuickRechargeHeaderPack({
-            coins: recommended.coins,
+            coins: packCardFigures(source).coins,
             price: recommended.price,
           });
           fireDefaultCoinPackSelected(
@@ -2803,7 +2807,7 @@ const CoinsPage = ({
           if (!quickRechargeHeaderLockedRef.current) {
             quickRechargeHeaderLockedRef.current = true;
             setQuickRechargeHeaderPack({
-              coins: inCallPack.coins,
+              coins: packCardFigures(inCallPack).coins,
               price: inCallPack.price,
             });
           }
@@ -2878,7 +2882,10 @@ const CoinsPage = ({
             quickRechargeHeaderLockedRef.current = true;
           }
           setQuickRechargeHeaderPack((prev) =>
-            prev ?? { coins: timerPack.coins, price: timerPack.price },
+            prev ?? {
+              coins: packCardFigures(timerPack).coins,
+              price: timerPack.price,
+            },
           );
         }
         if (!quickRechargeManualSelectRef.current) {
@@ -2900,7 +2907,10 @@ const CoinsPage = ({
             quickRechargeHeaderLockedRef.current = true;
           }
           setQuickRechargeHeaderPack((prev) =>
-            prev ?? { coins: initial.coins, price: initial.price },
+            prev ?? {
+              coins: packCardFigures(initial).coins,
+              price: initial.price,
+            },
           );
         }
         if (!quickRechargeManualSelectRef.current) {
@@ -3486,7 +3496,7 @@ const CoinsPage = ({
                 )}
                 <h3 className="mb-4 flex items-center justify-center gap-2 text-xl font-bold leading-none text-white">
                   <ZintleCoinIcon className={COIN_ICON_CLASS} />
-                  <span>{pkg.coins} Coins</span>
+                  <span>{packCardFigures(pkg).coins} Coins</span>
                 </h3>
                 <p className="text-2xl font-bold text-white mb-6">
                   ₹{pkg.price}

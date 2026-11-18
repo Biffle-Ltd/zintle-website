@@ -1,4 +1,5 @@
 import type { CoinStorePack, SubscriptionPlan } from "../components/CoinStoreMobile";
+import { packCardFigures } from "./coinStoreOffer";
 import {
   TIMER_COIN_FALLBACK_PRODUCT_ID,
   TIMER_COIN_PRODUCT_ID,
@@ -24,7 +25,16 @@ type PackLike = {
   price: number;
   name?: string;
   product_id?: string;
+  total_coins?: number;
+  bonus_coins?: number;
+  bonus?: number;
+  bonus_percent?: number;
 };
+
+/** Coins that land in the wallet. `total_coins` when the catalog sends it. */
+function coverageCoins(pack: PackLike): number {
+  return packCardFigures(pack).coins;
+}
 
 function parsePositiveNumberParam(
   params: URLSearchParams,
@@ -140,7 +150,7 @@ function toRecommendablePack(
 ): RecommendablePack {
   return {
     id: pack.id,
-    coins: pack.coins,
+    coins: coverageCoins(pack),
     price: pack.price,
     name: pack.name,
     isWeekly,
@@ -258,13 +268,13 @@ export function buildRecommendablePacks(options: {
       });
     }
   } else if (timerPack) {
-    push({
-      id: timerPack.id,
-      coins: timerPack.coins,
-      price: timerPack.price,
-      name: timerPack.name,
-      isWeekly: false,
-    });
+      push({
+        id: timerPack.id,
+        coins: coverageCoins(timerPack),
+        price: timerPack.price,
+        name: timerPack.name,
+        isWeekly: false,
+      });
   }
 
   for (const pack of packs) {
@@ -279,7 +289,7 @@ export function buildRecommendablePacks(options: {
     }
     push({
       id: pack.id,
-      coins: pack.coins,
+      coins: coverageCoins(pack),
       price: pack.price,
       name: pack.name,
       isWeekly: false,

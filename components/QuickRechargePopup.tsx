@@ -21,6 +21,7 @@ export type QuickRechargePack = {
   bonus_coins?: number;
   bonus?: number;
   base_coins?: number;
+  total_coins?: number;
   bonus_percent?: number;
   /** Subscription rows should not invent a coin-pack bonus. */
   showOffer?: boolean;
@@ -38,7 +39,9 @@ function formatRupee(amount: number): string {
 function formatCoinAmount(coins: number): string {
   const n = Number(coins);
   if (!Number.isFinite(n)) return "0";
-  return Number.isInteger(n) ? String(n) : String(Math.round(n));
+  if (Number.isInteger(n)) return String(n);
+  const cents = Math.round(n * 100) / 100;
+  return Number.isInteger(cents) ? String(cents) : String(cents);
 }
 
 function formatBalance(balance: number): string {
@@ -73,18 +76,18 @@ function PackRow({
       onClick={onBuy}
       disabled={disabled}
       busyLabel={busyLabel}
-      className={`flex min-h-[52px] w-full items-center justify-between text-left ${
+      className={`flex w-full items-center justify-between text-left ${
         starter
-          ? "rounded-[16px] bg-[rgba(94,216,106,0.12)] px-3 pb-3 pt-2"
+          ? "min-h-[96px] rounded-[18px] bg-[rgba(94,216,106,0.12)] px-4 py-3.5"
           : tone === "highlight"
-            ? "rounded-[16px] bg-[rgba(255,112,0,0.11)] px-3 pb-3 pt-2"
-            : "rounded-[10px] bg-[rgba(10,37,72,0.3)] px-3 pb-3 pt-2"
+            ? "min-h-[96px] rounded-[18px] bg-[rgba(255,112,0,0.11)] px-4 py-3.5"
+            : "min-h-[76px] rounded-[14px] bg-[rgba(10,37,72,0.3)] px-4 py-3"
       }`}
     >
-      <span className={`flex min-w-0 flex-col ${plain ? "gap-1" : "gap-2"}`}>
+      <span className={`flex min-w-0 flex-col ${plain ? "gap-1.5" : "gap-2.5"}`}>
         {figures.percent != null && (
           <span
-            className={`inline-flex w-fit rounded-[3px] px-1.5 py-[5px] text-[10px] font-medium leading-[1.15] ${
+            className={`inline-flex w-fit rounded-[6px] px-2 py-1 text-[13px] font-medium leading-[1.15] ${
               starter
                 ? "bg-[#00201A] text-[#5ED86A]"
                 : "bg-[#191700] text-[#E6A433]"
@@ -94,9 +97,9 @@ function PackRow({
           </span>
         )}
         <span
-          className={`flex min-w-0 items-center ${plain ? "gap-[5px]" : "gap-[7px]"}`}
+          className={`flex min-w-0 items-center ${plain ? "gap-1.5" : "gap-2"}`}
         >
-          <span className="flex shrink-0 items-center gap-0.5">
+          <span className="flex shrink-0 items-center gap-1">
             <img
               src={ZINTLE_BALANCE_COIN_SRC}
               alt=""
@@ -105,16 +108,20 @@ function PackRow({
               decoding="async"
               fetchPriority="high"
               draggable={false}
-              className="h-6 w-6 shrink-0"
+              className={plain ? "h-7 w-7 shrink-0" : "h-8 w-8 shrink-0"}
             />
-            <span className="whitespace-nowrap text-[16px] font-semibold leading-[1.15] text-white">
+            <span
+              className={`whitespace-nowrap font-semibold leading-none text-white ${
+                plain ? "text-[20px]" : "text-[24px]"
+              }`}
+            >
               {formatCoinAmount(figures.coins)}
             </span>
           </span>
           {figures.free > 0 && (
             <span
               className={`truncate font-normal leading-[1.15] text-[#E6A433] ${
-                plain ? "text-[10px]" : "text-[10.2px]"
+                plain ? "text-[13px]" : "text-[15px]"
               }`}
             >
               +{formatCoinAmount(figures.free)} Free coins
@@ -123,7 +130,7 @@ function PackRow({
         </span>
       </span>
       <span
-        className={`ml-3 inline-flex h-7 min-w-[63px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[14px] font-semibold leading-[1.15] text-black ${
+        className={`ml-3 inline-flex h-11 min-w-[76px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-5 text-[18px] font-semibold leading-none text-black ${
           starter ? "bg-[#5ED86A]" : "bg-[#FEFFFF]"
         }`}
       >

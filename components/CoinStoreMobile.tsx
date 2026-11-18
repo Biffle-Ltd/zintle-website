@@ -218,25 +218,24 @@ function PackRow({
   const bonus = figures.free;
   const percent = figures.percent;
   const starter = tone === "starter";
-  const plain = tone === "plain";
 
   return (
     <PressableCard
       onClick={onBuy}
       disabled={disabled}
       busyLabel={busyLabel}
-      className={`flex w-full items-center justify-between text-left ${
+      className={`flex h-[78px] w-full items-center justify-between rounded-2xl px-4 text-left ${
         starter
-          ? "min-h-[96px] rounded-[18px] bg-[rgba(94,216,106,0.12)] px-4 py-3.5"
+          ? "bg-[rgba(94,216,106,0.12)]"
           : tone === "highlight"
-            ? "min-h-[96px] rounded-[18px] bg-[rgba(255,112,0,0.11)] px-4 py-3.5"
-            : "min-h-[76px] rounded-[14px] bg-[rgba(10,37,72,0.3)] px-4 py-3"
+            ? "bg-[rgba(255,112,0,0.11)]"
+            : "bg-[rgba(10,37,72,0.3)]"
       }`}
     >
-      <span className={`flex min-w-0 flex-col ${plain ? "gap-1.5" : "gap-2.5"}`}>
+      <span className="flex min-w-0 flex-col justify-center gap-1.5">
         {percent != null && (
           <span
-            className={`inline-flex w-fit rounded-[6px] px-2 py-1 text-[13px] font-medium leading-[1.15] ${
+            className={`inline-flex w-fit rounded-[6px] px-1.5 py-0.5 text-[12px] font-medium leading-[1.15] ${
               starter
                 ? "bg-[#00201A] text-[#5ED86A]"
                 : "bg-[#191700] text-[#E6A433]"
@@ -245,32 +244,22 @@ function PackRow({
             {percent}% bonus
           </span>
         )}
-        <span
-          className={`flex min-w-0 items-center ${plain ? "gap-1.5" : "gap-2"}`}
-        >
+        <span className="flex min-w-0 items-center gap-1.5">
           <span className="flex shrink-0 items-center gap-1">
-            <FigmaCoin className={plain ? "h-7 w-7 shrink-0" : "h-8 w-8 shrink-0"} />
-            <span
-              className={`whitespace-nowrap font-semibold leading-none text-white ${
-                plain ? "text-[20px]" : "text-[24px]"
-              }`}
-            >
+            <FigmaCoin className="h-6 w-6 shrink-0" />
+            <span className="whitespace-nowrap text-[20px] font-semibold leading-none text-white">
               {formatCoins(figures.coins)}
             </span>
           </span>
           {bonus > 0 && (
-            <span
-              className={`truncate font-normal leading-[1.15] text-[#E6A433] ${
-                plain ? "text-[13px]" : "text-[15px]"
-              }`}
-            >
+            <span className="truncate text-[13px] font-normal leading-[1.15] text-[#E6A433]">
               +{formatCoins(bonus)} Free coins
             </span>
           )}
         </span>
       </span>
       <span
-        className={`ml-3 inline-flex h-11 min-w-[76px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-5 text-[18px] font-semibold leading-none text-black ${
+        className={`ml-3 inline-flex h-9 min-w-[72px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[16px] font-semibold leading-none text-black ${
           starter ? "bg-[#5ED86A]" : "bg-[#FEFFFF]"
         }`}
       >

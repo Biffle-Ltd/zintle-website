@@ -69,25 +69,24 @@ function PackRow({
       ? { coins: pack.coins, free: 0, percent: null }
       : packCardFigures(pack);
   const starter = tone === "starter";
-  const plain = tone === "plain";
 
   return (
     <PressableCard
       onClick={onBuy}
       disabled={disabled}
       busyLabel={busyLabel}
-      className={`flex w-full items-center justify-between text-left ${
+      className={`flex h-[78px] w-full items-center justify-between rounded-2xl px-4 text-left ${
         starter
-          ? "min-h-[96px] rounded-[18px] bg-[rgba(94,216,106,0.12)] px-4 py-3.5"
+          ? "bg-[rgba(94,216,106,0.12)]"
           : tone === "highlight"
-            ? "min-h-[96px] rounded-[18px] bg-[rgba(255,112,0,0.11)] px-4 py-3.5"
-            : "min-h-[76px] rounded-[14px] bg-[rgba(10,37,72,0.3)] px-4 py-3"
+            ? "bg-[rgba(255,112,0,0.11)]"
+            : "bg-[rgba(10,37,72,0.3)]"
       }`}
     >
-      <span className={`flex min-w-0 flex-col ${plain ? "gap-1.5" : "gap-2.5"}`}>
+      <span className="flex min-w-0 flex-col justify-center gap-1.5">
         {figures.percent != null && (
           <span
-            className={`inline-flex w-fit rounded-[6px] px-2 py-1 text-[13px] font-medium leading-[1.15] ${
+            className={`inline-flex w-fit rounded-[6px] px-1.5 py-0.5 text-[12px] font-medium leading-[1.15] ${
               starter
                 ? "bg-[#00201A] text-[#5ED86A]"
                 : "bg-[#191700] text-[#E6A433]"
@@ -96,9 +95,7 @@ function PackRow({
             {figures.percent}% bonus
           </span>
         )}
-        <span
-          className={`flex min-w-0 items-center ${plain ? "gap-1.5" : "gap-2"}`}
-        >
+        <span className="flex min-w-0 items-center gap-1.5">
           <span className="flex shrink-0 items-center gap-1">
             <img
               src={ZINTLE_BALANCE_COIN_SRC}
@@ -108,29 +105,21 @@ function PackRow({
               decoding="async"
               fetchPriority="high"
               draggable={false}
-              className={plain ? "h-7 w-7 shrink-0" : "h-8 w-8 shrink-0"}
+              className="h-6 w-6 shrink-0"
             />
-            <span
-              className={`whitespace-nowrap font-semibold leading-none text-white ${
-                plain ? "text-[20px]" : "text-[24px]"
-              }`}
-            >
+            <span className="whitespace-nowrap text-[20px] font-semibold leading-none text-white">
               {formatCoinAmount(figures.coins)}
             </span>
           </span>
           {figures.free > 0 && (
-            <span
-              className={`truncate font-normal leading-[1.15] text-[#E6A433] ${
-                plain ? "text-[13px]" : "text-[15px]"
-              }`}
-            >
+            <span className="truncate text-[13px] font-normal leading-[1.15] text-[#E6A433]">
               +{formatCoinAmount(figures.free)} Free coins
             </span>
           )}
         </span>
       </span>
       <span
-        className={`ml-3 inline-flex h-11 min-w-[76px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-5 text-[18px] font-semibold leading-none text-black ${
+        className={`ml-3 inline-flex h-9 min-w-[72px] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-4 text-[16px] font-semibold leading-none text-black ${
           starter ? "bg-[#5ED86A]" : "bg-[#FEFFFF]"
         }`}
       >
@@ -247,20 +236,20 @@ export const QuickRechargePopup = ({
       className={
         page
           ? "flex h-dvh w-full touch-manipulation flex-col overflow-hidden bg-[#011735] px-4 pt-[max(0.75rem,env(safe-area-inset-top))] min-[390px]:px-6"
-          : "flex max-h-full min-h-0 w-full touch-manipulation flex-col items-center gap-6 overflow-hidden rounded-[26px] bg-[#011735] p-4"
+          : "flex max-h-full min-h-0 w-full touch-manipulation flex-col items-center overflow-hidden rounded-[26px] bg-[#011735] p-4"
       }
       style={{ fontFamily: SHEET_FONT }}
       role={page ? "main" : "dialog"}
       aria-label="Quick recharge"
     >
       {!page && (
-        <div className="h-[3px] w-[41px] shrink-0 rounded-full bg-[#E9E7E9] opacity-40" />
+        <div className="mb-4 h-[3px] w-[41px] shrink-0 rounded-full bg-[#E9E7E9] opacity-40" />
       )}
 
       <div
         className={
           page
-            ? "flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            ? "flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             : "flex min-h-0 w-full flex-col gap-4 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         }
       >
@@ -360,19 +349,19 @@ export const QuickRechargePopup = ({
         <div
           className={`relative z-10 w-full shrink-0 ${
             page
-              ? "bg-[#011735] pb-[max(1rem,env(safe-area-inset-bottom))] pt-2"
-              : "bg-[#011735] pt-2"
+              ? "pb-[max(1rem,env(safe-area-inset-bottom))] pt-3"
+              : "pt-3"
           }`}
         >
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-full h-16 bg-gradient-to-t from-[#011735] to-transparent"
+            className="pointer-events-none absolute inset-x-[-1.5rem] bottom-0 h-28 bg-gradient-to-t from-black via-black/70 to-transparent"
           />
           <button
             type="button"
             onClick={onMorePlans}
             disabled={paymentInProgress}
-            className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-[11px] text-[14px] font-semibold text-white transition-transform active:scale-95 disabled:opacity-40"
+            className="relative z-10 inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-[11px] text-[14px] font-semibold text-white transition-transform active:scale-95 disabled:opacity-40"
           >
             See More Plans
             <img

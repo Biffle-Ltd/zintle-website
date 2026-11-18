@@ -2108,6 +2108,7 @@ const CoinsPage = ({
   // Stay on this document. A route change restarts the webview and the store
   // sits on the skeleton until packs and plans load again.
   const [openedFullStore, setOpenedFullStore] = useState(false);
+  const [openedCoinHistory, setOpenedCoinHistory] = useState(false);
   const quickRecharge = quickRechargeFromUrl && !openedFullStore;
   const quickRechargeSurface = useMemo(
     () => coinPurchaseSurfaceFromSearch(location.search),
@@ -3038,16 +3039,7 @@ const CoinsPage = ({
 
   const openCoinHistory = (source: "coin_balance" | "help") => {
     sendCoinCtaClicked(pixelContext, { cta: source });
-    try {
-      window.ReactNativeWebView?.postMessage(
-        JSON.stringify({ action: "open_coin_history" }),
-      );
-    } catch {
-      // Native history screen is not available in the browser.
-    }
-    const params = new URLSearchParams(location.search);
-    params.delete("quick_recharge");
-    navigate({ pathname: "/coins/history", search: params.toString() });
+    setOpenedCoinHistory(true);
   };
 
   const handleDesktopRecharge = async (pkg: CoinStorePack, index: number) => {
@@ -3332,6 +3324,15 @@ const CoinsPage = ({
       return false;
     }
   };
+
+  if (openedCoinHistory && !isBiffle) {
+    return (
+      <CoinHistory
+        onBack={() => setOpenedCoinHistory(false)}
+        coinBalance={coinBalance}
+      />
+    );
+  }
 
   if (quickRecharge) {
     if (!isBiffle) {

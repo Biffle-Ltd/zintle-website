@@ -9,6 +9,14 @@ export type WalletTransaction = {
   description: string | null;
   createdAt: string;
   bonusValue: number;
+  counterpartyName: string | null;
+};
+
+export type CoinHistoryFilter = "chat" | "recharge" | "gift";
+
+export type HistoryMonthGroup = {
+  label: string;
+  transactions: WalletTransaction[];
 };
 
 export type WalletTransactionPage = {
@@ -16,25 +24,47 @@ export type WalletTransactionPage = {
   transactions: WalletTransaction[];
 };
 
-const TITLES: Record<string, string> = {
-  gift: "Gift",
-  regular: "Coins",
-  tip: "Tip",
-  refund: "Refund",
-  withdrawal: "Withdrawal",
-  coin_pack: "Recharge",
-  call: "Call",
-  audio_call: "Audio call",
-  video_call: "Video call",
-  chat: "Chat",
-  voice_note: "Voice note",
-  referral: "Referral",
-  reward: "Reward",
-  daily_reward: "Daily reward",
-  bonus: "Bonus",
-  expired_coins: "Expired coins",
-  call_end_charge: "Call",
-};
+const CHAT_TYPES = new Set([
+  "chat",
+  "call",
+  "audio_call",
+  "video_call",
+  "voice_note",
+  "call_end_charge",
+]);
+const RECHARGE_TYPES = new Set([
+  "coin_pack",
+  "bonus",
+  "refund",
+  "reward",
+  "daily_reward",
+  "referral",
+  "regular",
+]);
+const GIFT_TYPES = new Set(["gift", "tip"]);
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+function personName(value: unknown): string | null {
+  const user = asRecord(value);
+  if (!user) return null;
+  const first = typeof user.first_name === "string" ? user.first_name.trim() : "";
+  const last = typeof user.last_name === "string" ? user.last_name.trim() : "";
+  const name = [first, last].filter(Boolean).join(" ");
+  return name || null;
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
@@ -76,6 +106,7 @@ function parseRow(value: unknown): WalletTransaction | null {
     description,
     createdAt: typeof row.created_at === "string" ? row.created_at : "",
     bonusValue: bonusTotal(row.bonus_transactions),
+    counterpartyName: personName(row.given_to_user),
   };
 }
 
@@ -97,10 +128,86 @@ export function parseWalletTransactionHistory(
   };
 }
 
+function boilerplateDescription(description: string): boolean {
+  return (
+    description.length > 80 ||
+    /^(coins spent for call|coins purchased by|coins expired)/i.test(description)
+  );
+}
+
+/** Chat, recharge, and gift are the history tabs. Other ledger rows stay out. */
+export function coinHistoryFilter(
+  transaction: WalletTransaction,
+): CoinHistoryFilter | null {
+  if (CHAT_TYPES.has(transaction.transactionFor)) return "chat";
+  if (GIFT_TYPES.has(transaction.transactionFor)) return "gift";
+  if (RECHARGE_TYPES.has(transaction.transactionFor)) return "recharge";
+  return null;
+}
+
 export function walletTransactionTitle(transaction: WalletTransaction): string {
-  const description = transaction.description?.trim();
-  if (description) return description;
-  return TITLES[transaction.transactionFor] ?? "Coins";
+  const description = transaction.description?.trim() ?? "";
+  const name = transaction.counterpartyName;
+  if (GIFT_TYPES.has(transaction.transactionFor)) {
+    const sentTo = description.match(/^Gift for (.+?) from .+$/i);
+    const who = name || sentTo?.[1]?.trim();
+    return who ? `Gift sent to ${who}` : "Gift";
+  }
+  if (description && !boilerplateDescription(description)) return description;
+  if (CHAT_TYPES.has(transaction.transactionFor)) {
+    if (name) return `Chat to ${name}`;
+    return transaction.transactionFor === "chat" ? "Chat" : "Call";
+  }
+  if (
+    transaction.transactionFor === "coin_pack" ||
+    transaction.transactionFor === "bonus"
+  ) {
+    return "Recharge";
+  }
+  return "Coins";
+}
+
+export function historyAmountLabel(transaction: WalletTransaction): string {
+  if (coinHistoryFilter(transaction) === "gift") return "Gift";
+  if (coinHistoryFilter(transaction) === "recharge") return "Recharge";
+  return transaction.transactionType === "credit" ? "Credit" : "Debit";
+}
+
+export function parseHistoryDate(createdAt: string): Date | null {
+  const match = createdAt.trim().match(/^(\d{1,2}) ([A-Za-z]+), (\d{4})$/);
+  if (!match) return null;
+  const month = MONTHS.findIndex(
+    (name) => name.toLowerCase() === match[2].toLowerCase(),
+  );
+  const day = Number(match[1]);
+  const year = Number(match[3]);
+  if (month < 0 || day < 1 || day > 31) return null;
+  return new Date(year, month, day);
+}
+
+export function historyDateLabel(createdAt: string): string {
+  const date = parseHistoryDate(createdAt);
+  if (!date) return createdAt;
+  return `${MONTHS[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
+export function groupHistoryByMonth(
+  transactions: WalletTransaction[],
+): HistoryMonthGroup[] {
+  const groups: HistoryMonthGroup[] = [];
+  for (const transaction of transactions) {
+    const date = parseHistoryDate(transaction.createdAt);
+    const label = date
+      ? `${MONTHS[date.getMonth()]} ${date.getFullYear()}`
+      : "Earlier";
+    const current = groups[groups.length - 1];
+    if (current && current.label === label) {
+      current.transactions.push(transaction);
+    } else {
+      groups.push({ label, transactions: [transaction] });
+    }
+  }
+  return groups;
 }
 
 export function formatWalletCoins(value: number): string {

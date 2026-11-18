@@ -115,11 +115,11 @@ export function CoinHistory({
   };
 
   const backClass =
-    "inline-flex min-h-11 items-center gap-1 text-[18px] font-medium text-white";
+    "inline-flex items-center gap-1.5 py-1 text-[22px] font-semibold leading-none text-white";
 
   return (
     <div
-      className="min-h-dvh bg-[#011735] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] text-white"
+      className="min-h-dvh bg-[#011735] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-1 text-white"
       style={{ fontFamily: '"Instrument Sans", ui-sans-serif, system-ui, sans-serif' }}
     >
       <header className="flex items-center justify-between gap-3">
@@ -147,17 +147,17 @@ export function CoinHistory({
               alt=""
               width={96}
               height={96}
-              className="h-5 w-5"
+              className="h-6 w-6"
               draggable={false}
             />
-            <span className="text-[14px] font-semibold leading-5 text-[#E9E7E9]">
+            <span className="text-[16px] font-semibold leading-5 text-[#E9E7E9]">
               {formatWalletCoins(coinBalance)}
             </span>
           </span>
         )}
       </header>
 
-      <div className="mt-4 flex items-center justify-between px-2">
+      <div className="mt-3 flex items-center justify-between px-1">
         {FILTERS.map((item) => {
           const selected = item.id === filter;
           return (
@@ -165,7 +165,7 @@ export function CoinHistory({
               key={item.id}
               type="button"
               onClick={() => setFilter(item.id)}
-              className={`min-h-10 min-w-[92px] rounded-full px-4 text-[15px] font-medium ${
+              className={`min-h-11 min-w-[96px] rounded-full px-4 text-[17px] font-medium ${
                 selected ? "bg-[#0E2C52] text-white" : "text-white/80"
               }`}
               aria-pressed={selected}
@@ -207,7 +207,7 @@ export function CoinHistory({
               key={month.label}
               className="rounded-[18px] bg-[#071E3D] px-4 py-3"
             >
-              <span className="inline-flex rounded-full bg-[#0E2C52] px-3 py-1 text-[12px] font-medium text-white">
+              <span className="inline-flex rounded-full bg-[#0E2C52] px-3 py-1 text-[14px] font-medium text-white">
                 {month.label}
               </span>
               <ul>
@@ -239,11 +239,11 @@ function HistoryRow({ transaction }: { transaction: WalletTransaction }) {
   return (
     <li className="flex items-center justify-between gap-3 py-3">
       <span className="min-w-0">
-        <span className="block truncate text-[15px] font-medium text-white">
+        <span className="block truncate text-[18px] font-medium leading-6 text-white">
           {walletTransactionTitle(transaction)}
         </span>
         {transaction.createdAt ? (
-          <span className="mt-0.5 block text-[12px] text-[#E0B15A]">
+          <span className="mt-0.5 block text-[14px] text-[#E0B15A]">
             {historyDateLabel(transaction.createdAt)}
           </span>
         ) : null}
@@ -255,15 +255,15 @@ function HistoryRow({ transaction }: { transaction: WalletTransaction }) {
             alt=""
             width={96}
             height={96}
-            className="h-4 w-4"
+            className="h-5 w-5"
             draggable={false}
           />
-          <span className="text-[15px] font-semibold text-white">
+          <span className="text-[18px] font-semibold text-white">
             {formatWalletCoins(Math.abs(transaction.value))}
           </span>
         </span>
         <span
-          className={`mt-0.5 block text-[12px] font-medium ${LABEL_COLOR[label] ?? "text-white/70"}`}
+          className={`mt-0.5 block text-[14px] font-medium ${LABEL_COLOR[label] ?? "text-white/70"}`}
         >
           {label}
         </span>
@@ -274,7 +274,7 @@ function HistoryRow({ transaction }: { transaction: WalletTransaction }) {
 
 function BackChevron() {
   return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+    <svg width="22" height="22" viewBox="0 0 18 18" fill="none" aria-hidden>
       <path
         d="M11 4L6 9l5 5"
         stroke="white"

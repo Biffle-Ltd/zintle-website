@@ -419,13 +419,29 @@ export const CoinStoreMobile = ({
       className="relative min-h-dvh overflow-x-hidden bg-[#011735] md:hidden"
       style={{ fontFamily: STORE_FONT }}
     >
-      <header className="relative flex min-h-11 items-center justify-center px-6 pt-[40px]">
+      <header className="flex flex-col items-center px-6 pt-[40px]">
+        <div className="flex h-10 w-full items-center justify-end">
+          <button
+            type="button"
+            onClick={() => onOpenCoinHistory?.("help")}
+            disabled={paymentInProgress}
+            className="inline-flex min-h-11 touch-manipulation items-center disabled:opacity-40"
+          >
+            <span className="inline-flex items-center gap-[5px] rounded-[21px] bg-[#0A2548] py-1 pl-1.5 pr-2 text-[14px] font-normal text-[#E9E7E9]">
+              <HelpMark />
+              Help
+            </span>
+          </button>
+        </div>
+        <p className="text-center text-[12px] font-normal leading-[15px] text-white">
+          Coin Store
+        </p>
         {coinBalance != null ? (
           <button
             type="button"
             onClick={() => onOpenCoinHistory?.("coin_balance")}
             disabled={paymentInProgress}
-            className="inline-flex min-h-11 max-w-[calc(100%-12rem)] touch-manipulation items-center gap-1.5 disabled:opacity-40"
+            className="inline-flex min-h-11 max-w-full touch-manipulation items-center gap-1.5 disabled:opacity-40"
             aria-label={`${formatBalance(coinBalance)} coins`}
           >
             <FigmaCoin className="h-9 w-9 shrink-0" />
@@ -435,17 +451,6 @@ export const CoinStoreMobile = ({
             <BalanceChevron />
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={() => onOpenCoinHistory?.("help")}
-          disabled={paymentInProgress}
-          className="absolute bottom-0 right-6 top-[40px] inline-flex min-h-11 touch-manipulation items-center disabled:opacity-40"
-        >
-          <span className="inline-flex items-center gap-[5px] rounded-[21px] bg-[#0A2548] py-1 pl-1.5 pr-2 text-[14px] font-normal text-[#E9E7E9]">
-            <HelpMark />
-            Help
-          </span>
-        </button>
       </header>
 
       <main className="relative flex flex-col gap-4 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3">

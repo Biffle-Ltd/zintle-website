@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { resolvePageAuthToken } from "../utils/authStorage";
 import { ZINTLE_BALANCE_COIN_SRC } from "../utils/coinStoreAssets";
 import { HOST } from "../utils/host";
@@ -31,7 +31,6 @@ const LABEL_COLOR: Record<string, string> = {
 };
 
 export function CoinHistory({
-  onBack,
   coinBalance = null,
 }: {
   onBack?: () => void;
@@ -114,32 +113,18 @@ export function CoinHistory({
       .finally(() => setLoadingMore(false));
   };
 
-  const backClass =
-    "inline-flex items-center gap-1.5 py-1 text-[22px] font-semibold leading-none text-white";
-
   return (
     <div
-      className="min-h-dvh bg-[#011735] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[50px] text-white"
+      className="min-h-dvh bg-[#011735] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[55px] text-white"
       style={{ fontFamily: '"Instrument Sans", ui-sans-serif, system-ui, sans-serif' }}
     >
-      <header className="flex items-center justify-between gap-3">
-        {onBack ? (
-          <button type="button" onClick={onBack} className={backClass}>
-            <BackChevron />
-            History
-          </button>
-        ) : (
-          <Link
-            to={{ pathname: "/coins", search: location.search }}
-            className={backClass}
-          >
-            <BackChevron />
-            History
-          </Link>
-        )}
+      <header className="relative flex items-center justify-center">
+        <h1 className="text-[22px] font-semibold leading-none text-white">
+          History
+        </h1>
         {coinBalance != null && (
           <span
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/80 py-1 pl-1 pr-2.5"
+            className="absolute right-0 inline-flex shrink-0 items-center gap-1 rounded-full border border-white/80 py-1 pl-1 pr-2.5"
             aria-label={`${formatWalletCoins(coinBalance)} coins`}
           >
             <img
@@ -269,19 +254,5 @@ function HistoryRow({ transaction }: { transaction: WalletTransaction }) {
         </span>
       </span>
     </li>
-  );
-}
-
-function BackChevron() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 18 18" fill="none" aria-hidden>
-      <path
-        d="M11 4L6 9l5 5"
-        stroke="white"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }

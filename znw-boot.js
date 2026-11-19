@@ -509,13 +509,16 @@
       var zintleRow =
         '<div style="height:69px;border-radius:10px;background:rgba(10,37,72,.3)"></div>';
       return (
-        '<div role="status" aria-live="polite" aria-label="Loading coin store" style="min-height:100dvh;background:#011735;padding:0 24px 32px;position:relative;overflow:hidden">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;padding-top:55px">' +
-        bone("height:22px;width:132px;border-radius:6px") +
+        '<div role="status" aria-live="polite" aria-label="Loading coin store" style="height:100dvh;background:#011735;display:flex;flex-direction:column;overflow:hidden">' +
+        '<div style="flex:none;padding:55px 24px 0">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between">' +
+        bone("height:22px;width:118px;border-radius:6px") +
         bone("height:26px;width:68px;border-radius:21px;background:#0A2548") +
         "</div>" +
         bone("height:36px;width:120px;border-radius:999px;margin:8px auto 0") +
-        '<div style="height:81px;margin-top:16px;border-radius:16px;background:linear-gradient(90deg,#FF7000,#F4486E)"></div>' +
+        "</div>" +
+        '<div style="flex:1;min-height:0;overflow:auto;padding:12px 24px 32px">' +
+        '<div style="height:81px;border-radius:16px;background:linear-gradient(90deg,#FF7000,#F4486E)"></div>' +
         bone("height:20px;width:92px;border-radius:6px;margin:24px 0 8px;background:rgba(255,255,255,.15)") +
         '<div style="height:73px;border-radius:16px;background:rgba(94,216,106,.12)"></div>' +
         bone("height:20px;width:121px;border-radius:6px;margin:24px 0 8px;background:rgba(255,255,255,.15)") +
@@ -525,7 +528,7 @@
         zintleRow +
         zintleRow +
         zintleRow +
-        "</div></div>"
+        "</div></div></div>"
       );
     }
     var bg = "#F5F5F5";

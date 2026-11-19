@@ -97,8 +97,6 @@ type CoinStoreMobileProps = {
   coinBalance?: number | null;
   /** Balance and Help both open coin history for now. */
   onOpenCoinHistory?: (source: "coin_balance" | "help") => void;
-  /** Leaves the full store. From quick recharge this returns to that screen. */
-  onBack?: () => void;
   /** The card that is waiting on UPI or checkout. Others stay dimmed. */
   pendingPurchase?: { id: number } | null;
 };
@@ -157,20 +155,6 @@ function BalanceChevron() {
         d="M7.5 5L12.5 10L7.5 15"
         stroke="white"
         strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function BackChevron() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 18 18" fill="none" aria-hidden>
-      <path
-        d="M11 4L6 9l5 5"
-        stroke="white"
-        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -378,7 +362,6 @@ export const CoinStoreMobile = ({
   paymentInProgress = false,
   coinBalance = null,
   onOpenCoinHistory,
-  onBack,
   pendingPurchase = null,
 }: CoinStoreMobileProps) => {
   useEffect(() => {
@@ -434,21 +417,15 @@ export const CoinStoreMobile = ({
 
   return (
     <div
-      className="relative min-h-dvh overflow-x-hidden bg-[#011735] md:hidden"
+      className="relative flex h-dvh flex-col overflow-hidden bg-[#011735] md:hidden"
       style={{ fontFamily: STORE_FONT }}
     >
       <StoreTopGlow />
-      <header className="relative px-6 pt-[55px]">
+      <header className="relative shrink-0 px-6 pt-[55px]">
         <div className="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => onBack?.()}
-            disabled={paymentInProgress}
-            className="inline-flex min-h-11 items-center gap-1.5 py-1 text-[22px] font-semibold leading-none text-white disabled:opacity-40"
-          >
-            <BackChevron />
+          <h1 className="inline-flex min-h-11 items-center py-1 text-[22px] font-semibold leading-none text-white">
             Coin Store
-          </button>
+          </h1>
           <button
             type="button"
             onClick={() => onOpenCoinHistory?.("help")}
@@ -478,7 +455,7 @@ export const CoinStoreMobile = ({
         ) : null}
       </header>
 
-      <main className="relative flex flex-col gap-4 px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3">
+      <main className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-6 pb-[max(2rem,env(safe-area-inset-bottom))] pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
         {!hasRows && (
           <div className="rounded-[16px] bg-[rgba(10,37,72,0.3)] px-6 py-10 text-center">
             <p className="text-sm text-white/70">

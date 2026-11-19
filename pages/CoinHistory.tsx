@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { StoreTopGlow } from "../components/StoreTopGlow";
 import { resolvePageAuthToken } from "../utils/authStorage";
@@ -52,6 +52,11 @@ export function CoinHistory({
   );
   const [loadingMore, setLoadingMore] = useState(false);
   const [filter, setFilter] = useState<CoinHistoryFilter>("chat");
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    listRef.current?.scrollTo(0, 0);
+  }, [filter]);
 
   useEffect(() => {
     if (!token) return;
@@ -120,11 +125,11 @@ export function CoinHistory({
 
   return (
     <div
-      className="relative min-h-dvh overflow-x-hidden bg-[#011735] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[55px] text-white"
+      className="relative flex h-dvh flex-col overflow-hidden bg-[#011735] px-4 pt-[55px] text-white"
       style={{ fontFamily: '"Instrument Sans", ui-sans-serif, system-ui, sans-serif' }}
     >
       <StoreTopGlow />
-      <header className="relative flex items-center justify-between gap-3">
+      <header className="relative flex shrink-0 items-center justify-between gap-3">
         {onBack ? (
           <button type="button" onClick={onBack} className={titleClass}>
             <BackChevron />
@@ -159,7 +164,7 @@ export function CoinHistory({
         )}
       </header>
 
-      <div className="mt-3 flex items-center justify-between px-1">
+      <div className="mt-3 flex min-w-0 shrink-0 items-center justify-between gap-2 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {FILTERS.map((item) => {
           const selected = item.id === filter;
           return (
@@ -167,7 +172,7 @@ export function CoinHistory({
               key={item.id}
               type="button"
               onClick={() => setFilter(item.id)}
-              className={`min-h-11 min-w-[96px] rounded-full px-4 text-[17px] font-medium ${
+              className={`min-h-11 min-w-[96px] shrink-0 rounded-full px-4 text-[17px] font-medium ${
                 selected ? "bg-[#0E2C52] text-white" : "text-white/80"
               }`}
               aria-pressed={selected}
@@ -178,6 +183,10 @@ export function CoinHistory({
         })}
       </div>
 
+      <div
+        ref={listRef}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1.5rem,env(safe-area-inset-bottom))] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
       {!token && (
         <p className="mt-8 text-center text-[14px] leading-5 text-white/70">
           Sign in to see your coin history.
@@ -232,6 +241,7 @@ export function CoinHistory({
           {loadingMore ? "Loading" : "Load more"}
         </button>
       )}
+      </div>
     </div>
   );
 }

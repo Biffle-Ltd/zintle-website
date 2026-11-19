@@ -3088,6 +3088,16 @@ const CoinsPage = ({
 
   const openFullCoinStore = () => {
     sendCoinCtaClicked(pixelContext, { cta: "more_plans" });
+    const w = window;
+    if (w.ReactNativeWebView?.postMessage) {
+      try {
+        w.ReactNativeWebView.postMessage(
+          JSON.stringify({ action: "openCoinStore" }),
+        );
+      } catch {
+        // Native bridge unavailable — still open the store below.
+      }
+    }
     setOpenedFullStore(true);
   };
 

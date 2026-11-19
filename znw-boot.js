@@ -510,7 +510,7 @@
         '<div style="height:69px;border-radius:10px;background:rgba(10,37,72,.3)"></div>';
       return (
         '<div role="status" aria-live="polite" aria-label="Loading coin store" style="min-height:100dvh;background:#011735;padding:8px 24px 32px;position:relative;overflow:hidden">' +
-        '<div style="position:relative;display:flex;justify-content:center;align-items:center;min-height:44px;padding-top:20px">' +
+        '<div style="position:relative;display:flex;justify-content:center;align-items:center;min-height:44px;padding-top:40px">' +
         bone("height:36px;width:120px;border-radius:999px") +
         bone("position:absolute;right:0;top:9px;height:26px;width:68px;border-radius:21px;background:#0A2548") +
         "</div>" +

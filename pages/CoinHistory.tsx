@@ -164,7 +164,7 @@ export function CoinHistory({
         )}
       </header>
 
-      <div className="mt-3 flex min-w-0 shrink-0 items-center justify-between gap-2 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mt-3 flex min-w-0 shrink-0 items-center justify-between gap-2 overflow-x-auto overflow-y-hidden px-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {FILTERS.map((item) => {
           const selected = item.id === filter;
           return (
@@ -172,7 +172,7 @@ export function CoinHistory({
               key={item.id}
               type="button"
               onClick={() => setFilter(item.id)}
-              className={`min-h-11 min-w-[96px] shrink-0 rounded-full px-4 text-[17px] font-medium ${
+              className={`inline-flex min-h-11 min-w-[96px] shrink-0 items-center justify-center rounded-full px-4 text-[17px] font-medium ${
                 selected ? "bg-[#0E2C52] text-white" : "text-white/80"
               }`}
               aria-pressed={selected}
@@ -205,7 +205,7 @@ export function CoinHistory({
         </p>
       )}
 
-      {token && status === "ready" && visible.length === 0 && (
+      {token && status === "ready" && visible.length === 0 && !hasMore && (
         <p className="mt-8 text-center text-[14px] leading-5 text-white/70">
           No {filter} history yet.
         </p>

@@ -11,6 +11,7 @@ import {
   ZINTLE_TRIAL_BANNER_SRC,
 } from "../utils/coinStoreAssets";
 import { PressableCard } from "./PressableCard";
+import { StoreTopGlow } from "./StoreTopGlow";
 
 export const TIMER_COIN_PRODUCT_ID = "coin_100";
 export const TIMER_COIN_FALLBACK_PRODUCT_ID = "coin_149";
@@ -92,10 +93,12 @@ type CoinStoreMobileProps = {
   basicWeeklyPlan: SubscriptionPlan | null;
   freeTrial?: VisibleFreeTrial | null;
   paymentInProgress?: boolean;
-  /** Wallet balance, centered. The native header already shows the title. */
+  /** Wallet balance, shown under the heading. */
   coinBalance?: number | null;
   /** Balance and Help both open coin history for now. */
   onOpenCoinHistory?: (source: "coin_balance" | "help") => void;
+  /** Leaves the full store. From quick recharge this returns to that screen. */
+  onBack?: () => void;
   /** The card that is waiting on UPI or checkout. Others stay dimmed. */
   pendingPurchase?: { id: number } | null;
 };
@@ -154,6 +157,20 @@ function BalanceChevron() {
         d="M7.5 5L12.5 10L7.5 15"
         stroke="white"
         strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function BackChevron() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 18 18" fill="none" aria-hidden>
+      <path
+        d="M11 4L6 9l5 5"
+        stroke="white"
+        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -361,6 +378,7 @@ export const CoinStoreMobile = ({
   paymentInProgress = false,
   coinBalance = null,
   onOpenCoinHistory,
+  onBack,
   pendingPurchase = null,
 }: CoinStoreMobileProps) => {
   useEffect(() => {
@@ -419,13 +437,23 @@ export const CoinStoreMobile = ({
       className="relative min-h-dvh overflow-x-hidden bg-[#011735] md:hidden"
       style={{ fontFamily: STORE_FONT }}
     >
-      <header className="flex flex-col items-center px-6 pt-[40px]">
-        <div className="flex h-10 w-full items-center justify-end">
+      <StoreTopGlow />
+      <header className="relative px-6 pt-[55px]">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => onBack?.()}
+            disabled={paymentInProgress}
+            className="inline-flex min-h-11 items-center gap-1.5 py-1 text-[22px] font-semibold leading-none text-white disabled:opacity-40"
+          >
+            <BackChevron />
+            Coin Store
+          </button>
           <button
             type="button"
             onClick={() => onOpenCoinHistory?.("help")}
             disabled={paymentInProgress}
-            className="inline-flex min-h-11 touch-manipulation items-center disabled:opacity-40"
+            className="inline-flex min-h-11 shrink-0 touch-manipulation items-center disabled:opacity-40"
           >
             <span className="inline-flex items-center gap-[5px] rounded-[21px] bg-[#0A2548] py-1 pl-1.5 pr-2 text-[14px] font-normal text-[#E9E7E9]">
               <HelpMark />
@@ -433,15 +461,12 @@ export const CoinStoreMobile = ({
             </span>
           </button>
         </div>
-        <p className="text-center text-[12px] font-normal leading-[15px] text-white">
-          Coin Store
-        </p>
         {coinBalance != null ? (
           <button
             type="button"
             onClick={() => onOpenCoinHistory?.("coin_balance")}
             disabled={paymentInProgress}
-            className="inline-flex min-h-11 max-w-full touch-manipulation items-center gap-1.5 disabled:opacity-40"
+            className="mx-auto mt-1 flex w-fit min-h-11 max-w-full touch-manipulation items-center gap-1.5 disabled:opacity-40"
             aria-label={`${formatBalance(coinBalance)} coins`}
           >
             <FigmaCoin className="h-9 w-9 shrink-0" />

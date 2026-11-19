@@ -3477,6 +3477,17 @@ const CoinsPage = ({
           {...coinStoreMobileProps}
           coinBalance={coinBalance}
           onOpenCoinHistory={openCoinHistory}
+          onBack={() => {
+            if (paymentInProgressRef.current) return;
+            // Opened over quick recharge. Stay on this document.
+            if (quickRechargeFromUrl) {
+              setOpenedFullStore(false);
+              return;
+            }
+            // A route change restarts the webview. Only step back when this
+            // document already has a previous entry.
+            if (window.history.length > 1) window.history.back();
+          }}
           pendingPurchase={pendingPurchase}
         />
       )}

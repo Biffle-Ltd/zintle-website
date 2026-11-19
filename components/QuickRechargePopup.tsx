@@ -247,6 +247,33 @@ export const QuickRechargePopup = ({
     paymentInProgress && pendingPurchase?.id !== id;
 
   const page = layout === "page";
+  const balanceRow = (
+    <div className="flex w-full shrink-0 items-center justify-between gap-3">
+      <h2 className="min-w-0 text-[20px] font-semibold leading-6 text-[#E9E7E9]">
+        Quick Recharge
+      </h2>
+      {balance != null && (
+        <span
+          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/80 bg-transparent py-1 pl-1 pr-2.5"
+          aria-label={`${formatBalance(balance)} coins`}
+        >
+          <img
+            src={ZINTLE_BALANCE_COIN_SRC}
+            alt=""
+            width={96}
+            height={96}
+            decoding="async"
+            fetchPriority="high"
+            draggable={false}
+            className="h-6 w-6 shrink-0"
+          />
+          <span className="text-[16px] font-semibold leading-5 text-[#E9E7E9]">
+            {formatBalance(balance)}
+          </span>
+        </span>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -263,38 +290,16 @@ export const QuickRechargePopup = ({
         <div className="mb-4 h-[3px] w-[41px] shrink-0 rounded-full bg-[#E9E7E9] opacity-40" />
       )}
 
+      {page && balanceRow}
+
       <div
         className={
           page
-            ? "flex min-h-0 w-full flex-1 flex-col gap-[21px] overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            ? "mt-[21px] flex min-h-0 w-full flex-1 flex-col overflow-y-auto overscroll-contain pb-10 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             : "flex min-h-0 w-full flex-col gap-4 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         }
       >
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="min-w-0 text-[20px] font-semibold leading-6 text-[#E9E7E9]">
-            Quick Recharge
-          </h2>
-          {balance != null && (
-            <span
-              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/80 bg-transparent py-1 pl-1 pr-2.5"
-              aria-label={`${formatBalance(balance)} coins`}
-            >
-              <img
-                src={ZINTLE_BALANCE_COIN_SRC}
-                alt=""
-                width={96}
-                height={96}
-                decoding="async"
-                fetchPriority="high"
-                draggable={false}
-                className="h-6 w-6 shrink-0"
-              />
-              <span className="text-[16px] font-semibold leading-5 text-[#E9E7E9]">
-                {formatBalance(balance)}
-              </span>
-            </span>
-          )}
-        </div>
+        {!page && balanceRow}
 
         {sheet.empty && !freeTrial ? (
           <div className="rounded-[16px] bg-[rgba(10,37,72,0.3)] px-6 py-10 text-center">

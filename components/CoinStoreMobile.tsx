@@ -419,7 +419,7 @@ export const CoinStoreMobile = ({
       className="relative min-h-dvh overflow-x-hidden bg-[#011735] md:hidden"
       style={{ fontFamily: STORE_FONT }}
     >
-      <header className="relative flex min-h-11 items-center justify-center px-6 pt-2">
+      <header className="relative flex min-h-11 items-center justify-center px-6 pt-[20px]">
         {coinBalance != null ? (
           <button
             type="button"
@@ -439,7 +439,7 @@ export const CoinStoreMobile = ({
           type="button"
           onClick={() => onOpenCoinHistory?.("help")}
           disabled={paymentInProgress}
-          className="absolute right-6 top-1/2 inline-flex min-h-11 -translate-y-1/2 touch-manipulation items-center disabled:opacity-40"
+          className="absolute bottom-0 right-6 top-[20px] inline-flex min-h-11 touch-manipulation items-center disabled:opacity-40"
         >
           <span className="inline-flex items-center gap-[5px] rounded-[21px] bg-[#0A2548] py-1 pl-1.5 pr-2 text-[14px] font-normal text-[#E9E7E9]">
             <HelpMark />

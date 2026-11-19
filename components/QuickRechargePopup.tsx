@@ -266,7 +266,7 @@ export const QuickRechargePopup = ({
       <div
         className={
           page
-            ? "flex min-h-0 w-full flex-1 flex-col gap-4 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            ? "flex min-h-0 w-full flex-1 flex-col gap-[21px] overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             : "flex min-h-0 w-full flex-col gap-4 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         }
       >

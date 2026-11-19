@@ -495,7 +495,7 @@
         bone("height:24px;width:148px;border-radius:6px") +
         bone("height:32px;width:59px;border-radius:21px") +
         "</div>" +
-        '<div style="display:flex;flex-direction:column;gap:16px;margin-top:16px">' +
+        '<div style="display:flex;flex-direction:column;gap:16px;margin-top:21px">' +
         bone("height:20px;width:92px;border-radius:6px") +
         '<div style="height:73px;border-radius:16px;background:rgba(94,216,106,.12)"></div>' +
         bone("height:20px;width:121px;border-radius:6px") +

@@ -119,7 +119,7 @@ export function CoinHistory({
 
   return (
     <div
-      className="min-h-dvh bg-[#011735] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-1 text-white"
+      className="min-h-dvh bg-[#011735] px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[50px] text-white"
       style={{ fontFamily: '"Instrument Sans", ui-sans-serif, system-ui, sans-serif' }}
     >
       <header className="flex items-center justify-between gap-3">

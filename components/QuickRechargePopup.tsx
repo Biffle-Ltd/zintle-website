@@ -271,7 +271,7 @@ export const QuickRechargePopup = ({
         }
       >
         <div className="flex items-center justify-between gap-3">
-          <h2 className="min-w-0 text-[20px] font-medium leading-6 text-[#E9E7E9]">
+          <h2 className="min-w-0 text-[20px] font-semibold leading-6 text-[#E9E7E9]">
             Quick Recharge
           </h2>
           {balance != null && (
